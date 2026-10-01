@@ -40,18 +40,27 @@ This continues the work started in the LearnBox session. Read this file, then `C
 - `src/lib/push/server.ts` and `src/lib/push/client.ts`: AppSync Events publish and subscribe, which need the Events API.
 - The Cognito sign-up, confirm and Google flows in `src/lib/auth/client.ts` and `src/app/sign-in/page.tsx`, which need the user pool.
 
+## Direction set by the owner on 2026-10-01
+- **Live is LearnBox's free tool**, like HubSpot's free tools beside its main product. It brings facilitators to the simulation business.
+- **The UI must be SaaS-grade**, on the front page and on every screen after sign-in.
+- **Claude Design produces the look.** `design/PROMPT.md` and `design/BRIEF.md` were rewritten for this: the quality bar (§2), a full front page (§4A.1), an app shell with dashboard and editor (§4E), the four places LearnBox appears (§4F) and the draft copy (§5).
+- **Copy**: drafted here, approved by the owner. Plain statements, no creative writing, no long explanation.
+- **Domain**: a subdomain of `learnbox.one`. The brief uses `live.learnbox.one` as a stand-in.
+
 ## Waiting on the owner
-1. **Product name and domain.**
-2. **OK to create in AWS** (account `281627750083`, profile `personal`, region `ap-south-1`):
+1. **Product name**, which also gives the subdomain of `learnbox.one`. The DNS record goes in the `learnbox.one` zone, which belongs to LearnBox, so it needs the owner's OK.
+2. **The simulations to show** on the front page: a name and one line each. The slot is marked `[OWNER: …]` in `design/BRIEF.md` §5. Fill it before sending the brief to Claude Design.
+3. **Approval of the draft copy** in `design/BRIEF.md` §5.
+4. **OK to create in AWS** (account `281627750083`, profile `personal`, region `ap-south-1`):
    - Cognito user pool (self sign-up, email confirm, Google);
    - SES identity, with production access requested early because approval takes a day or more;
    - DynamoDB table `<Name>` and `<Name>-dev` (on-demand, `PK`/`SK` strings, TTL on `expiresAt`);
    - AppSync Events API (namespace `live`; API key for subscribe, IAM for publish);
    - Amplify Hosting app;
    - Budgets alert.
-3. **OK to create a private GitHub repo** under `tl-tigon`.
-4. **Company name and contact** for the Terms and Privacy pages.
-5. **Claude Design handoff** of the UI. The prompt is in `design/PROMPT.md` and the brief in `design/BRIEF.md`. The `.dc.html` that comes back is the visual authority.
+5. **OK to create a private GitHub repo** under `tl-tigon`.
+6. **Company name and contact** for the Terms and Privacy pages.
+7. **Claude Design handoff** of the UI. The owner runs `design/PROMPT.md` with `design/BRIEF.md` and `design/current-screens/` attached. The `.dc.html` that comes back is the visual authority.
 
 ## Next steps (in order, unless the owner redirects)
 
@@ -93,6 +102,7 @@ Slide types: `quiz` (2–4 options, one correct, `seconds` 10/20/30/60) and `lea
 - Excel export (`exceljs`).
 - `/app/account`: change password; delete account, which deletes everything owned and then the Cognito user.
 - Front page content, Terms and Privacy.
+- The LearnBox places: the "by LearnBox" mark, the front page section, the dashboard panel and the results page panel (`design/BRIEF.md` §4F).
 - TTL `expiresAt` = 12 months on session rows.
 
 ### 4. Phase 0 provisioning, on the owner's OK

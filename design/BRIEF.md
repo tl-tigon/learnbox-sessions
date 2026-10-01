@@ -1,14 +1,19 @@
 # Live: design brief
 
-"Live" is a working name; the final name isn't chosen yet. Use it as a plain wordmark that can be swapped later.
+"Live" is a working name; the final name isn't chosen yet. Use it as a plain wordmark that can be swapped later. The product will run at a subdomain of `learnbox.one`; this brief uses `live.learnbox.one` as a stand-in.
 
 ## 1. What the product is
 
 Live is a free, self-serve tool for running polls, Q&A, quizzes and surveys with an audience. It is in the same space as Mentimeter, Slido and Kahoot.
 
-- **Facilitators** are trainers, managers, teachers and speakers. They sign up, build a presentation of interactive slides, and run it as a live session.
+- **Facilitators** are trainers, L&D managers, teachers and speakers. They sign up, build a presentation of interactive slides, and run it as a live session.
 - **The audience** joins on their phones with a 6-digit code or a QR code. They need no account and no app.
 - **Results** appear live on the big screen as people answer.
+
+**Live is made by LearnBox.** LearnBox makes simulations for corporate training, and that is the paid business. Live is its free tool, in the way HubSpot offers free tools beside its main product. Live has two jobs:
+
+1. Be a product facilitators choose over Mentimeter or Slido on its own merit.
+2. Show those facilitators that LearnBox exists, in a few fixed places (§4F).
 
 There are three places the product is seen, and each needs to work well:
 
@@ -16,11 +21,22 @@ There are three places the product is seen, and each needs to work well:
 |---|---|---|---|
 | Audience | Phone, 390px wide (also works on a laptop) | Everyone in the room or on the call | In hand |
 | Presenter screen | Projector or shared screen, 1920×1080 and 1366×768 | The whole room | 3–20 metres |
-| Facilitator app and control view | Laptop 1366×768; the control view also on a phone | The facilitator | Desk |
+| Front page, facilitator app and control view | Laptop 1366×768 and phone 390px | The facilitator | Desk |
 
-## 2. The visual system
+## 2. The quality bar
 
-The product needs its **own** visual system. It is unrelated to LearnBox or any other product. Please define:
+Live is a SaaS product and is the first thing a facilitator sees of LearnBox. Every screen is finished to the standard of the signed-in apps of Mentimeter, Slido and Typeform. This applies equally to the front page and to every screen after sign-in.
+
+- **Front page**: a full product page (§4A.1). Its visuals are the real product screens from this brief (presenter screen, phone, control view) with the §6 data. Use product screens, in place of illustrations or stock images.
+- **Facilitator app**: one consistent app shell (§4E.22) across dashboard, results and account. Presentations show a thumbnail of their first slide. The editor is built around a live preview.
+- **Every app screen** has its loading, saving, empty and error states drawn.
+- **Every screen** is drawn at laptop and phone width, in dark and light.
+
+`current-screens/` shows the working app today. Those screens are plain on purpose. They show what each screen holds; the layout and the look are yours to replace.
+
+## 3. The visual system
+
+Live has its **own** visual system. It carries a small "by LearnBox" mark (§4F) and otherwise stands as its own product. Please define:
 
 - **Colour tokens** as CSS custom properties in one `:root` block, with both a **dark** and a **light** theme.
   - Name the roles: background, surface, raised surface, line, text, muted text, accent, accent ink, danger, success, and the chart series.
@@ -32,24 +48,34 @@ The product needs its **own** visual system. It is unrelated to LearnBox or any 
   - Results animate as counts change: bars grow and words in the cloud resize smoothly.
   - Reduced motion must be respected.
 - **The QR code** is always black on white for camera reliability. Frame it; never recolour it.
+- **An icon for each slide type** (eight types, §4E.23), used in the editor, the dashboard and the front page.
 
 **Rules from the owner:**
-- **No invented copy.** No taglines, welcome lines, encouragement or jokes. Use labels, names and numbers only.
+- **Copy.**
+  - The front page and the LearnBox panels use the copy in §5, as written. Add no other copy.
+  - Every other screen uses labels, names and numbers only.
   - Buttons say what they do: "Join", "Submit", "Next", "Present", "Download CSV".
   - Empty states show no values rather than a sentence.
 - **One primary action per view.**
 - **Tap targets of at least 44px on phones.**
 - **No generic AI look:** no purple gradients, glassmorphism, or three equal cards in a row.
 
-## 3. Screens and every state to draw
+## 4. Screens and every state to draw
 
 ### A. Public
 
 **1. Front page (`/`)**
-- A join-by-code field, which is the main action for most visitors.
-- Sign in and Sign up.
-- A short section naming what Live does: Polls, Word cloud, Rating, Open text, Q&A, Quiz, Survey. Use a one-line factual description each, which the owner will edit.
-- Links to Terms and Privacy.
+
+Two kinds of visitor arrive here: an audience member holding a code, and a facilitator deciding whether to sign up. Both find their action without scrolling, at phone and laptop width.
+
+- **Header**: wordmark with "by LearnBox"; a join-by-code field; Sign in; Create account.
+- **Top section**: the headline and line from §5, the primary action "Create free account", and the product shown running: the presenter screen with live results and a phone answering.
+- **Slide types**: Multiple choice, Word cloud, Rating, Open text, Q&A, Quiz, Survey. Each has its icon, its line from §5 and a small view of its result on the presenter screen.
+- **How it works**: the four steps in §5, each with the product screen it refers to.
+- **What an account includes**: the numbers in §5.
+- **LearnBox section**: see §4F.
+- **Footer**: Terms, Privacy, LearnBox, contact email.
+- States: join field error ("No session with that code"), signed-in visitor (the header shows "Open dashboard" in place of Sign in and Create account).
 
 **2. Sign in / Create account**
 - Email and password, plus a "Continue with Google" button.
@@ -66,6 +92,8 @@ The product needs its **own** visual system. It is unrelated to LearnBox or any 
 - A long-text reading layout.
 
 ### B. Audience: phone
+
+Every audience screen carries the "by LearnBox" mark, small, at the foot (§4F).
 
 **4. Joining**
 - Code entry with large digits.
@@ -117,10 +145,10 @@ The product needs its **own** visual system. It is unrelated to LearnBox or any 
 ### C. Presenter screen (1920×1080 and 1366×768)
 
 **12. Join splash**
-- A large QR code, the URL (`live.example/123456`), the code split as `954 152`, the session title, and the number of people joined (live).
+- A large QR code, the URL (`live.learnbox.one/123456`), the code split as `954 152`, the session title, and the number of people joined (live).
 
 **13. Join bar**
-- Kept small on every slide: URL, code, people joined, and a small QR code.
+- Kept small on every slide: URL, code, people joined, a small QR code, and the "by LearnBox" mark.
 
 **14. Results for each type**, live:
 - **Multiple choice**: horizontal bars with label, count and %.
@@ -166,25 +194,33 @@ The product needs its **own** visual system. It is unrelated to LearnBox or any 
 **21. Survey session**
 - People joined, a live answered count per slide, and a link to Results.
 
-### E. Facilitator app (laptop; must also work at phone width)
+### E. Facilitator app (laptop 1366×768; must also work at phone width)
 
-**22. Dashboard**
-- **Presentations**: title, slide count and last edited, plus "New presentation".
-- **Sessions**: title, code, date and time, Live or Ended, with Control / Screen / Results.
-- Empty state (no values, no sentence).
-- Limit messages:
+**22. App shell and dashboard**
+
+The shell is the same on the dashboard, results and account:
+- wordmark with "by LearnBox";
+- navigation: Presentations, Sessions, LearnBox simulations (opens `learnbox.one`);
+- account menu: account email, Account, theme (dark / light), Sign out.
+
+Dashboard:
+- **Presentations**: a card for each, with a thumbnail of its first slide, title, slide count and last edited. Actions on a card: Edit, Present, Delete. Primary action of the view: "New presentation".
+- **Sessions**: title, code, date and time, Live or Ended, with Control / Screen / Results. Live sessions come first.
+- **Usage**: "3 / 50 presentations" and "1 / 3 live sessions".
+- **LearnBox panel**: see §4F.
+- States: loading, empty (no values, no sentence), and the two limits reached:
   - "Up to 50 presentations per account. Delete one to make another."
   - "Up to 3 live sessions at once. End one to start another."
-- Header: account email, Account, Sign out.
 
 **23. Editor**
-- A slide list on the left showing number, type and title. Slides can be reordered and deleted.
-- The settings for the chosen slide.
-- A live preview of how the slide looks on the big screen.
-- The title of the presentation, editable in place.
-- A save state: Saving… / Saved / Not saved.
-- Primary action: **Present**. Secondary: **Run as survey**.
-- "Add slide" offers eight types: Multiple choice, Word cloud, Rating, Open text, Q&A, Quiz question, Leaderboard, Heading.
+- Three areas:
+  - the slide list, each slide shown as a small thumbnail with its number and type icon; slides can be reordered and deleted;
+  - a live preview of the chosen slide as it looks on the big screen, with a switch to the phone view;
+  - the settings for the chosen slide.
+- Top bar: back to Presentations; the title of the presentation, editable in place; the save state (Saving… / Saved / Not saved); primary action **Present**; secondary **Run as survey**.
+- "Add slide" opens a picker of eight types, each with its icon and name: Multiple choice, Word cloud, Rating, Open text, Q&A, Quiz question, Leaderboard, Heading.
+- States: loading, save failed, slide limit reached ("Up to 50 slides per presentation.").
+- At phone width the three areas become steps: list, then settings, then preview.
 - Settings by type:
 
 | Type | Settings |
@@ -203,14 +239,90 @@ The product needs its **own** visual system. It is unrelated to LearnBox or any 
 - Each slide's results, using the same charts as the big screen.
 - Open text and Q&A as lists.
 - Download CSV and Download Excel.
+- **LearnBox panel**: see §4F.
+- States: loading; a session with no answers (charts with no values).
 
 **25. Account**
 - Email, change password, delete account.
 - The delete confirm states what is removed: presentations, sessions and all answers.
 
-## 4. Data to design with
+### F. LearnBox: where Live points to it
+
+Four fixed places. Each is a static part of the page. None opens over the facilitator's work, moves, or repeats within a view.
+
+| Place | What it is |
+|---|---|
+| "by LearnBox" mark | Small text beside the wordmark in the public header and the app shell; at the foot of every audience phone screen; in the presenter screen's join bar. On public pages and in the app it links to `learnbox.one`. |
+| Front page section | Heading, line, simulation list and link from §5. |
+| Dashboard panel | Heading, line and link from §5. It sits beside or below the facilitator's own content and takes less room than it. |
+| Results page panel | The same panel, after the last slide's results. |
+
+The LearnBox link is always a text link or secondary button. The view's primary action stays the facilitator's own.
+
+## 5. Copy
+
+Draft by the owner's instruction: plain statements, no slogans. Use it exactly; the owner will edit the wording later.
+
+**Front page: top section**
+- Headline: "Live polls, Q&A, quizzes and surveys"
+- Line: "Free. Your audience joins on their phones with a 6-digit code."
+- Primary action: "Create free account"
+- Join field: label "Code", button "Join"
+
+**Front page: slide types**
+
+| Type | Line |
+|---|---|
+| Multiple choice | The audience picks one or more options. The bars update as votes arrive. |
+| Word cloud | Each person sends up to 3 words. Repeated words grow. |
+| Rating | A scale of up to 10. The screen shows the average and the spread. |
+| Open text | Short written answers, shown as a wall. |
+| Q&A | The audience asks and upvotes questions. You approve, highlight and mark them answered. |
+| Quiz | Timed questions. Points for correct and fast answers. Leaderboard and podium. |
+| Survey | The audience answers at its own pace. |
+
+**Front page: how it works**
+1. "Build a presentation": add polls, Q&A and quiz questions as slides.
+2. "Start a session": the screen shows a 6-digit code and a QR code.
+3. "The audience answers on their phones": they join in the browser with the code.
+4. "Results appear on the screen": download them afterwards as CSV or Excel.
+
+**Front page: what an account includes**
+
+| | |
+|---|---|
+| Price | Free |
+| People per session | 1,000 |
+| Presentations | 50 |
+| Slides per presentation | 50 |
+| Live sessions at once | 3 |
+| Export | CSV and Excel |
+
+**LearnBox: front page section**
+- Heading: "LearnBox simulations"
+- Line: "Live is made by LearnBox. LearnBox makes simulations that teach professional skills through practice, for corporate training."
+- Simulation list: **[OWNER: the simulations to show, with a name and one line each]**
+- Link: "See the simulations" → `learnbox.one`
+
+**LearnBox: dashboard and results panel**
+- Heading: "LearnBox simulations"
+- Line: "Simulations that teach professional skills through practice, for corporate training."
+- Link: "See the simulations" → `learnbox.one`
+
+**Mark:** "by LearnBox"
+
+## 6. Data to design with
 
 Use this data, so the designs match what the app really shows. Please also draw one "large room" variant of each results screen.
+
+**Facilitator account: asha@example.com**
+- Presentations (3 / 50):
+  - "Sales kickoff 2027", 12 slides, edited today;
+  - "Team offsite", 5 slides, edited yesterday;
+  - "Onboarding feedback", 6 slides, edited 12 Sep 2026.
+- Sessions (1 / 3 live):
+  - "Sales kickoff 2027", code 418 207, today 10:30, Live;
+  - "Team offsite", code 954 152, 28 Sep 2026 16:00, Ended.
 
 **Small room: "Team offsite", code 954 152, 5 joined**
 1. Multiple choice, "Where should we go?": Goa 3 (60%), Coorg 1 (20%), Lonavala 1 (20%). 5 answered.
@@ -237,6 +349,6 @@ Use this data, so the designs match what the app really shows. Please also draw 
   - Leaderboard: Asha 2,840, Rohan 2,615, Meera 2,410, Kabir 2,190 …
   - Points: up to 1,000 per correct answer, more for faster answers.
 
-## 5. What exists now
+## 7. What exists now
 
 `current-screens/` holds screenshots of the working app. The screens are plain on purpose: they show what each screen holds, not how it should look. Everything in them works end to end. The flows and data are real; the look is entirely yours.

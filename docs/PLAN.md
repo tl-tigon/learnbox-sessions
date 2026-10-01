@@ -24,7 +24,12 @@ Live is a free product that anyone can sign up for. Facilitators use it with any
 
 **Later:** a PowerPoint add-in that puts a live question inside a slide.
 
-**Separate from LearnBox.** Live has its own repo, domain, logins, database and deploys. The quiz uses points and a leaderboard by the owner's choice, and LearnBox's no-gamification rule does not apply here.
+**LearnBox's free tool** (added 2026-10-01). Live brings facilitators to LearnBox's simulation business, the way HubSpot's free tools bring people to HubSpot.
+- It runs at a subdomain of `learnbox.one`.
+- The front page and every signed-in screen are finished to SaaS standard.
+- It points to LearnBox in four fixed places: a "by LearnBox" mark, a front page section, a dashboard panel and a results page panel.
+
+**Built separately from LearnBox.** Live has its own repo, logins, database and deploys. The quiz uses points and a leaderboard by the owner's choice, and LearnBox's no-gamification rule does not apply here.
 
 ## Approach
 
@@ -74,7 +79,7 @@ Also:
 | 1 | Engine and polls: presentations, sessions, code and QR, join, live push, the four poll types plus heading; presenter screen and control view; survey mode; results page and CSV | **Built and tested** (commit 165f5be) |
 | 2 | Q&A: ask, upvote, anonymous, moderation, highlight | Next |
 | 3 | Quiz: timed questions, server-timed points, leaderboard, podium | — |
-| 4 | Results in Excel; account settings and delete; front page; Terms and Privacy; cost alarms | — |
+| 4 | Results in Excel; account settings and delete; front page; the LearnBox places; Terms and Privacy; cost alarms | — |
 | 5 | Apply the Claude Design handoff to every screen, in dark and light, at phone, laptop and projector sizes | Waiting on the design |
 | 6 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
 

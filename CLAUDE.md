@@ -6,7 +6,11 @@
 - **The audience** joins on phones with a 6-digit code and needs no account.
 - **Results** update live on a presenter screen.
 
-Live is separate from LearnBox (`../LMS`): it has its own repo, AWS resources and deploys. Never change LearnBox from here.
+**Live is LearnBox's free tool.** LearnBox (`../LMS`) sells simulations for corporate training; Live brings facilitators to it, the way HubSpot's free tools bring people to HubSpot. Live will run at a subdomain of `learnbox.one`.
+- Live is a SaaS product: the front page and every signed-in screen are finished to that standard.
+- Live points to LearnBox in four fixed places: the "by LearnBox" mark, a front page section, a dashboard panel and a results page panel (`design/BRIEF.md` §4F).
+
+The code stays separate from LearnBox: Live has its own repo, AWS resources and deploys. Never change LearnBox from here.
 
 **Start here:**
 - `HANDOFF.md`: current state and next steps.
@@ -45,6 +49,7 @@ Live is separate from LearnBox (`../LMS`): it has its own repo, AWS resources an
   - Use the DesignSync tool only when the owner starts `/design-sync`.
   - Get the handoff from a file or link the owner gives.
 - **No invented UI copy**: no taglines, welcome lines or encouragement. Use labels, names and numbers. Buttons say what they do. Empty states show no values, not a sentence.
+  - The front page and the LearnBox panels use the copy in `design/BRIEF.md` §5, which the owner approves. It is plain statements: no creative writing and no long explanation.
 - **Writing style**: affirmative and concise. State what something is, not what it isn't.
 - **The owner reads plans and updates in plain terms**: lead with what changes for facilitators and the audience, and keep code detail below that.
 - **Numbers** (codes, counts, timers, percentages) use the tabular/mono face. One primary action per view. Dark and light themes both.
