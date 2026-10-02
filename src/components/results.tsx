@@ -22,6 +22,23 @@ export function Results({ slide, tally, texts = [] }: { slide: Slide; tally: Tal
       </div>
     );
   }
+  if (slide.type === 'quiz') {
+    const max = Math.max(1, ...slide.options.map((o) => t.counts[o.id] ?? 0));
+    return (
+      <div className="bars">
+        {slide.options.map((o) => {
+          const n = t.counts[o.id] ?? 0;
+          const right = o.id === slide.correctId;
+          return (
+            <div className={`bar ${right ? 'correct' : ''}`} key={o.id}>
+              <div className="spread"><span>{o.label}{right && ' ✓'}</span><span className="num">{n} · {pct(n, t.people)}%</span></div>
+              <div className="bar-track"><div className="bar-fill" style={{ width: `${(n / max) * 100}%` }} /></div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   if (slide.type === 'rating') {
     const values = Array.from({ length: slide.max }, (_, i) => i + 1);
     const max = Math.max(1, ...values.map((v) => t.counts[String(v)] ?? 0));

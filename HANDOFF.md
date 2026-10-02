@@ -4,7 +4,7 @@ This continues the work started in the LearnBox session. Read this file, then `C
 
 ## Where things stand
 
-**Phases 1 (polls) and 2 (Q&A) are built and tested.** They are in a local git repo only (`main`). There is no GitHub remote yet.
+**Phases 1 (polls), 2 (Q&A) and 3 (quiz) are built and tested.** They are in a local git repo only (`main`). There is no GitHub remote yet.
 
 **What works now** (in-memory store, with development sign-in):
 - **Facilitator**:
@@ -12,7 +12,16 @@ This continues the work started in the LearnBox session. Read this file, then `C
   - dashboard;
   - presentation editor with autosave;
   - Present, or Run as survey.
-- **Slide types**: multiple choice (1 to N picks), word cloud (1–3 words, normalised and profanity-filtered), rating (1–3/4/5/7/10 with end labels), open text (1–3 answers), Q&A, heading.
+- **Slide types**: multiple choice (1 to N picks), word cloud (1–3 words, normalised and profanity-filtered), rating (1–3/4/5/7/10 with end labels), open text (1–3 answers), Q&A, quiz question, leaderboard, heading.
+- **Quiz**:
+  - a quiz question has 2–4 options, one correct, and a time limit of 10, 20, 30 or 60 seconds;
+  - a session with a quiz asks each person for a name before they join;
+  - the facilitator starts the question, the audience taps an option, the facilitator reveals the answer;
+  - a correct answer earns 500 points plus up to 500 more for speed, timed on the server;
+  - the phone shows correct or incorrect, the points earned, the total and the rank;
+  - a leaderboard slide shows the top 10 and who rose or fell; after the last quiz question it shows a podium;
+  - the results page and the CSV carry each question's answers and the full leaderboard;
+  - a quiz runs with a presenter only: "Run as survey" refuses a deck with quiz slides.
 - **Q&A**:
   - the audience asks questions (with a name, or anonymously if the slide allows it) and upvotes, one vote per person;
   - with moderation on, a question waits for the facilitator's approval and only its asker sees it meanwhile;
@@ -35,11 +44,11 @@ This continues the work started in the LearnBox session. Read this file, then `C
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 24 vitest tests (engine, store guarantees, views, Q&A).
-- A browser walk passed 27 of 27 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 33 vitest tests (engine, store guarantees, views, Q&A, quiz).
+- A browser walk passed 40 of 40 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
-  - It covered a facilitator, the big screen (as a signed-out projector with the display key) and 5 phones; every slide type; hide and show results; lock; a moderated Q&A; end; CSV; survey; and checks that another account is blocked.
+  - It covered a facilitator, the big screen (as a signed-out projector with the display key) and 5 phones; every slide type; hide and show results; lock; a moderated Q&A; a quiz question with its reveal and podium; end; CSV; survey; and checks that another account is blocked.
 
 **Written but not yet run:**
 - `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist.
@@ -71,35 +80,29 @@ This continues the work started in the LearnBox session. Read this file, then `C
 
 ## Next steps (in order, unless the owner redirects)
 
-### 1. Phase 3: Quiz
-Slide types: `quiz` (2–4 options, one correct, `seconds` 10/20/30/60) and `leaderboard`.
-
-**Timing:**
-- The question opens with `state.quiz = { slideId, openedAt (server ms), closesAt }`.
-- Answers after `closesAt` are refused.
-- `points = correct ? round(500 + 500 * (1 - elapsed/seconds)) : 0`, where `elapsed` is measured on the server from `openedAt`.
-
-**Scoring:**
-- Score row `SCORE#<token>`: total, plus the last question's points.
-- Leaderboard: query `SCORE#` and sort. That is fine up to the 1,000-person cap.
-
-**Control:** Start question, Reveal, Leaderboard, Next.
-
-**Join:** a nickname is required for quiz sessions. The join route already takes one.
-
-### 2. Phase 4: the rest of v1
+### 1. Phase 4: the rest of v1
 - Excel export (`exceljs`).
 - `/app/account`: change password; delete account, which deletes everything owned and then the Cognito user.
 - Front page content, Terms and Privacy.
 - The LearnBox places: the wordmark, the front page section, the dashboard panel and the results page panel (`design/BRIEF.md` §4F).
 - TTL `expiresAt` = 12 months on session rows.
 
-### 3. Phase 0 provisioning, on the owner's OK
+### 2. Phase 0 provisioning, on the owner's OK
 Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then:
 - run the store tests against the dev table;
 - run a load test of about 500 simulated phones.
 
-### 4. Phase 5: apply the Claude Design handoff
+### 3. Phase 5: apply the Claude Design handoff
+
+## How the quiz is built (Phase 3)
+- **Rules**: `src/lib/engine/quiz.ts` (phases, points, ranking). The session functions are in `src/lib/live.ts`.
+- **State**: `state.quiz = { slideId, openedAt, closesAt, revealed, correct? }`, all on the server's clock. `state.played` lists the quiz slides already started; each is played once, and coming back to one shows it revealed.
+- **Controls**: `quiz-start` and `quiz-reveal` through `PATCH /api/sessions/<id>`. Reveal also ends the timer. Nothing happens by itself when the time runs out: phones and screens work out "time is up" from `closesAt`, and the server refuses late answers.
+- **What the audience is sent**: the question without its correct option (`forAudience`), and only the number who answered. The correct option and the spread travel on the reveal.
+- **Clock**: every view and state event carries the server's time; `useServerClock` keeps the difference, so a phone with a wrong clock counts down right.
+- **Scores**: row `SESS#<id>` / `SCORE#<token>` with the total and the last question's points. The leaderboard reads every score row and sorts; a 3-second memo in `live.ts` absorbs a room asking at once.
+- **Names**: `needsName(session)` is true when the deck has a quiz question. Names can repeat; nothing makes them unique yet.
+- **Results**: answers in the results JSON carry `points` and no token.
 
 ## How Q&A is built (Phase 2)
 - **Rules**: `src/lib/engine/questions.ts` (checks, what a screen may see, ordering) and `src/lib/qa.ts` (ask, upvote, moderate).

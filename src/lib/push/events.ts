@@ -17,6 +17,6 @@ export const qaChannel = (sessionId: string, slideId: string) => `/${NAMESPACE}/
 export interface QuestionEvent { id: string; status: QuestionStatus; text?: string; name?: string; votes?: number; at?: string }
 
 export type PushEvent =
-  | { kind: 'state'; seq: number; status: Session['status']; state: SessionState; slide: Slide | null; index: number; total: number }
+  | { kind: 'state'; seq: number; status: Session['status']; state: SessionState; slide: Slide | null; index: number; total: number; now: number }
   | { kind: 'tally'; slideId: string; tally: Tally; text?: string; at?: string }
   | { kind: 'qa'; slideId: string; q: QuestionEvent };

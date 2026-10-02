@@ -29,9 +29,9 @@ export async function GET(req: Request, ctx: Ctx) {
   return json({ ...view, ...(owner ? { displayKey: s.displayKey } : {}) });
 }
 
-const ACTIONS = new Set(['go', 'next', 'prev', 'results', 'lock']);
+const ACTIONS = new Set(['go', 'next', 'prev', 'results', 'lock', 'quiz-start', 'quiz-reveal']);
 
-/** A presenter control: move, show results, lock answers. */
+/** A presenter control: move, show results, lock answers, start or reveal a quiz question. */
 export async function PATCH(req: Request, ctx: Ctx) {
   const s = await load(req, ctx, false);
   if (s instanceof Response) return s;

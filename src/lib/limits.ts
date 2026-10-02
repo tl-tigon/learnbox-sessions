@@ -18,6 +18,11 @@ export const LIMITS = {
   questionChars: 280,
   questionsPerPerson: 10,
   questionsPerSlide: 500,
+  quizOptions: 4,
+  /** The most one quiz answer can earn: half for being right, half for speed. */
+  quizPoints: 1000,
+  /** Rows on the big screen's leaderboard. */
+  boardSize: 10,
   /** A session closes itself this long after it starts. */
   sessionHours: 24,
 } as const;

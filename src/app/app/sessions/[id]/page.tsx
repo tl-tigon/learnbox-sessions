@@ -4,6 +4,7 @@ import { authed } from '@/lib/auth/client';
 import { Results } from '@/components/results';
 import { useSignedIn } from '@/components/use-signed-in';
 import { sortQuestions, type PublicQuestion } from '@/lib/engine/questions';
+import type { BoardEntry } from '@/lib/engine/quiz';
 import type { Slide, Tally } from '@/lib/types';
 
 const STATUS = { pending: 'Waiting', live: 'Approved', answered: 'Answered', hidden: 'Hidden' } as const;
@@ -12,6 +13,7 @@ interface Data {
   session: { id: string; code: string; title: string; mode: string; createdAt: string; status: string };
   people: number;
   rows: { slide: Slide; tally: Tally; answers: { answer: { type: string; text?: string }; at: string }[]; questions: PublicQuestion[] }[];
+  board: BoardEntry[];
 }
 
 export default function SessionResults({ params }: { params: Promise<{ id: string }> }) {
@@ -71,6 +73,20 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
           )}
         </section>
       ))}
+      {d.board.length > 0 && (
+        <section className="card stack">
+          <div className="spread"><h2>Leaderboard</h2><span className="num muted">{d.board.length} players</span></div>
+          <div className="list">
+            {d.board.map((e, i) => (
+              <div key={i} className="board-row">
+                <span className="num">{e.rank}</span>
+                <span>{e.nickname}</span>
+                <span className="num">{e.total.toLocaleString('en-US')}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

@@ -2,7 +2,7 @@
  * The in-memory store, for local development and tests. Same guarantees as DynamoDB, kept on
  * `globalThis` so Next's dev reloads do not wipe it.
  */
-import type { Presentation, Question, Session, SessionState, Tally } from '../types';
+import type { Presentation, Question, Score, Session, SessionState, Tally } from '../types';
 import type { Person, Store, StoredAnswer } from './types';
 
 interface Db {
@@ -14,6 +14,7 @@ interface Db {
   tallies: Map<string, Tally>;
   questions: Map<string, Map<string, Question>>;
   upvotes: Map<string, Set<string>>;
+  scores: Map<string, Map<string, Score>>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -21,7 +22,8 @@ const clone = <T>(v: T): T => structuredClone(v);
 export function memoryStore(db: Db = freshDb()): Store {
   const peopleOf = (sid: string) => db.people.get(sid) ?? db.people.set(sid, new Map()).get(sid)!;
   const answersOf = (sid: string) => db.answers.get(sid) ?? db.answers.set(sid, new Map()).get(sid)!;
-  /* `??=` because a dev server keeps its database across reloads, including one made before Q&A. */
+  /* `??=` because a dev server keeps its database across reloads, including one made before these existed. */
+  const scoresOf = (sid: string) => (db.scores ??= new Map()).get(sid) ?? db.scores.set(sid, new Map()).get(sid)!;
   const questionsOf = (sid: string) => (db.questions ??= new Map()).get(sid) ?? db.questions.set(sid, new Map()).get(sid)!;
   const upvotesOf = (sid: string) => (db.upvotes ??= new Map()).get(sid) ?? db.upvotes.set(sid, new Set()).get(sid)!;
   const akey = (a: Pick<StoredAnswer, 'slideId' | 'token' | 'entry'>) => `${a.slideId}#${a.token}#${a.entry}`;
@@ -154,9 +156,20 @@ export function memoryStore(db: Db = freshDb()): Store {
       const prefix = `${token}#`;
       return [...upvotesOf(sessionId)].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
     },
+
+    async addScore(sessionId, token, nickname, slideId, points) {
+      const all = scoresOf(sessionId);
+      const s = all.get(token) ?? { token, nickname, total: 0, last: 0, lastSlideId: '' };
+      const next = { ...s, nickname, total: s.total + points, last: points, lastSlideId: slideId };
+      all.set(token, next);
+      return clone(next);
+    },
+    async listScores(sessionId) {
+      return [...scoresOf(sessionId).values()].map(clone);
+    },
   };
 }
 
 export function freshDb(): Db {
-  return { presentations: new Map(), sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map() };
+  return { presentations: new Map(), sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map() };
 }

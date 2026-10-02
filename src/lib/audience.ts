@@ -17,6 +17,23 @@ export function browserToken(): string {
   }
 }
 
+/** The name this person last gave, offered again the next time one is asked for. */
+const NAME_KEY = 'la-name';
+export function savedName(): string {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+export function saveName(name: string) {
+  try {
+    if (name.trim()) localStorage.setItem(NAME_KEY, name.trim());
+  } catch {
+    /* fine: the name is asked for again next time */
+  }
+}
+
 /** How many entries this phone has sent per slide, so a moved-back slide shows as answered. */
 export function sentCounts(sessionId: string): Record<string, number> {
   try {

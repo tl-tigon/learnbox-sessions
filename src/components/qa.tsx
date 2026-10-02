@@ -4,6 +4,7 @@
  * and the top questions) and the control view (the moderation queue).
  */
 import { useCallback, useEffect, useState } from 'react';
+import { savedName, saveName } from '@/lib/audience';
 import { authed } from '@/lib/auth/client';
 import { sortQuestions, type PublicQuestion, type QuestionOrder } from '@/lib/engine/questions';
 import { LIMITS } from '@/lib/limits';
@@ -13,14 +14,6 @@ import type { QaSlide, SessionState } from '@/lib/types';
 
 interface MyQuestion extends PublicQuestion { mine: boolean; voted: boolean }
 
-const NAME_KEY = 'la-name';
-const savedName = () => {
-  try {
-    return localStorage.getItem(NAME_KEY) ?? '';
-  } catch {
-    return '';
-  }
-};
 
 const who = (q: { name: string }) => q.name || 'Anonymous';
 
@@ -73,11 +66,7 @@ export function QaPhone({ sessionId, slide, token, state, closed }: { sessionId:
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setErr(j.error ?? 'Not sent');
-    try {
-      if (name.trim()) localStorage.setItem(NAME_KEY, name.trim());
-    } catch {
-      /* fine: the name is asked for again next time */
-    }
+    saveName(name);
     setText('');
     setData((cur) => (cur && !cur.some((q) => q.id === j.question.id) ? [...cur, j.question] : cur));
   };

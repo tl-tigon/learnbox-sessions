@@ -1,9 +1,10 @@
-import type { Answer, Presentation, Question, QuestionStatus, Session, SessionState, Tally } from '../types';
+import type { Answer, Presentation, Question, QuestionStatus, Score, Session, SessionState, Tally } from '../types';
 
 export interface PresentationSummary { id: string; title: string; slideCount: number; updatedAt: string }
 export interface SessionSummary { id: string; code: string; title: string; status: Session['status']; mode: Session['mode']; createdAt: string; closesAt: number }
 
-export interface StoredAnswer { slideId: string; token: string; entry: number; answer: Answer; at: string }
+/** `points` is set on quiz answers: what the answer earned, worked out on the server when it arrived. */
+export interface StoredAnswer { slideId: string; token: string; entry: number; answer: Answer; at: string; points?: number }
 export interface Person { token: string; nickname: string; joinedAt: string }
 
 /**
@@ -56,4 +57,9 @@ export interface Store {
   upvote(sessionId: string, slideId: string, id: string, token: string): Promise<Question | null>;
   /** Ids of the questions this person has upvoted in the session. */
   myUpvotes(sessionId: string, token: string): Promise<string[]>;
+
+  /** Adds a quiz answer's points to the player's total and returns their score. */
+  addScore(sessionId: string, token: string, nickname: string, slideId: string, points: number): Promise<Score>;
+  /** Every player who has answered a quiz question. */
+  listScores(sessionId: string): Promise<Score[]>;
 }

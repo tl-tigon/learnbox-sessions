@@ -1,6 +1,7 @@
 /**
  * Results as CSV: one block per slide. Counts for choice, rating and word cloud; every answer
- * for open text; every question for Q&A, with the name its asker chose to show.
+ * for open text; every question for Q&A, with the name its asker chose to show; and the quiz
+ * leaderboard with the names the players entered.
  */
 import type { sessionResults } from './live';
 
@@ -29,6 +30,9 @@ export function resultsCsv(r: Results): string {
     if (slide.type === 'choice') {
       out.push(line('Option', 'Picks'));
       for (const o of slide.options) out.push(line(o.label, tally.counts[o.id] ?? 0));
+    } else if (slide.type === 'quiz') {
+      out.push(line('Option', 'Picks', 'Correct'));
+      for (const o of slide.options) out.push(line(o.label, tally.counts[o.id] ?? 0, o.id === slide.correctId ? 'Yes' : ''));
     } else if (slide.type === 'rating') {
       out.push(line('Rating', 'Votes'));
       for (let v = 1; v <= slide.max; v++) out.push(line(v, tally.counts[String(v)] ?? 0));
@@ -41,5 +45,10 @@ export function resultsCsv(r: Results): string {
     }
     out.push('');
   });
+  if (r.board.length) {
+    out.push(line('Leaderboard'), line('Rank', 'Name', 'Points'));
+    for (const e of r.board) out.push(line(e.rank, e.nickname, e.total));
+    out.push('');
+  }
   return '﻿' + out.join('\r\n');
 }

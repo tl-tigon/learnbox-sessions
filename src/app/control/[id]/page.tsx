@@ -4,9 +4,11 @@ import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authed } from '@/lib/auth/client';
 import { QaModeration } from '@/components/qa';
+import { LeaderboardScreen, useServerClock } from '@/components/quiz';
 import { Results } from '@/components/results';
 import { useSignedIn } from '@/components/use-signed-in';
-import { isInteractive } from '@/lib/engine/slides';
+import { quizPhase } from '@/lib/engine/quiz';
+import { isInteractive, isPoll } from '@/lib/engine/slides';
 import { useScreen, withQuestion } from '@/lib/use-screen';
 
 export default function Control({ params }: { params: Promise<{ id: string }> }) {
@@ -23,6 +25,7 @@ function Panel({ id }: { id: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
   useEffect(() => setOrigin(window.location.origin), []);
+  const now = useServerClock(v?.serverNow);
 
   const act = async (body: Record<string, unknown>) => {
     setBusy(true);
@@ -34,7 +37,7 @@ function Panel({ id }: { id: string }) {
     setData((cur) => {
       if (!cur || j.state.seq <= cur.state.seq) return cur;
       const same = j.state.current === cur.state.current;
-      return { ...cur, state: j.state, slide: cur.slides[j.state.current] ?? null, tally: same ? cur.tally : null, texts: same ? cur.texts : [], questions: same ? cur.questions : [] };
+      return { ...cur, state: j.state, slide: cur.slides[j.state.current] ?? null, tally: same ? cur.tally : null, texts: same ? cur.texts : [], questions: same ? cur.questions : [], board: same ? cur.board : null };
     });
     void refresh();
   };
@@ -54,6 +57,9 @@ function Panel({ id }: { id: string }) {
   const screenUrl = `${origin}/present/${id}`;
   const projectorUrl = v.displayKey ? `${screenUrl}#k=${v.displayKey}` : screenUrl;
   const slide = v.slide;
+  /* On a quiz question the next step is to start it, then to reveal it; only then to move on. */
+  const phase = slide?.type === 'quiz' ? quizPhase(v.state, slide.id, now) : null;
+  const quizStep = phase !== null && phase !== 'revealed';
 
   if (v.status === 'ended') {
     return (
@@ -92,10 +98,19 @@ function Panel({ id }: { id: string }) {
         <>
           <div className="row">
             <button disabled={busy || v.state.current === 0} onClick={() => act({ action: 'prev' })}>Previous</button>
-            <button className="primary" disabled={busy || v.state.current >= v.slides.length - 1} onClick={() => act({ action: 'next' })}>Next</button>
+            <button className={quizStep ? '' : 'primary'} disabled={busy || v.state.current >= v.slides.length - 1} onClick={() => act({ action: 'next' })}>Next</button>
             <span className="num muted">{v.state.current + 1} / {v.slides.length}</span>
-            <button className={v.state.showResults ? 'on' : ''} aria-pressed={v.state.showResults} disabled={busy} onClick={() => act({ action: 'results', on: !v.state.showResults })}>Results {v.state.showResults ? 'shown' : 'hidden'}</button>
-            {slide && isInteractive(slide) && (
+            {phase === 'ready' && <button className="primary" disabled={busy} onClick={() => act({ action: 'quiz-start' })}>Start question</button>}
+            {(phase === 'open' || phase === 'closed') && (
+              <>
+                <span className="num" aria-label="Seconds left">{Math.max(0, Math.ceil(((v.state.quiz?.closesAt ?? 0) - now) / 1000))} s</span>
+                <button className="primary" disabled={busy} onClick={() => act({ action: 'quiz-reveal' })}>Reveal</button>
+              </>
+            )}
+            {slide && isPoll(slide) && (
+              <button className={v.state.showResults ? 'on' : ''} aria-pressed={v.state.showResults} disabled={busy} onClick={() => act({ action: 'results', on: !v.state.showResults })}>Results {v.state.showResults ? 'shown' : 'hidden'}</button>
+            )}
+            {slide && isPoll(slide) && (
               <button className={v.state.locked ? 'on' : ''} aria-pressed={v.state.locked} disabled={busy} onClick={() => act({ action: 'lock', on: !v.state.locked })}>{v.state.locked ? 'Answers closed' : 'Close answers'}</button>
             )}
             {slide?.type === 'qa' && (
@@ -111,6 +126,7 @@ function Panel({ id }: { id: string }) {
                 {slide.type === 'qa' && <span className="num muted">{v.questions.filter((q) => q.status !== 'hidden').length} questions</span>}
               </div>
               {isInteractive(slide) && <Results slide={slide} tally={v.tally} texts={v.texts} />}
+              {slide.type === 'leaderboard' && v.board && <LeaderboardScreen board={v.board} />}
               {slide.type === 'qa' && (
                 <QaModeration sessionId={id} slide={slide} questions={v.questions} state={v.state}
                   onChange={(q, state) => setData((cur) => (cur ? { ...cur, questions: withQuestion(cur.questions, q), state: state.seq > cur.state.seq ? state : cur.state } : cur))} />

@@ -4,7 +4,7 @@ import { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authed } from '@/lib/auth/client';
 import { useSignedIn } from '@/components/use-signed-in';
-import { blankSlide, SLIDE_TYPES } from '@/lib/engine/slides';
+import { blankSlide, QUIZ_SECONDS, SLIDE_TYPES } from '@/lib/engine/slides';
 import { LIMITS } from '@/lib/limits';
 import type { Presentation, Slide, SlideType } from '@/lib/types';
 
@@ -14,6 +14,8 @@ const TYPE_LABEL: Record<SlideType, string> = {
   rating: 'Rating',
   open: 'Open text',
   qa: 'Q&A',
+  quiz: 'Quiz question',
+  leaderboard: 'Leaderboard',
   content: 'Heading',
 };
 
@@ -118,7 +120,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 <button className="danger" onClick={() => { edit((d) => { d.slides.splice(sel, 1); }); setSel(Math.max(0, sel - 1)); }}>Delete slide</button>
               </div>
             </div>
-            <label>{slide.type === 'content' ? 'Heading' : slide.type === 'qa' ? 'Title' : 'Question'}
+            <label>{slide.type === 'content' ? 'Heading' : slide.type === 'qa' || slide.type === 'leaderboard' ? 'Title' : 'Question'}
               <input value={slide.title} maxLength={LIMITS.titleChars} onChange={(e) => editSlide((s) => { s.title = e.target.value; })} />
             </label>
             <SlideSettings slide={slide} edit={editSlide} />
@@ -181,6 +183,35 @@ function SlideSettings({ slide, edit }: { slide: Slide; edit: (fn: (s: Slide) =>
           <label>Label for {slide.max}<input value={slide.highLabel} maxLength={LIMITS.optionChars} onChange={(e) => edit((s) => { if (s.type === 'rating') s.highLabel = e.target.value; })} /></label>
         </div>
       );
+    case 'quiz':
+      return (
+        <div className="stack">
+          <span className="muted small">Correct · Option</span>
+          {slide.options.map((o, i) => (
+            <div className="row" key={o.id} style={{ flexWrap: 'nowrap' }}>
+              <label className="check" style={{ flex: 'none' }}>
+                <input type="radio" name={`correct-${slide.id}`} checked={slide.correctId === o.id} aria-label={`Option ${i + 1} is correct`}
+                  onChange={() => edit((s) => { if (s.type === 'quiz') s.correctId = o.id; })} />
+              </label>
+              <input aria-label={`Option ${i + 1}`} value={o.label} maxLength={LIMITS.optionChars} placeholder={`Option ${i + 1}`}
+                onChange={(e) => edit((s) => { if (s.type === 'quiz') s.options[i].label = e.target.value; })} />
+              <button aria-label={`Remove option ${i + 1}`} disabled={slide.options.length <= 2}
+                onClick={() => edit((s) => { if (s.type === 'quiz') { s.options.splice(i, 1); if (!s.options.some((x) => x.id === s.correctId)) s.correctId = s.options[0].id; } })}>×</button>
+            </div>
+          ))}
+
+          {slide.options.length < LIMITS.quizOptions && (
+            <button onClick={() => edit((s) => { if (s.type === 'quiz') s.options.push({ id: Math.random().toString(36).slice(2, 10), label: '' }); })}>Add option</button>
+          )}
+          <label>Time limit
+            <select value={slide.seconds} onChange={(e) => edit((s) => { if (s.type === 'quiz') s.seconds = Number(e.target.value); })}>
+              {QUIZ_SECONDS.map((n) => <option key={n} value={n}>{n} seconds</option>)}
+            </select>
+          </label>
+        </div>
+      );
+    case 'leaderboard':
+      return null;
     case 'qa':
       return (
         <div className="stack">

@@ -73,7 +73,7 @@ input, select, textarea {
   border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
 }
 label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
-input[type='checkbox'] { width: 20px; height: 20px; padding: 0; accent-color: var(--accent); }
+input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; padding: 0; accent-color: var(--accent); }
 label.check { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text); }
 .code-input { font-size: 32px; letter-spacing: 0.3em; text-align: center; }
 
@@ -94,6 +94,27 @@ label.check { display: flex; align-items: center; gap: 10px; min-height: 44px; c
 .qa-now { font-size: clamp(28px, 3.6vw, 60px); font-weight: 600; line-height: 1.2; border-left: 6px solid var(--accent); padding-left: 24px; }
 .qa-meta { font-size: 20px; font-weight: 400; }
 .screen .question { font-size: 26px; padding: 14px 18px; }
+
+/* Quiz */
+.timer { font-size: 48px; font-weight: 700; line-height: 1; }
+.quiz-options { display: grid; gap: 10px; }
+.opt { justify-content: flex-start; text-align: left; min-height: 56px; gap: 12px; }
+.opt > span:nth-child(2) { flex: 1; }
+.opt:disabled { opacity: 1; }
+.opt:disabled:not(.on):not(.correct) { color: var(--muted); }
+.letter { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); font-weight: 700; }
+.correct { color: var(--ok); }
+.opt.correct { border-color: var(--ok); }
+.bar.correct .bar-fill { background: var(--ok); }
+.board-row { display: grid; grid-template-columns: 4ch 1fr auto auto; gap: 16px; align-items: center; background: var(--surface-2); border-radius: 8px; padding: 10px 14px; }
+.podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: end; }
+.place { display: grid; gap: 6px; justify-items: center; background: var(--surface-2); border-radius: var(--radius); padding: 20px 12px; }
+.place .rank { font-size: 1.6em; font-weight: 700; }
+.place-1 { order: 2; padding-top: 44px; padding-bottom: 44px; border: 2px solid var(--accent); }
+.place-2 { order: 1; }
+.place-3 { order: 3; }
+.screen .timer { font-size: 96px; }
+.screen .board-row, .screen .place { font-size: 28px; }
 
 /* Presenter screen */
 .screen { min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; padding: 32px 48px; gap: 24px; }

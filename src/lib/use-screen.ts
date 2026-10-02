@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authed } from './auth/client';
 import type { PublicQuestion } from './engine/questions';
+import type { BoardEntry } from './engine/quiz';
 import { useLive } from './use-live';
 import { qaChannel, stateChannel, tallyChannel, type PushEvent } from './push/events';
 import type { Session, SessionState, Slide, Tally } from './types';
@@ -13,6 +14,8 @@ export interface ScreenView {
   mode: Session['mode'];
   status: 'live' | 'ended';
   state: SessionState;
+  /** The server's clock when this view was made; quiz countdowns run on it. */
+  serverNow: number;
   slides: Slide[];
   slide: Slide | null;
   people: number;
@@ -20,6 +23,8 @@ export interface ScreenView {
   texts: { text: string; at: string }[];
   /** The current Q&A slide's questions. The owner also gets the ones waiting for approval. */
   questions: PublicQuestion[];
+  /** The standings, on a leaderboard slide. */
+  board: { entries: BoardEntry[]; players: number; final: boolean } | null;
   displayKey?: string;
 }
 
@@ -48,7 +53,7 @@ export function useScreen(id: string, displayKey: string | null) {
       if (e.seq <= cur.state.seq) return cur;
       const slide = cur.slides[e.state.current] ?? null;
       const moved = slide?.id !== cur.slide?.id;
-      return { ...cur, status: e.status, state: e.state, slide, tally: moved ? null : cur.tally, texts: moved ? [] : cur.texts, questions: moved ? [] : cur.questions };
+      return { ...cur, status: e.status, state: e.state, serverNow: e.now, slide, tally: moved ? null : cur.tally, texts: moved ? [] : cur.texts, questions: moved ? [] : cur.questions, board: moved ? null : cur.board };
     }
     if (e.kind === 'qa' && e.slideId === cur.slide?.id) {
       /* No text: the question is hidden, or waiting for approval (the reload below fetches it for the owner). */
@@ -68,6 +73,8 @@ export function useScreen(id: string, displayKey: string | null) {
     slowMs: 5000,
     onEvent: (e) => {
       if (e.kind === 'qa' && e.q.status === 'pending') reload.current();
+      /* A leaderboard's standings come with a reload. */
+      if (e.kind === 'state' && e.slide?.type === 'leaderboard') reload.current();
     },
   });
   reload.current = () => void live.refresh();

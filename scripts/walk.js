@@ -1,7 +1,8 @@
 ﻿/* Walk on the in-memory dev server: a facilitator builds a deck in the editor, presents it, five
    phones join by code and answer every slide type, the big screen and control view show live
-   counts, a moderated Q&A runs (ask, approve, upvote, highlight, answered, hide), the session
-   ends and the CSV downloads. Then a survey run. */
+   counts, a moderated Q&A runs (ask, approve, upvote, highlight, answered, hide), a quiz question
+   is played (start, answer, reveal, podium), the session ends and the CSV downloads. Then a
+   survey run. */
 const fs = require('fs'), path = require('path');
 const { chromium } = require('C:/Users/tejas/OneDrive/Documents/Workspace/LMS/Trust Sim/capture-tool/node_modules/playwright-core');
 const BASE = 'http://localhost:3200';
@@ -29,10 +30,20 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     await p.fill('input[aria-label="Option 2"]', 'Coorg');
     await p.click('button:has-text("Add option")');
     await p.fill('input[aria-label="Option 3"]', 'Lonavala');
-    for (const [type, title] of [['wordcloud', 'One word for this year'], ['rating', 'How was the quarter?'], ['open', 'What should we change?'], ['qa', 'Questions for the team'], ['content', 'Thank you']]) {
+    for (const [type, title] of [['wordcloud', 'One word for this year'], ['rating', 'How was the quarter?'], ['open', 'What should we change?'], ['qa', 'Questions for the team'], ['quiz', 'Which planet is the largest?'], ['leaderboard', 'Leaderboard'], ['content', 'Thank you']]) {
       await p.selectOption('label:has-text("Add slide") select', type);
-      await p.fill(type === 'content' ? 'label:has-text("Heading") input' : type === 'qa' ? 'label:has-text("Title") input' : 'label:has-text("Question") input', title);
+      await p.fill(type === 'content' ? 'label:has-text("Heading") input' : type === 'qa' || type === 'leaderboard' ? 'label:has-text("Title") input' : 'label:has-text("Question") input', title);
       if (type === 'qa') await p.check('label:has-text("Approve questions") input');
+      if (type === 'quiz') {
+        await p.fill('input[aria-label="Option 1"]', 'Earth');
+        await p.fill('input[aria-label="Option 2"]', 'Jupiter');
+        await p.click('button:has-text("Add option")');
+        await p.fill('input[aria-label="Option 3"]', 'Saturn');
+        await p.click('button:has-text("Add option")');
+        await p.fill('input[aria-label="Option 4"]', 'Mars');
+        await p.check('input[aria-label="Option 2 is correct"]');
+        await p.selectOption('label:has-text("Time limit") select', '10');
+      }
     }
     await p.waitForSelector('text=Saved');
     await p.waitForTimeout(900);
@@ -40,8 +51,10 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     await p.screenshot({ path: path.join(OUT, '01-editor.png') });
     const presId = p.url().split('/').pop();
     const saved = await p.evaluate(async (id) => (await (await fetch(`/api/presentations/${id}`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).json()).presentation, presId);
-    check('editor saved 6 slides in order', saved.slides.map((s) => s.type).join(',') === 'choice,wordcloud,rating,open,qa,content', saved.slides.map((s) => s.type).join(','));
+    check('editor saved 8 slides in order', saved.slides.map((s) => s.type).join(',') === 'choice,wordcloud,rating,open,qa,quiz,leaderboard,content', saved.slides.map((s) => s.type).join(','));
     check('editor saved the Q&A settings', saved.slides[4].moderation === true && saved.slides[4].anonymous === true);
+    const quiz = saved.slides[5];
+    check('editor saved the quiz question', quiz.options.length === 4 && quiz.seconds === 10 && quiz.options.find((o) => o.id === quiz.correctId)?.label === 'Jupiter');
 
     // Present
     await p.click('button:has-text("Present")');
@@ -58,7 +71,8 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     await screen.goto(`${BASE}/present/${sessionId}#k=${displayKey}`);
     await screen.waitForSelector('text=Where should we go?', { timeout: 90000 }); // the dev server compiles this page on first load
 
-    // Five phones
+    // Five phones. The session has a quiz, so each gives a name to join.
+    const NAMES = ['Asha', 'Rohan', 'Meera', 'Kabir', 'Dev'];
     const phones = [];
     for (let i = 0; i < 5; i++) {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -66,6 +80,12 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
       ph.on('pageerror', (e) => errs.push('phone: ' + e));
       await ph.goto(`${BASE}/`);
       await ph.fill('#code', code);
+      await ph.click('button:has-text("Join")');
+      await ph.fill('label:has-text("Name") input', NAMES[i]);
+      if (i === 0) {
+        const noName = await ph.evaluate(async (sid) => (await fetch(`/api/live/${sid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token') }) })).status, sessionId);
+        check('quiz session: joining without a name is refused', noName === 400, String(noName));
+      }
       await ph.click('button:has-text("Join")');
       await ph.waitForSelector('text=Where should we go?');
       phones.push(ph);
@@ -173,7 +193,53 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     const asOther = await p.evaluate(async ({ sid, slideId }) => (await fetch(`/api/sessions/${sid}/qa/${slideId}/x`, { method: 'PATCH', headers: { authorization: 'Bearer dev:someone@else.com', 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve' }) })).status, { sid: sessionId, slideId: saved.slides[4].id });
     check('Q&A: another account cannot moderate', asOther === 404, String(asOther));
 
-    // Slide 6 and end
+    // Slide 6: quiz question, timed on the server
+    await p.click('button:has-text("Next")');
+    for (const ph of phones) await ph.waitForSelector('text=Which planet is the largest?');
+    await phones[0].waitForSelector('text=5 players', { timeout: 8000 });
+    await screen.waitForSelector('text=5 players', { timeout: 8000 });
+    const before = await phones[0].evaluate(async (sid) => await (await fetch(`/api/live/${sid}?t=${localStorage.getItem('la-token')}`)).json(), sessionId);
+    check('quiz: the phone is not sent the correct answer', before.slide.correctId === '' && !before.state.quiz);
+    const early = await phones[4].evaluate(async ({ sid, slideId, optionId }) => (await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token'), slideId, answer: { optionId } }) })).status, { sid: sessionId, slideId: quiz.id, optionId: quiz.correctId });
+    check('quiz: an answer before the start is refused', early === 409, String(early));
+    await p.click('button:has-text("Start question")');
+    for (const ph of phones) await ph.waitForSelector('.opt:has-text("Jupiter"):not([disabled])', { timeout: 8000 });
+    await phones[0].screenshot({ path: path.join(OUT, '13-phone-quiz.png') });
+    await phones[0].click('.opt:has-text("Jupiter")');
+    await phones[1].waitForTimeout(1500);
+    await phones[1].click('.opt:has-text("Jupiter")');
+    await phones[2].waitForTimeout(1500);
+    await phones[2].click('.opt:has-text("Jupiter")');
+    await phones[3].click('.opt:has-text("Mars")');
+    await screen.waitForSelector('text=4 answered', { timeout: 8000 });
+    check('quiz: the big screen shows the countdown and no counts before the reveal', !!(await screen.$('.timer')) && (await screen.$$('.bar-track')).length === 0);
+    await screen.screenshot({ path: path.join(OUT, '14-screen-quiz-open.png') });
+    await p.click('button:has-text("Reveal")');
+    await screen.waitForSelector('.bar.correct:has-text("Jupiter")', { timeout: 8000 });
+    const spread = await screen.textContent('.bars');
+    check('quiz: the reveal marks the correct answer and shows the spread', /Jupiter ✓\s*3/.test(spread) && /Mars\s*1/.test(spread), spread);
+    await screen.screenshot({ path: path.join(OUT, '15-screen-quiz-reveal.png') });
+    await phones[0].waitForSelector('text=Rank 1 / 4', { timeout: 8000 });
+    await phones[1].waitForSelector('text=Rank 2 / 4', { timeout: 8000 });
+    await phones[3].waitForSelector('text=Incorrect', { timeout: 8000 });
+    await phones[4].waitForSelector('text=No answer', { timeout: 8000 });
+    const p0 = await phones[0].textContent('main'), p1 = await phones[1].textContent('main');
+    const pts = (t) => Number((t.match(/\+([\d,]+)/) || [])[1]?.replace(/,/g, '') ?? -1);
+    check('quiz: correct answers earn 500 to 1,000 points, more for the faster one', /Correct/.test(p0) && pts(p0) > pts(p1) && pts(p1) >= 500 && pts(p0) <= 1000, `${pts(p0)} > ${pts(p1)}`);
+    await phones[0].screenshot({ path: path.join(OUT, '16-phone-quiz-result.png') });
+    const late = await phones[4].evaluate(async ({ sid, slideId, optionId }) => (await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token'), slideId, answer: { optionId } }) })).status, { sid: sessionId, slideId: quiz.id, optionId: quiz.correctId });
+    check('quiz: an answer after the reveal is refused', late === 409, String(late));
+
+    // Slide 7: the final leaderboard
+    await p.click('button:has-text("Next")');
+    await screen.waitForSelector('.podium .place-1:has-text("Asha")', { timeout: 8000 });
+    const places = await screen.$$eval('.podium .place strong', (els) => els.map((e) => e.textContent).join(','));
+    check('quiz: the podium is in points order', places === 'Asha,Rohan,Meera', places);
+    await phones[1].waitForSelector('text=Rank 2 / 4', { timeout: 8000 });
+    check('quiz: a phone shows its own place', true);
+    await screen.screenshot({ path: path.join(OUT, '17-screen-podium.png') });
+
+    // Slide 8 and end
     await p.click('button:has-text("Next")');
     await screen.waitForSelector('h1:has-text("Thank you")');
     p.once('dialog', (d) => d.accept());
@@ -188,11 +254,23 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     const csv = fs.readFileSync(await dl.path(), 'utf8');
     check('CSV has every slide', /"Goa","3"/.test(csv) && /"growth","3"/.test(csv) && /"Idea number 2"/.test(csv) && /"5","2"/.test(csv), csv.split('\r\n').slice(0, 4).join(' | '));
     check('CSV has the questions', csv.includes('"Will targets change mid-year?","Asha","3","Answered"') && csv.includes('"When is the new CRM live?","Anonymous","1","Hidden"'));
+    check('CSV has the quiz and the leaderboard', csv.includes('"Jupiter","3","Yes"') && /"Leaderboard"\r\n"Rank","Name","Points"\r\n"1","Asha","\d+"/.test(csv));
+    const full = await p.evaluate(async (id) => await (await fetch(`/api/sessions/${id}/results`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).text(), sessionId);
+    check('results carry no phone tokens', !/"token"/.test(full) && full.includes('"points"'));
     const codeAfter = await phones[0].evaluate(async (c) => (await fetch(`/api/join/${c}`)).status, code);
     check('code freed after the end', codeAfter === 404, String(codeAfter));
 
-    // Survey run
+    // Survey run. A survey has no presenter, so the quiz slides come out first.
     await p.goto(`${BASE}/app/p/${presId}`);
+    await p.click('button:has-text("Run as survey")');
+    await p.waitForSelector('text=Quiz slides need a presenter');
+    check('survey: a deck with quiz slides is refused', true);
+    for (const title of ['Which planet is the largest?', 'Leaderboard']) {
+      await p.click(`button.thumb:has-text("${title}")`);
+      await p.click('button:has-text("Delete slide")');
+    }
+    await p.waitForTimeout(900);
+    await p.waitForSelector('text=Saved');
     await p.click('button:has-text("Run as survey")');
     await p.waitForURL(/\/control\//);
     const code2 = (await p.textContent('text=/Code \\d{6}/')).match(/\d{6}/)[0];

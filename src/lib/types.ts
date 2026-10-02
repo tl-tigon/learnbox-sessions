@@ -6,7 +6,7 @@
  * later never changes a session that already ran, and every answer belongs to the session.
  */
 
-export type SlideType = 'choice' | 'wordcloud' | 'rating' | 'open' | 'qa' | 'content';
+export type SlideType = 'choice' | 'wordcloud' | 'rating' | 'open' | 'qa' | 'quiz' | 'leaderboard' | 'content';
 
 interface SlideBase {
   id: string;
@@ -53,12 +53,26 @@ export interface QaSlide extends SlideBase {
   anonymous: boolean;
 }
 
+/** A timed question with one correct option. Correct, fast answers earn points. */
+export interface QuizSlide extends SlideBase {
+  type: 'quiz';
+  options: ChoiceOption[];
+  /** Blank in the copy the audience receives; the session state carries it once revealed. */
+  correctId: string;
+  seconds: number;
+}
+
+/** The quiz standings so far. After the last quiz question it is the podium. */
+export interface LeaderboardSlide extends SlideBase {
+  type: 'leaderboard';
+}
+
 export interface ContentSlide extends SlideBase {
   type: 'content';
   body: string;
 }
 
-export type Slide = ChoiceSlide | WordcloudSlide | RatingSlide | OpenSlide | QaSlide | ContentSlide;
+export type Slide = ChoiceSlide | WordcloudSlide | RatingSlide | OpenSlide | QaSlide | QuizSlide | LeaderboardSlide | ContentSlide;
 
 export interface Presentation {
   id: string;
@@ -72,6 +86,17 @@ export interface Presentation {
 /** Who moves the slides: the presenter, or each person at their own pace (a survey). */
 export type SessionMode = 'presenter' | 'survey';
 
+/** The quiz question on the current slide. Times are the server's clock, in milliseconds. */
+export interface QuizState {
+  slideId: string;
+  openedAt: number;
+  /** Answers after this are refused. */
+  closesAt: number;
+  revealed: boolean;
+  /** The correct option, present once revealed. */
+  correct?: string;
+}
+
 export interface SessionState {
   /** Index into `slides` that the presenter is on. Unused in survey mode. */
   current: number;
@@ -81,6 +106,10 @@ export interface SessionState {
   locked: boolean;
   /** The question the presenter is answering now, on a Q&A slide. */
   highlight?: string | null;
+  /** The quiz question in play on the current slide; absent until the presenter starts it. */
+  quiz?: QuizState | null;
+  /** Quiz slides already started. Each is played once. */
+  played?: string[];
   /** Rises on every change, so a late or repeated update is ignored. */
   seq: number;
 }
@@ -108,7 +137,8 @@ export type Answer =
   | { type: 'choice'; optionIds: string[] }
   | { type: 'wordcloud'; text: string }
   | { type: 'rating'; value: number }
-  | { type: 'open'; text: string };
+  | { type: 'open'; text: string }
+  | { type: 'quiz'; optionId: string };
 
 /** Live counts for one slide. */
 export interface Tally {
@@ -116,6 +146,15 @@ export interface Tally {
   people: number;
   /** choice: option id -> picks. rating: "1".."max" -> votes. wordcloud: word -> times sent. */
   counts: Record<string, number>;
+}
+
+/** One player's quiz points. `last` is what `lastSlideId` earned them. */
+export interface Score {
+  token: string;
+  nickname: string;
+  total: number;
+  last: number;
+  lastSlideId: string;
 }
 
 /** pending: waiting for approval. live: everyone sees it. answered and hidden are set by the facilitator. */

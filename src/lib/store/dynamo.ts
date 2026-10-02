@@ -12,6 +12,7 @@
  *   SESS#<id>       TALLY#<slide>           live counts; each count is a top-level "c:<key>" number
  *   SESS#<id>       QA#<slide>#<qid>        one question; qids sort by time
  *   SESS#<id>       UPVOTE#<token>#<qid>    one person's upvote on one question
+ *   SESS#<id>       SCORE#<token>           one player's quiz points
  *   CODE#<code>     META                    which live session a code belongs to
  *
  * Counts are top-level attributes rather than a map so `ADD` works on a word nobody has sent yet;
@@ -19,7 +20,7 @@
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import type { Question, Session, SessionState, Tally } from '../types';
+import type { Question, Score, Session, SessionState, Tally } from '../types';
 import type { Person, Store, StoredAnswer } from './types';
 
 const isClash = (e: unknown) => (e as { name?: string })?.name === 'ConditionalCheckFailedException';
@@ -61,7 +62,8 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
   };
   const questionFrom = (i): Question | null =>
     i ? { id: i.id, slideId: i.slideId, token: i.token, text: i.text, name: i.name ?? '', status: i.status, votes: Number(i.votes ?? 0), at: i.at } : null;
-  const answerFrom = (i): StoredAnswer => ({ slideId: i.slideId, token: i.token, entry: i.entry, answer: i.answer, at: i.at });
+  const scoreFrom = (i): Score => ({ token: i.token, nickname: i.nickname ?? '', total: Number(i.total ?? 0), last: Number(i.last ?? 0), lastSlideId: i.lastSlideId ?? '' });
+  const answerFrom = (i): StoredAnswer => ({ slideId: i.slideId, token: i.token, entry: i.entry, answer: i.answer, at: i.at, ...(i.points === undefined ? {} : { points: Number(i.points) }) });
 
   return {
     async listPresentations(ownerSub) {
@@ -318,6 +320,21 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     async myUpvotes(sessionId, token) {
       const prefix = `UPVOTE#${token}#`;
       return (await queryAll(`SESS#${sessionId}`, prefix)).map((r) => String(r.SK).slice(prefix.length));
+    },
+
+    async addScore(sessionId, token, nickname, slideId, points) {
+      const r = await ddb.send(new UpdateCommand({
+        TableName: table,
+        Key: { PK: `SESS#${sessionId}`, SK: `SCORE#${token}` },
+        UpdateExpression: 'ADD #total :p SET #token = :t, nickname = :n, #last = :p, lastSlideId = :s',
+        ExpressionAttributeNames: { '#total': 'total', '#token': 'token', '#last': 'last' },
+        ExpressionAttributeValues: { ':p': points, ':t': token, ':n': nickname, ':s': slideId },
+        ReturnValues: 'ALL_NEW',
+      }));
+      return scoreFrom(r.Attributes);
+    },
+    async listScores(sessionId) {
+      return (await queryAll(`SESS#${sessionId}`, 'SCORE#')).map(scoreFrom);
     },
   };
 }

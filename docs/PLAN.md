@@ -80,7 +80,7 @@ Also:
 | 0 | Name and domain; AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, Amplify app, budget alert; private GitHub repo. **Each needs the owner's OK.** Claude Design brief. | Name chosen: LearnBox Sessions at `sessions.learnbox.one`. Brief done (`design/`); AWS and GitHub not started |
 | 1 | Engine and polls: presentations, sessions, code and QR, join, live push, the four poll types plus heading; presenter screen and control view; survey mode; results page and CSV | **Built and tested** (commit 165f5be) |
 | 2 | Q&A: ask, upvote, anonymous, moderation, highlight | **Built and tested** |
-| 3 | Quiz: timed questions, server-timed points, leaderboard, podium | Next |
+| 3 | Quiz: timed questions, server-timed points, leaderboard, podium | **Built and tested** |
 | 4 | Results in Excel; account settings and delete; front page; the LearnBox places; Terms and Privacy; cost alarms | — |
 | 5 | Apply the Claude Design handoff to every screen, in dark and light, at phone, laptop and projector sizes | Waiting on the design |
 | 6 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |

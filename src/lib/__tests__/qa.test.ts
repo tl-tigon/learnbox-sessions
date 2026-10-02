@@ -142,6 +142,8 @@ describe('lists and results', () => {
     await ask(db, s, TOKEN(2), 'qqqq1', { text: 'Where?', anonymous: true });
     const r = await sessionResults(db, s);
     expect(r.rows.map((x) => x.slide.id)).toEqual(['qqqq1', 'aaaa2']);
-    expect(r.rows[0].questions).toMatchObject([{ text: 'When?', name: 'Person 1' }, { text: 'Where?', name: '' }]);
+    /* Two questions asked in the same millisecond have no fixed order, so compare them sorted. */
+    const asked = [...r.rows[0].questions].sort((a, b) => a.text.localeCompare(b.text));
+    expect(asked).toMatchObject([{ text: 'When?', name: 'Person 1' }, { text: 'Where?', name: '' }]);
   });
 });

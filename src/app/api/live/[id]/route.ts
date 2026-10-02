@@ -2,7 +2,7 @@ import { store } from '@/lib/store';
 import { clientIp, fail, json, limited, readJson } from '@/lib/http';
 import { isToken } from '@/lib/ids';
 import { LIMITS } from '@/lib/limits';
-import { audienceView, isClosed } from '@/lib/live';
+import { audienceView, isClosed, needsName } from '@/lib/live';
 import { cleanText, isProfane } from '@/lib/engine/words';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -27,6 +27,8 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!isToken(body.token)) return fail(400, 'Bad token');
   const nickname = cleanText(String(body.nickname ?? '')).slice(0, LIMITS.nicknameChars);
   if (nickname && isProfane(nickname)) return fail(400, 'Choose another name');
+  /* The leaderboard shows names, so a quiz session takes nobody without one. */
+  if (!nickname && needsName(s) && !(await db.getPerson(s.id, body.token))?.nickname) return fail(400, 'Enter your name');
   const r = await db.join(s.id, body.token, nickname, LIMITS.peoplePerSession);
   if (r.full) return fail(409, 'This session is full');
   return json({ ok: true, nickname: r.person?.nickname ?? '' });
