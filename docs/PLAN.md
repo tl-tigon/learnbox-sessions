@@ -1,6 +1,7 @@
-# LearnBox Sessions: plan (approved by the owner on 2026-10-01)
+# LearnBox Sessions: plan
 
-The plan was approved under the working name "Live". The owner chose the name LearnBox Sessions on 2026-10-02.
+- **2026-10-01**: the owner approved the first plan, a slide-deck product under the working name "Live".
+- **2026-10-02**: the owner chose the name LearnBox Sessions, then switched the product to Slido's event model with an interface modelled on Slido's. This file describes the product as it is now.
 
 ## In plain terms
 
@@ -8,16 +9,18 @@ LearnBox Sessions is a free product that anyone can sign up for. Facilitators us
 
 **Facilitators**
 - Sign up with email (confirmed by a code) or with Google. There are no plans, payments or invitations.
-- Build reusable presentations of interactive slides.
-- Start a session. The audience joins by phone with a 6-digit code or a QR code, with no account and no app.
-- Run it from a presenter screen (projector) and a control view (laptop or phone). They can move between slides, show or hide results, close answers and moderate Q&A.
-- Afterwards, see the results and download them (CSV or Excel).
+- Make a session. Its 6-digit code works for up to 7 days.
+- Add polls, quizzes and surveys to it, before or during the session.
+- Run it from the session screen (laptop or phone): start one poll at a time, lock voting, show or hide results, and moderate the Q&A beside it.
+- Show the big screen on a projector or a shared screen.
+- Afterwards, see the results and download them (CSV or Excel), and duplicate the session to run it again.
 
-**What the audience can do (v1)**
-- **Polls**: multiple choice, word cloud, rating and open text. Results update live.
-- **Q&A**: ask questions, upvote, and ask anonymously if allowed. The facilitator approves, highlights, marks answered or hides.
-- **Quiz**: timed questions, points for correct and fast answers, a leaderboard and a podium. Players enter a nickname.
-- **Survey**: self-paced. The audience goes through the slides at its own pace.
+**The audience**
+- Joins by phone with the code or a QR code, with no account and no app.
+- **Q&A**, open for the whole session: ask questions, upvote, ask anonymously if allowed, and read the facilitator's replies.
+- **Polls**: multiple choice, word cloud, rating, open text and ranking. A vote can be changed while voting is open.
+- **Quiz**: timed questions, points for correct and fast answers, and a leaderboard. Players give a name.
+- **Survey**: several questions on one page, sent together.
 
 **Because it is free and open, it also needs**
 - a front page, Terms and Privacy pages;
@@ -26,10 +29,10 @@ LearnBox Sessions is a free product that anyone can sign up for. Facilitators us
 
 **Later:** a PowerPoint add-in that puts a live question inside a slide.
 
-**LearnBox's free tool** (added 2026-10-01). It brings facilitators to LearnBox's simulation business, the way HubSpot's free tools bring people to HubSpot.
+**LearnBox's free tool.** It brings facilitators to LearnBox's simulation business, the way HubSpot's free tools bring people to HubSpot.
 - It runs at `sessions.learnbox.one`.
 - The front page and every signed-in screen are finished to SaaS standard.
-- It points to LearnBox in four fixed places: the wordmark, a front page section, a dashboard panel and a results page panel.
+- It points to LearnBox in the wordmark, and in three places still to build: a front page section, a panel on the sessions list and a panel on the results page.
 
 **Built separately from LearnBox.** It has its own repo, logins, database and deploys. The quiz uses points and a leaderboard by the owner's choice, and LearnBox's no-gamification rule does not apply here.
 
@@ -40,7 +43,7 @@ LearnBox Sessions is a free product that anyone can sign up for. Facilitators us
 - **Hosting**: its own AWS Amplify Hosting app. Pushing `main` deploys once it is connected.
 - **Facilitator sign-in**: Cognito, with self sign-up on, email confirmation and Google. Email goes through SES, because Cognito's built-in email is capped at about 50 a day; SES production access must be requested.
 - **Bot protection**: Cloudflare Turnstile checked in a pre-sign-up Lambda, plus a block on throwaway email domains.
-- **Audience**: anonymous. Each phone keeps a random token in the browser and can give an optional nickname.
+- **Audience**: anonymous. Each phone keeps a random token in the browser and can give a name.
 - **Data**: DynamoDB (on-demand), one table plus a `-dev` twin. Key layout is in `src/lib/store/dynamo.ts`.
 - **Live push**: AWS AppSync Events.
   - Only the server publishes, signed with IAM; browsers subscribe with an API key.
@@ -48,26 +51,26 @@ LearnBox Sessions is a free product that anyone can sign up for. Facilitators us
 
 ### How a vote flows
 1. The phone POSTs to `/api/live/<id>/answer`.
-2. The server checks that the session is live, the presenter is on that slide and answers are open.
-3. The answer is written with a conditional put: one per token per slide entry.
-4. The slide's counts go up by one in a single `UpdateItem`.
-5. The new counts are published to `/live/<id>/tally/<slideId>`.
+2. The server checks that the session is live, that this poll is the one started, and that voting is open.
+3. A first answer is written with a conditional put: one per token per poll entry. A changed answer replaces the old one only if the old one is still what the change was made from.
+4. The poll's counts move in a single `UpdateItem`.
+5. The new counts are published to `/live/<id>/tally/<pollId>`.
 
-Presenter moves carry a rising `seq`, and a stale one is ignored. The quiz timer and points use the **server** clock.
+Controls carry a rising `seq`, and a stale one is ignored. The quiz timer and points use the **server** clock.
 
-Counts are a fast running total. The stored answers are the source of truth, and the results page and export are built from them.
+Counts are a fast running total. The stored answers are the source of truth.
 
 ### Fair use (`src/lib/limits.ts`)
 | Limit | Value |
 |---|---|
 | People per session | 1,000 |
-| Live sessions per account at once | 3 |
-| Presentations per account | 50 |
-| Slides per presentation | 50 |
-| Session lifetime | Closes itself after 24 h |
+| Live sessions per account at once | 5 |
+| Sessions per account | 100 |
+| Polls, quizzes and surveys per session | 50 |
+| A session's code works for | 7 days |
 
 Also:
-- rate limits on joining, code lookups and answers;
+- rate limits on joining, code lookups, answers, questions and votes;
 - a profanity filter;
 - an AWS Budgets alert and an alarm on the AppSync message count, with a switch (`PUSH_OFF=1`) that falls back to polling;
 - answers deleted after 12 months using TTL;
@@ -77,30 +80,23 @@ Also:
 
 | # | What | Status |
 |---|---|---|
-| 0 | Name and domain; AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, Amplify app, budget alert; private GitHub repo. **Each needs the owner's OK.** Claude Design brief. | Name chosen: LearnBox Sessions at `sessions.learnbox.one`. Brief done (`design/`); AWS and GitHub not started |
-| 1 | Engine and polls: presentations, sessions, code and QR, join, live push, the four poll types plus heading; presenter screen and control view; survey mode; results page and CSV | **Built and tested** (commit 165f5be) |
-| 2 | Q&A: ask, upvote, anonymous, moderation, highlight | **Built and tested** |
-| 3 | Quiz: timed questions, server-timed points, leaderboard, podium | **Built and tested** |
-| 4 | Results in Excel; account settings and delete; front page; the LearnBox places; Terms and Privacy; cost alarms | Excel, account delete and 12-month expiry **built and tested**; the rest waits on the owner |
-| 5 | Apply the Claude Design handoff to every screen, in dark and light, at phone, laptop and projector sizes | Waiting on the design |
-| 6 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
+| 0 | AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, Amplify app, budget alert; DNS for `sessions.learnbox.one`; private GitHub repo. **Each needs the owner's OK.** | Not started |
+| 1–3 | The first build: a slide deck with polls, Q&A and quiz | Built 2026-10-01 to 02, then replaced by the event model |
+| 4 | Results in Excel; account delete; 12-month expiry | **Built and tested** |
+| 5 | The event model: sessions as events, always-open Q&A, polls started one at a time, vote changes, ranking, surveys, quiz runs, replies, announcement, duplicate | **Built and tested** (2026-10-02) |
+| 6 | The interface, modelled on Slido's (`design/slido-study/STUDY.md`), in LearnBox green with Inter | **Built** (2026-10-02); the facilitator's screen is in the same language, without sight of Slido's own |
+| 7 | Front page copy approved; the LearnBox places; Terms and Privacy; cost alarms | Waiting on the owner |
+| 8 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
 
 ## Verification
-- **Vitest**:
-  - one answer per token under concurrent sends;
-  - counts equal the stored answers;
-  - quiz points use server time;
-  - code collisions;
-  - locked or closed slides refuse answers;
-  - stale `seq` is dropped.
-- **Browser walk** (playwright-core), with a facilitator, the big screen and 5 phones:
-  - every slide type;
-  - results hidden and shown;
-  - lock;
-  - end;
-  - CSV;
-  - survey;
-  - another account blocked;
-  - no page errors.
+- **Vitest** (48 tests):
+  - one answer per token under concurrent sends, and a changed vote that keeps the counts adding up;
+  - answers only for the poll that is started; locked voting and ended sessions refuse them;
+  - a survey checked whole before anything is stored;
+  - quiz points use server time; the correct answer and the votes stay back until their moment; a quiz is played once;
+  - Q&A: one upvote per person; a waiting question seen only by its asker and the facilitator;
+  - code collisions; stale `seq` is dropped;
+  - deleting an account; CSV and Excel.
+- **Browser walk** (playwright-core, 48 checks), with a facilitator, the big screen as a signed-out projector and 5 phones: the whole flow, then the ways around the rules that must be refused.
 - **Load test** on dev: about 500 simulated phones vote within 10 s. No vote may be lost, and the time from vote to screen must stay under about 1 s.
 - **Screenshots** in dark and light at phone and 1920×1080, sent to the owner before any deploy.

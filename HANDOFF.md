@@ -1,129 +1,111 @@
 # Handoff: LearnBox Sessions (state on 2026-10-02)
 
-This continues the work started in the LearnBox session. Read this file, then `CLAUDE.md` and `docs/PLAN.md`.
+Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.md`.
 
 ## Where things stand
 
-**Phases 1 (polls), 2 (Q&A) and 3 (quiz) are built and tested, and so is the part of Phase 4 that needs nothing from the owner.** They are in a local git repo only (`main`). There is no GitHub remote yet.
+**The product was rebuilt on 2026-10-02 around Slido's event model, with a new interface.** The earlier slide-deck version (presentations, slides, a control view) is gone; its rules for counting, Q&A, quiz scoring, storage and downloads were carried over. Everything is in a local git repo only (`main`). There is no GitHub remote yet.
 
 **What works now** (in-memory store, with development sign-in):
-- **Facilitator**:
-  - sign in (development: any email, no password);
-  - dashboard;
-  - presentation editor with autosave;
-  - Present, or Run as survey;
-  - Account page: delete the account, which removes its presentations, sessions and all answers.
-- **Slide types**: multiple choice (1 to N picks), word cloud (1–3 words, normalised and profanity-filtered), rating (1–3/4/5/7/10 with end labels), open text (1–3 answers), Q&A, quiz question, leaderboard, heading.
-- **Quiz**:
-  - a quiz question has 2–4 options, one correct, and a time limit of 10, 20, 30 or 60 seconds;
-  - a session with a quiz asks each person for a name before they join;
-  - the facilitator starts the question, the audience taps an option, the facilitator reveals the answer;
-  - a correct answer earns 500 points plus up to 500 more for speed, timed on the server;
-  - the phone shows correct or incorrect, the points earned, the total and the rank;
-  - a leaderboard slide shows the top 10 and who rose or fell; after the last quiz question it shows a podium;
-  - the results page and the CSV carry each question's answers and the full leaderboard;
-  - a quiz runs with a presenter only: "Run as survey" refuses a deck with quiz slides.
-- **Q&A**:
-  - the audience asks questions (with a name, or anonymously if the slide allows it) and upvotes, one vote per person;
-  - with moderation on, a question waits for the facilitator's approval and only its asker sees it meanwhile;
-  - the control view has the queue: Approve, Hide, Highlight, Mark answered, sorted Top or Recent;
-  - the big screen shows the highlighted question large and the top questions with votes;
-  - the results page and the CSV list every question with its votes and status.
-- **Audience**: joins at `/` or `/s/<code>` with no account, using a browser token. They follow the presenter, or go at their own pace in a survey.
-- **Presenter screen** `/present/<id>`:
-  - join bar with code, QR and people joined;
-  - live results;
-  - also opens on a projector that isn't signed in, via `#k=<displayKey>`.
-- **Control view** `/control/<id>`:
-  - previous / next (and arrow keys);
-  - jump to any slide;
-  - results shown or hidden;
-  - close answers;
-  - end session;
-  - copy projector link.
-- **Results page** with CSV and Excel downloads, built from the stored answers. The Excel file has a summary sheet, one sheet per slide and a leaderboard sheet.
+- **Facilitator**
+  - Sign in (development: any email, no password).
+  - Sessions list: new session, live and ended sessions, the caps in use.
+  - The session screen: polls, quizzes and surveys in a list on the left, each with a Start button; on the right, the Q&A to moderate or the selected interaction to edit and run. Edits save as they are typed.
+  - Present opens the big screen. The menu has Copy join link, Copy projector link, Duplicate session, End session and Delete session.
+  - Results page with CSV and Excel downloads.
+  - Account page: delete the account, which removes its sessions and all their answers.
+- **Q&A, open for the whole session**
+  - The audience asks (with a name, or anonymously if allowed) and upvotes, one vote per person.
+  - With review on, a question waits for approval and only its asker sees it meanwhile.
+  - The facilitator approves, hides, highlights, marks answered, restores and replies in writing.
+  - The facilitator can close questions (upvotes stay open) and post an announcement.
+- **Polls, started one at a time**
+  - Multiple choice (1 to N picks), word cloud (1–3 words), rating (1 to 3/4/5/7/10 with end labels), open text (1–3 answers), ranking.
+  - A choice, rating or ranking can be changed while voting is open. The facilitator can lock voting and hide results.
+- **Survey**: several polls on one page, sent with one button, changeable while open.
+- **Quiz**: a run of timed questions (2–4 options, one correct, 10/20/30/60 seconds).
+  - Players give a name in the lobby.
+  - Steps: Start quiz, Reveal answer, Leaderboard, Next question. When time is up the screen shows how people voted; Reveal marks the correct answer.
+  - A correct answer earns 500 points plus up to 500 more for speed, timed on the server.
+  - The phone shows correct or incorrect, points and rank; the last leaderboard ends the quiz, which is played once.
+- **Audience**: joins at `/` or `/s/<code>` with no account. The phone has two tabs, Q&A and Polls; starting a poll brings the Polls tab forward.
+- **Big screen** `/present/<id>`: join instructions with code and QR on the left; the questions or the running poll on the right. Opens on a projector that isn't signed in with `#k=<displayKey>`.
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 35 vitest tests (engine, store guarantees, views, Q&A, quiz, account deletion, downloads).
-- A browser walk passed 42 of 42 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 48 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers).
+- A browser walk passes 48 of 48 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
-  - It covered a facilitator, the big screen (as a signed-out projector with the display key) and 5 phones; every slide type; hide and show results; lock; a moderated Q&A; a quiz question with its reveal and podium; end; CSV and Excel; survey; checks that another account is blocked; and deleting the account.
-  - It deletes its own account at the end, so a walk that finishes leaves nothing behind.
+  - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.
+  - It empties the walk account at the start and deletes it at the end.
 
 **Written but not yet run:**
-- `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist. This includes the Q&A, quiz and delete-session functions, and the 12-month `expiresAt` on every session row.
-- Change password and the removal of the Cognito user on the Account page (`changePassword`, `removeSignIn` in `src/lib/auth/client.ts`). In development the page shows no password form.
+- `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist. It was rewritten for the event model along with `memory.ts`.
 - `src/lib/push/server.ts` and `src/lib/push/client.ts`: AppSync Events publish and subscribe, which need the Events API.
-- The Cognito sign-up, confirm and Google flows in `src/lib/auth/client.ts` and `src/app/sign-in/page.tsx`, which need the user pool.
+- The Cognito sign-up, confirm, Google, change-password and delete-user flows in `src/lib/auth/client.ts`, which need the user pool.
 
-## Direction set by the owner on 2026-10-01
-- **The name is LearnBox Sessions** (chosen 2026-10-02), always written in full. "Live" was the working name and stays in the repo folder, file names and routes.
-- **It is LearnBox's free tool**, like HubSpot's free tools beside its main product. It brings facilitators to the simulation business.
-- **The UI must be SaaS-grade**, on the front page and on every screen after sign-in.
-- **Claude Design produces the look.** `design/PROMPT.md` and `design/BRIEF.md` were rewritten for this: the quality bar (§2), a full front page (§4A.1), an app shell with dashboard and editor (§4E), the four places LearnBox appears (§4F) and the draft copy (§5).
-- **Copy**: drafted here, approved by the owner. Plain statements, no creative writing, no long explanation.
-- **Domain**: `sessions.learnbox.one`.
+## Decisions by the owner
+- **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
+- **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
+- **2026-10-02**: switch to Slido's event model, and model the interface on Slido's.
+  - The interface is built here in code from `design/slido-study/STUDY.md`. This replaces the earlier rule that a Claude Design handoff was the visual authority.
+  - Identity: LearnBox's forest green with Inter.
+  - Extras in the first build: host replies, ranking poll, announcement.
+  - The bar: well thought out, nothing buggy or glitchy, no way around a rule.
+
+`design/PROMPT.md` and `design/BRIEF.md` describe the earlier slide-deck product for Claude Design. They are kept for their copy draft (§5) and are otherwise out of date.
+
+## Numbers chosen with the event model (owner to confirm)
+These are in `src/lib/limits.ts`.
+
+| Limit | Value | Was |
+|---|---|---|
+| A session's code works for | 7 days | 24 hours |
+| Live sessions per account at once | 5 | 3 |
+| Sessions per account, live and ended | 100 | (50 presentations) |
+| Polls, quizzes and surveys per session | 50 | (50 slides) |
+| Questions per person per session | 20 | 10 per slide |
+| Leaderboard rows on the big screen | 5 | 10 |
 
 ## Waiting on the owner
-1. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
-2. **The simulations to show** on the front page: a name and one line each. The slot is marked `[OWNER: …]` in `design/BRIEF.md` §5. Fill it before sending the brief to Claude Design.
-3. **Approval of the draft copy** in `design/BRIEF.md` §5.
-4. **OK to create in AWS** (account `281627750083`, profile `personal`, region `ap-south-1`):
+1. **OK to create in AWS** (account `281627750083`, profile `personal`, region `ap-south-1`):
    - Cognito user pool (self sign-up, email confirm, Google);
    - SES identity, with production access requested early because approval takes a day or more;
-   - DynamoDB table `<Name>` and `<Name>-dev` (on-demand, `PK`/`SK` strings, TTL on `expiresAt`);
+   - DynamoDB table and its `-dev` twin (on-demand, `PK`/`SK` strings, TTL on `expiresAt`);
    - AppSync Events API (namespace `live`; API key for subscribe, IAM for publish);
    - Amplify Hosting app;
    - Budgets alert.
-5. **OK to create a private GitHub repo** under `tl-tigon`.
+2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
+3. **OK to create a private GitHub repo** under `tl-tigon`.
+4. **The front page copy**: the draft is in `src/app/page.tsx`.
+5. **The simulations to show**, a name and one line each, for the LearnBox places (front page section, sessions list, results page).
 6. **Company name and contact** for the Terms and Privacy pages.
-7. **Claude Design handoff** of the UI. The owner runs `design/PROMPT.md` with `design/BRIEF.md` and `design/current-screens/` attached. The `.dc.html` that comes back is the visual authority.
+7. **Slido's host screens**, if the owner wants the facilitator's screen matched to them: they are behind sign-in, so they need screenshots from a Slido account. The current facilitator's screen uses the same visual language.
 
-## Next steps (in order, unless the owner redirects)
+## Next steps
+1. **Provisioning**, on the owner's OK. Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then run the store tests against the dev table, and a load test of about 500 simulated phones.
+2. **The rest of v1**, each waiting on the owner: front page copy, Terms and Privacy, the LearnBox places, cost alarms.
+3. **More of Slido**, if wanted: downvotes, labels, asker withdraws a question, audience replies, resetting a poll's results, a PowerPoint add-in.
 
-### 1. Phase 4: what is left
-Done: Excel export, the Account page with delete account, and `expiresAt` on session rows.
-
-Left, each waiting on the owner:
-- Front page content: needs the copy in `design/BRIEF.md` §5 approved.
-- Terms and Privacy: need the company name and contact.
-- The LearnBox places: the front page section, the dashboard panel and the results page panel (`design/BRIEF.md` §4F) need the simulation list. The wordmark is in.
-- Cost alarms: part of the AWS setup.
-
-### 2. Phase 0 provisioning, on the owner's OK
-Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then:
-- run the store tests against the dev table;
-- run a load test of about 500 simulated phones.
-
-### 3. Phase 5: apply the Claude Design handoff
-
-## How the quiz is built (Phase 3)
-- **Rules**: `src/lib/engine/quiz.ts` (phases, points, ranking). The session functions are in `src/lib/live.ts`.
-- **State**: `state.quiz = { slideId, openedAt, closesAt, revealed, correct? }`, all on the server's clock. `state.played` lists the quiz slides already started; each is played once, and coming back to one shows it revealed.
-- **Controls**: `quiz-start` and `quiz-reveal` through `PATCH /api/sessions/<id>`. Reveal also ends the timer. Nothing happens by itself when the time runs out: phones and screens work out "time is up" from `closesAt`, and the server refuses late answers.
-- **What the audience is sent**: the question without its correct option (`forAudience`), and only the number who answered. The correct option and the spread travel on the reveal.
-- **Clock**: every view and state event carries the server's time; `useServerClock` keeps the difference, so a phone with a wrong clock counts down right.
-- **Scores**: row `SESS#<id>` / `SCORE#<token>` with the total and the last question's points. The leaderboard reads every score row and sorts; a 3-second memo in `live.ts` absorbs a room asking at once.
-- **Names**: `needsName(session)` is true when the deck has a quiz question. Names can repeat; nothing makes them unique yet.
-- **Results**: answers in the results JSON carry `points` and no token.
-
-## How Q&A is built (Phase 2)
-- **Rules**: `src/lib/engine/questions.ts` (checks, what a screen may see, ordering) and `src/lib/qa.ts` (ask, upvote, moderate).
-- **Rows**: question `SESS#<id>` / `QA#<slideId>#<qid>`; upvote `SESS#<id>` / `UPVOTE#<token>#<qid>` (token first, so one query lists a person's votes). The vote count goes up only when the upvote row is new.
-- **Routes**: audience `GET`/`POST /api/live/<id>/qa/<slideId>` and `POST …/<qid>/vote`; owner `PATCH /api/sessions/<id>/qa/<slideId>/<qid>`.
-- **Push**: `/live/<id>/qa/<slideId>`. Every phone can read it, so a waiting or hidden question travels as id and status only; the control view reloads to fetch a waiting one.
-- **Highlight**: `state.highlight` in the session state. It clears on a slide move, and when the question is hidden or marked answered.
-- **Limits**: 280 characters, 10 questions per person per slide, 500 per slide (`LIMITS`).
+## How it is built
+- **Edits and live state are separate.** The facilitator's edits (`title`, `interactions`, `qa`) go through `PUT /api/sessions/<id>` → `editSession` → `store.updateSession`. Everything that changes live is in `state` and goes through `PATCH` → `control` → `store.setState`, which applies only on top of the `seq` it was made from. Every edit ends with a `touch` control, so phones get the active poll's new wording and a deleted active poll stops.
+- **The facilitator's screen keeps its own draft.** It loads the session once, edits locally and saves 600 ms after the last change; a control (Start, Lock) saves first. The server is not asked to overwrite the draft.
+- **Answers**: row `ANS#<poll>#<token>#<n>`. A first answer is a conditional put. A changed answer is `replaceAnswer`, which applies only if the stored answer is still the one the change was made from; the counts then move by the difference in one update.
+- **Counts** (`TALLY#<poll>`) are running totals; the stored answers are the truth. For ranking, an option's count is its points: first place earns as many as there are options.
+- **Quiz**: `state.quiz = { quizId, index, openedAt, closesAt, revealed, correct?, board }` on the server's clock; `index` -1 is the lobby. `state.played` lists finished quizzes. A quiz left midway resumes when it is started again. A quiz that has started keeps its questions against edits. Scores are in `SCORE#<quiz>#<token>`.
+- **What each screen is sent**: see "Three views of a session" in `CLAUDE.md`. A quiz question's votes are sent as a count only while it is open, in full once time is up, and the correct option on Reveal.
+- **Clock**: every view and state event carries the server's time; `useServerClock` keeps the difference, so a phone with a wrong clock counts down right. When a countdown reaches zero the big screen reloads to fetch the votes.
+- **Q&A**: rows `QA#<qid>` (with replies) and `UPVOTE#<token>#<qid>`. Push channel `/live/<id>/qa`; every phone can read it, so a waiting or hidden question travels as id and status only.
+- **Push and phones**: a phone applies pushed state without asking the server, except during a quiz, where its own answer, points and rank need a reload (after a random wait of up to 1.2 s, so a room does not ask at once). The facilitator's screen and the big screen reload on every state change; there are only a few of them.
 
 ## Gotchas found so far
 - **PowerShell writes:** in Windows PowerShell 5.1, `Get-Content` / `Set-Content` mangle UTF-8 characters such as "·". Use the Edit/Write tools for files that contain them.
-- **Screenshots:** a Playwright screenshot of a background tab can hang. Call `page.bringToFront()` first.
 - **Production guards:** `next start` (production) refuses the memory store and dev sign-in by design. Use `npm run dev` (port 3200) for local walks, or set `STORE=dynamo` with real Cognito.
-- **Background tabs stop polling:** `useLive` polls only while the page is visible. In the walk, each screen has its own browser context so all stay in the foreground; `bringToFront()` on one page puts the others in its context in the background.
+- **Background tabs stop polling:** `useLive` polls only while the page is visible. In the walk, each screen has its own browser context so all stay in the foreground.
 - **Build while the dev server runs:** `NEXT_DIST_DIR=.next-check npx next build`, then `git checkout tsconfig.json` and delete `.next-check` (the build adds that folder to `tsconfig.json`).
-- **Stale sessions in dev:** a walk that fails midway leaves a live session, and three live sessions block the next walk. End them from the dashboard, or restart the dev server.
-- **Walk right after a build or an install:** the dev server recompiles when `tsconfig.json` or `package.json` changes, and the walk's 8-second waits can time out meanwhile. Run the walk again once the server has settled.
-- **Deleting an account in DynamoDB** deletes a session's rows 25 to a batch, 8 batches at a time. A session with tens of thousands of rows takes several seconds; time it during the load test.
+- **Walk right after a build or an install:** the dev server recompiles when `tsconfig.json` or `package.json` changes, and the walk's 10-second waits can time out meanwhile. Run the walk again once the server has settled.
+- **The dev store across reloads:** the memory database lives on `globalThis` under a key that carries its shape's version (`__sessionsDb2` in `store/index.ts`). Change the key when the shape changes.
+- **Deleting a session in DynamoDB** deletes its rows 25 to a batch, 8 batches at a time. A session with tens of thousands of rows takes several seconds; time it during the load test.
 - **Live counts:** the counts row in DynamoDB keeps each count as a top-level attribute `c:<key>`, so `ADD` works for a word nobody has sent before.
+- **Inter** is fetched by `next/font` at build time, so a build needs network access.

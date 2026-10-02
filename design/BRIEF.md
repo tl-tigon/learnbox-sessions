@@ -1,5 +1,7 @@
 # LearnBox Sessions: design brief
 
+> **Out of date since 2026-10-02.** This brief describes the earlier slide-deck product, written for a Claude Design handoff. The product now follows Slido's event model and its interface is built in code from `slido-study/STUDY.md`. The copy draft in §5 is still the source for the front page wording.
+
 The product is **LearnBox Sessions**. Always write the name in full: the wordmark, the page titles and the copy never shorten it to "Sessions". It runs at `sessions.learnbox.one`.
 
 ## 1. What the product is

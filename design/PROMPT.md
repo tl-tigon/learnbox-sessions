@@ -1,3 +1,5 @@
+> **Out of date since 2026-10-02.** This prompt was for a Claude Design handoff of the earlier slide-deck product. The interface is now built in code from `slido-study/STUDY.md`.
+
 Design the full UI for **LearnBox Sessions**: a free SaaS tool for running live polls, Q&A, quizzes and surveys with an audience, in the same space as Mentimeter, Slido and Kahoot. Always write the name in full, and design a wordmark for it.
 
 LearnBox Sessions is made by **LearnBox**, which sells simulations for corporate training. It is LearnBox's free tool, in the way HubSpot offers free tools beside its main product. It has to be a product facilitators would choose on its own merit, and it points to LearnBox in four fixed places.
