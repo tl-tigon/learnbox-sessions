@@ -147,6 +147,32 @@ One field in the middle of an almost empty page: `#`, "enter code here", a round
 - The profile button opens a second sheet with the participant's name.
 - With no poll running: an icon and one line, in the middle of the page.
 
+## slido.com, the site
+
+Studied on 2026-10-02 at 1440px and 390px wide: the home page, the menus, the product tour and the pages for live polls, live Q&A, quizzes, word cloud, surveys and analytics.
+
+- **Top bar**: 80px, sticky, white; it gains a hairline once the page scrolls. The wordmark, then Product, Solutions, Pricing, Resources, Enterprise; "Log In" and a filled "Sign Up" at the right. Product and Solutions open a panel on hover: a list on the left, and on the right an icon in a tinted circle, the item's name, two lines and "Learn more" for the item the pointer is on. On a phone the bar keeps the wordmark, "Sign Up" and a menu button; the menu opens as a full page with the groups folding open.
+- **Home page**, top to bottom:
+  - a pill, "Joining as a participant?", with the code field in it;
+  - the heading at 64px/72px bold, a 20px line, one 56px button;
+  - a video, 800x450 and 48 seconds, that loops: a browser window (the presenter's screen) and a phone side by side, playing a poll being voted on, then the Q&A with questions arriving, then a word cloud;
+  - a cream band (`#faf7f0`), "Works standalone and with your favorite tools", with six logos;
+  - a centred heading and a paragraph;
+  - four items (Live polls, Audience Q&A, Quizzes, Analytics) that open one at a time beside a picture that changes with them;
+  - three cream cards, an icon, a title and two lines each;
+  - award badges, a carousel of customer quotes with photographs, a row of customer logos;
+  - a green band with one heading and one button;
+  - a footer of five columns of links.
+- **A product page** (live Q&A): the heading at the left with a short list and a button, a picture at the right; "in 3 steps" as three green cards with a drawing each; "See how it works", a real event in two frames, "Participant mode" (a phone) and "Present mode" (the screen), where a vote on one shows on the other; then rows that alternate sides and background, each a small label, a 38px heading, two lines and a picture; a grid of six smaller features, icon, title and line; the tools band; quotes; the green band.
+- **Type**: headings in Slido's own sans at 64px and 38px bold; text in Inter at 16px, 20px for the lead line; buttons 56px tall with a 4px radius.
+
+**How LearnBox Sessions' site differs:**
+- The pictures are drawings of LearnBox Sessions' own screens, built in code (`src/components/site/mock.tsx`). The one under the home page's heading plays a poll, the Q&A, a word cloud and a quiz in turn; four labels under it choose the scene.
+- "Try it" is a working example in the page: a vote or a question on the drawn phone shows on the drawn big screen. It runs in the visitor's browser.
+- The menus are Product (the tour and six pages), Use cases (one page, five sections) and Pricing (one free plan).
+- The band under the picture says where a session runs: a projector, a shared browser tab in a video call, phones, the code and QR code. LearnBox Sessions has no add-ins for other tools, so no logos.
+- No awards, customer quotes or customer logos: there are none yet.
+
 ## What LearnBox Sessions takes, and what stays Slido's
 
 **Taken:** the event model, the layouts, the spacing and sizes above, the component shapes, and the restraint (one accent, one typeface, hairline cards, plain labels).

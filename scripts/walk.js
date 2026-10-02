@@ -483,6 +483,47 @@ const FIRST = { timeout: 120000 };
     const left = `${(await api('GET', '/api/sessions')).body.sessions.length},${(await api('GET', `/api/sessions/${sessionId}/results`)).status}`;
     check('deleting the account removes its sessions and their results', left === '0,404', left);
     await p.screenshot({ path: path.join(OUT, '19-front-page.png') });
+
+    // ---- The site: its menus, its pages and the working example on a product page
+    await p.hover('.s-head button:has-text("Product")');
+    await p.click('.s-drop a:has-text("Live polls")');
+    await p.waitForURL(`${BASE}/features/polls`, FIRST);
+    await p.waitForSelector('h1:has-text("Live polls")', WAIT);
+    check('site: the Product menu opens a product page', (await p.$$('.s-drop')).length === 0);
+    const shares = () => p.$$eval('.s-try-screen .mk-bar b', (els) => els.map((e) => e.textContent).join(' '));
+    const before = await shares();
+    await p.click('.s-try-phone [role="radio"]:has-text("Hiring plan")');
+    await p.click('.s-try-phone button:has-text("Send")');
+    const voted = await shares();
+    await p.click('.s-try-phone button:has-text("Edit response")');
+    await p.click('.s-try-phone [role="radio"]:has-text("Roadmap")');
+    await p.click('.s-try-phone button:has-text("Send")');
+    const moved = await shares();
+    check('site: a vote in the example moves the big screen, and a changed vote counts once', before === '47% 21% 32%' && voted === '45% 25% 30%' && moved === '50% 20% 30%', `${before} | ${voted} | ${moved}`);
+    await p.screenshot({ path: path.join(OUT, '20-site-polls.png') });
+    const bad = [];
+    for (const u of ['/', '/product', '/features/qa', '/features/word-cloud', '/features/quizzes', '/features/surveys', '/features/results', '/use-cases', '/pricing']) {
+      for (const width of [1366, 390]) {
+        await p.setViewportSize({ width, height: 800 });
+        const r = await p.goto(`${BASE}${u}`, FIRST);
+        const sideways = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        if (!r || r.status() !== 200 || sideways > 0 || !(await p.$('h1'))) bad.push(`${u}@${width}`);
+      }
+    }
+    const missing = (await api('GET', '/features/nope')).status;
+    check('site: every page opens and fits a phone and a laptop; an unknown page is not found', bad.length === 0 && missing === 404, `${bad.join(' ')} ${missing}`);
+    await p.goto(`${BASE}/`, FIRST);
+    await p.click('button[aria-label="Menu"]');
+    await p.click('.s-drawer summary:has-text("Use cases")');
+    await p.click('.s-drawer a:has-text("Classrooms")');
+    await p.waitForURL(`${BASE}/use-cases#classrooms`, FIRST);
+    check('site: on a phone the menu opens as a page and closes on a choice', (await p.$$('.s-drawer')).length === 0);
+    await p.setViewportSize({ width: 1366, height: 800 });
+    await p.goto(`${BASE}/`, FIRST);
+    await p.click('.s-scenes button:has-text("Quiz")');
+    await p.waitForSelector('.s-frame .mk-board', WAIT);
+    await p.screenshot({ path: path.join(OUT, '21-site-home.png') });
+    check('site: the front page picture shows the scene chosen', true);
     check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   } catch (e) {
     check('walk ran to the end', false, String(e).slice(0, 600));

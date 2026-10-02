@@ -36,13 +36,18 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Steps: Start quiz, Reveal answer, Leaderboard, Next question. When time is up the screen shows how people voted; Reveal marks the correct answer.
   - A correct answer earns 500 points plus up to 500 more for speed, timed on the server.
   - The phone shows correct or incorrect, points and rank; the last leaderboard ends the quiz, which is played once.
+- **The site** (2026-10-02), laid out as slido.com is, studied page by page:
+  - A sticky top bar with Product and Use cases menus, Pricing, Sign in and Create account. On a phone the menus open as one page.
+  - Front page: the code field in a pill; the heading and one button; a moving picture of the big screen and a phone playing a poll, the Q&A, a word cloud and a quiz; where a session runs; the five parts of a session, opening one at a time beside their picture; three cards; three steps; a working example (vote on the drawn phone, the drawn big screen follows); a band with one button; a footer of links.
+  - `/product` (the tour), `/features/polls`, `qa`, `word-cloud`, `quizzes`, `surveys`, `results`, `/use-cases`, `/pricing` (one free plan, its lines from `LIMITS`).
+  - Every picture is a drawing of the product's own screens in code; nothing is a photograph or a video.
 - **Audience**: joins at `/` or `/s/<code>` with no account. The phone has two tabs, Q&A and Polls; starting a poll brings the Polls tab forward, and stopping it brings the Q&A back. After a vote the options give way to the results, with "Edit response" under them. A menu holds the session's name and code, "Enter another code", a dark mode switch and "Create a session"; the profile button sets the person's name. Once a person has answered or asked, a strip at the foot of the page offers "Create a session".
 - **Big screen** `/present/<id>`: join instructions with code and QR on the left; the questions or the running poll on the right. Opens on a projector that isn't signed in with `#k=<displayKey>`.
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
 - `npm test` runs 64 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
-- A browser walk passes 62 of 62 checks: `node scripts/walk.js`, with `npm run dev` running.
+- A browser walk passes 67 of 67 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
   - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.
@@ -95,7 +100,8 @@ These are in `src/lib/limits.ts`.
    - Budgets alert.
 2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
 3. **OK to create a private GitHub repo** under `tl-tigon`.
-4. **The front page copy**: the draft is in `src/app/page.tsx`.
+4. **The site's copy**: the draft is in `src/lib/site.ts` and the pages in `src/app/(site)/`. Also for the owner: whether the Pricing page should promise the limits it lists; the line "Zoom, Teams, Meet, Webex: share the big screen's browser tab"; the use cases chosen (training, team meetings, all-hands, events, classrooms).
+   - Left out until real ones exist: customer quotes, customer logos, awards.
 5. **The simulations to show**, a name and one line each, for the LearnBox places (front page section, sessions list, results page).
 6. **Company name and contact** for the Terms and Privacy pages.
 7. **The test event in the owner's Slido account**, "Claude test - safe to delete" (#2650635), can be deleted.
@@ -103,7 +109,7 @@ These are in `src/lib/limits.ts`.
 
 ## Next steps
 1. **Provisioning**, on the owner's OK. Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then run the store tests against the dev table, and a load test of about 500 simulated phones.
-2. **The rest of v1**, each waiting on the owner: front page copy, Terms and Privacy, the LearnBox places, cost alarms.
+2. **The rest of v1**, each waiting on the owner: the site's copy, Terms and Privacy, the LearnBox places, cost alarms.
 3. **More of Slido**, if wanted: downvotes, labels, asker withdraws a question, audience replies, resetting a poll's results, a PowerPoint add-in.
 
 ## To check at the first deploy

@@ -40,6 +40,7 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **Storage**: `src/lib/store/`, one `Store` interface with two implementations, `memory.ts` (dev and tests) and `dynamo.ts`. Both must keep the same guarantees (see `types.ts`); new storage rules get a test in `src/lib/__tests__/`.
 - **Screens**:
   - `/` front page with the code field; `/s/<code>` the phone;
+  - the site, in `src/app/(site)/` under one top bar and footer: `/`, `/product`, `/features/<slug>` (polls, qa, word-cloud, quizzes, surveys, results), `/use-cases`, `/pricing`. What its pages say is in `src/lib/site.ts`; its pictures are drawings of the product's screens in `src/components/site/`;
   - `/app` the facilitator's sessions; `/app/sessions/<id>` the facilitator's screen; `/app/sessions/<id>/results`; `/app/account`;
   - `/present/<id>` the big screen, also opened on a projector with `#k=<displayKey>`.
 - **Three views of a session** (`live.ts`): `audienceView` for a phone, `wallView` for the big screen, `hostView` for the facilitator. Only `hostView` holds questions waiting for review, every poll's answered count and the display key. With `?show=<id>` it also carries the stored results of the interaction open on the facilitator's screen, unless that one is running.
@@ -59,13 +60,15 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **Never commit** `.env*` files or secrets.
 - **The interface follows `design/slido-study/STUDY.md`** (owner's decision, 2026-10-02). It is built here in code.
   - One accent, LearnBox's forest green. One typeface, Inter, at 14px and 12px. White cards with a hairline border and no shadow. One full-width primary action per phone screen.
+  - The site uses larger type (64px and 40px headings, 16px to 20px text) in `src/app/(site)/site.css`; its layout follows slido.com.
   - The facilitator's screen follows Slido's host screen: a header, a rail, a list of cards, the open card with its results under each option, and a bar that starts and stops it.
   - Screenshots of the owner's Slido account hold their clients' names. They stay in `.playwright-mcp/` (ignored by git) and never go into the repo.
   - Slido's name, wordmark, exact green, images and wording are never used.
   - Every colour is a token in `globals.css`. Dark and light themes both.
 - **It must work cleanly.** The owner's bar: nothing clunky, buggy or glitchy, and no way around a rule. A rule is enforced on the server and has a test that tries to break it; a flow is checked in the browser walk.
 - **No invented UI copy**: no taglines, welcome lines or encouragement. Use labels, names and numbers. Buttons say what they do. A state with nothing to show uses a short label ("No active poll", "Questions closed").
-  - The front page copy is a draft the owner edits. It is plain statements: no creative writing and no long explanation.
+  - The site's copy (`src/lib/site.ts` and the pages in `src/app/(site)/`) is a draft the owner edits. It is plain statements: no creative writing and no long explanation. Every statement about the product is true of the code, and its numbers come from `LIMITS`.
+  - The site has no awards, customer quotes or customer logos until real ones exist, and names other tools only to say a browser tab can be shared in them.
 - **Writing style**: affirmative and concise. State what something is, not what it isn't.
 - **The owner reads plans and updates in plain terms**: lead with what changes for facilitators and the audience, and keep code detail below that.
 - **Numbers** (codes, counts, timers, percentages) use tabular figures (`.num`).

@@ -85,8 +85,9 @@ Also:
 | 4 | Results in Excel; account delete; 12-month expiry | **Built and tested** |
 | 5 | The event model: sessions as events, always-open Q&A, polls started one at a time, vote changes, ranking, surveys, quiz runs, replies, announcement, duplicate | **Built and tested** (2026-10-02) |
 | 6 | The interface, modelled on Slido's (`design/slido-study/STUDY.md`), in LearnBox green with Inter | **Built** (2026-10-02). The facilitator's and the participant's screens follow Slido's own, run from both sides in a test event in the owner's account |
-| 7 | Front page copy approved; the LearnBox places; Terms and Privacy; cost alarms | Waiting on the owner |
-| 8 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
+| 7 | The site: front page, product tour, six product pages, use cases, pricing | **Built** (2026-10-02), laid out as slido.com is; its copy is a draft |
+| 8 | The site's copy approved; the LearnBox places; Terms and Privacy; cost alarms | Waiting on the owner |
+| 9 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
 
 ## Verification
 - **Vitest** (64 tests):
@@ -97,6 +98,6 @@ Also:
   - Q&A: one upvote per person; a waiting question seen only by its asker and the facilitator;
   - code collisions; stale `seq` is dropped;
   - deleting an account; CSV and Excel.
-- **Browser walk** (playwright-core, 62 checks), with a facilitator, the big screen as a signed-out projector and 5 phones: the whole flow, then the ways around the rules that must be refused.
+- **Browser walk** (playwright-core, 67 checks), with a facilitator, the big screen as a signed-out projector and 5 phones: the whole flow, then the ways around the rules that must be refused.
 - **Load test** on dev: about 500 simulated phones vote within 10 s. No vote may be lost, and the time from vote to screen must stay under about 1 s.
 - **Screenshots** in dark and light at phone and 1920×1080, sent to the owner before any deploy.

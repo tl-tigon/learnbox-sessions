@@ -28,6 +28,8 @@
   --danger: #c62828;
   --danger-soft: #fae1e1;
   --ok: #1f7a52;
+  /* The body of a drawn phone and the top of a drawn browser window, on the site. */
+  --device: #262626;
   --radius: 12px;
   --radius-s: 8px;
   --font: var(--font-inter), Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -59,6 +61,7 @@
     --danger: #ff6b6b;
     --danger-soft: rgba(255, 107, 107, 0.16);
     --ok: #3aa374;
+    --device: #3b423d;
     color-scheme: dark;
   }
 }
@@ -86,6 +89,7 @@
   --danger: #ff6b6b;
   --danger-soft: rgba(255, 107, 107, 0.16);
   --ok: #3aa374;
+  --device: #3b423d;
   color-scheme: dark;
 }
 
@@ -497,12 +501,3 @@ select.inline { width: auto; padding: 0 2px; border-color: transparent; font-siz
   .startbar { position: sticky; bottom: 8px; box-shadow: inset 0 0 0 1px var(--line), 0 4px 16px rgba(0, 0, 0, 0.12); }
   .topbar { flex-wrap: wrap; }
 }
-
-/* The front page */
-.hero { display: grid; justify-items: center; text-align: center; gap: 20px; padding: 56px 16px 72px; }
-.hero h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; max-width: 16ch; }
-.hero p { font-size: 18px; max-width: 60ch; color: var(--text-2); }
-.hero .btn.primary { min-height: 52px; padding: 0 28px; font-size: 16px; font-weight: 600; }
-.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; max-width: 1120px; margin: 0 auto; padding: 0 16px 64px; }
-.features .card { display: grid; gap: 6px; align-content: start; }
-.features .kind { width: 36px; height: 36px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
