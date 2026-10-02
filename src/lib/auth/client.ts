@@ -9,6 +9,7 @@
 import { Amplify } from 'aws-amplify';
 import {
   confirmSignUp,
+  deleteUser,
   fetchAuthSession,
   resendSignUpCode,
   resetPassword,
@@ -17,6 +18,7 @@ import {
   signInWithRedirect,
   signOut as amplifySignOut,
   signUp,
+  updatePassword,
 } from 'aws-amplify/auth';
 
 const POOL = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
@@ -114,6 +116,21 @@ export async function signOut() {
   }
   configure();
   await amplifySignOut();
+}
+
+export async function changePassword(oldPassword: string, newPassword: string) {
+  configure();
+  return updatePassword({ oldPassword, newPassword });
+}
+
+/** Removes the sign-in itself: the Cognito user, or in development the remembered email. */
+export async function removeSignIn() {
+  if (DEV_AUTH) {
+    localStorage.removeItem(DEV_KEY);
+    return;
+  }
+  configure();
+  await deleteUser();
 }
 
 /** fetch with the facilitator's token attached. */

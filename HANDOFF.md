@@ -4,14 +4,15 @@ This continues the work started in the LearnBox session. Read this file, then `C
 
 ## Where things stand
 
-**Phases 1 (polls), 2 (Q&A) and 3 (quiz) are built and tested.** They are in a local git repo only (`main`). There is no GitHub remote yet.
+**Phases 1 (polls), 2 (Q&A) and 3 (quiz) are built and tested, and so is the part of Phase 4 that needs nothing from the owner.** They are in a local git repo only (`main`). There is no GitHub remote yet.
 
 **What works now** (in-memory store, with development sign-in):
 - **Facilitator**:
   - sign in (development: any email, no password);
   - dashboard;
   - presentation editor with autosave;
-  - Present, or Run as survey.
+  - Present, or Run as survey;
+  - Account page: delete the account, which removes its presentations, sessions and all answers.
 - **Slide types**: multiple choice (1 to N picks), word cloud (1–3 words, normalised and profanity-filtered), rating (1–3/4/5/7/10 with end labels), open text (1–3 answers), Q&A, quiz question, leaderboard, heading.
 - **Quiz**:
   - a quiz question has 2–4 options, one correct, and a time limit of 10, 20, 30 or 60 seconds;
@@ -40,18 +41,20 @@ This continues the work started in the LearnBox session. Read this file, then `C
   - close answers;
   - end session;
   - copy projector link.
-- **Results page** with CSV download, built from the stored answers.
+- **Results page** with CSV and Excel downloads, built from the stored answers. The Excel file has a summary sheet, one sheet per slide and a leaderboard sheet.
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 33 vitest tests (engine, store guarantees, views, Q&A, quiz).
-- A browser walk passed 40 of 40 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 35 vitest tests (engine, store guarantees, views, Q&A, quiz, account deletion, downloads).
+- A browser walk passed 42 of 42 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
-  - It covered a facilitator, the big screen (as a signed-out projector with the display key) and 5 phones; every slide type; hide and show results; lock; a moderated Q&A; a quiz question with its reveal and podium; end; CSV; survey; and checks that another account is blocked.
+  - It covered a facilitator, the big screen (as a signed-out projector with the display key) and 5 phones; every slide type; hide and show results; lock; a moderated Q&A; a quiz question with its reveal and podium; end; CSV and Excel; survey; checks that another account is blocked; and deleting the account.
+  - It deletes its own account at the end, so a walk that finishes leaves nothing behind.
 
 **Written but not yet run:**
-- `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist.
+- `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist. This includes the Q&A, quiz and delete-session functions, and the 12-month `expiresAt` on every session row.
+- Change password and the removal of the Cognito user on the Account page (`changePassword`, `removeSignIn` in `src/lib/auth/client.ts`). In development the page shows no password form.
 - `src/lib/push/server.ts` and `src/lib/push/client.ts`: AppSync Events publish and subscribe, which need the Events API.
 - The Cognito sign-up, confirm and Google flows in `src/lib/auth/client.ts` and `src/app/sign-in/page.tsx`, which need the user pool.
 
@@ -80,12 +83,14 @@ This continues the work started in the LearnBox session. Read this file, then `C
 
 ## Next steps (in order, unless the owner redirects)
 
-### 1. Phase 4: the rest of v1
-- Excel export (`exceljs`).
-- `/app/account`: change password; delete account, which deletes everything owned and then the Cognito user.
-- Front page content, Terms and Privacy.
-- The LearnBox places: the wordmark, the front page section, the dashboard panel and the results page panel (`design/BRIEF.md` §4F).
-- TTL `expiresAt` = 12 months on session rows.
+### 1. Phase 4: what is left
+Done: Excel export, the Account page with delete account, and `expiresAt` on session rows.
+
+Left, each waiting on the owner:
+- Front page content: needs the copy in `design/BRIEF.md` §5 approved.
+- Terms and Privacy: need the company name and contact.
+- The LearnBox places: the front page section, the dashboard panel and the results page panel (`design/BRIEF.md` §4F) need the simulation list. The wordmark is in.
+- Cost alarms: part of the AWS setup.
 
 ### 2. Phase 0 provisioning, on the owner's OK
 Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then:
@@ -119,4 +124,6 @@ Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `sc
 - **Background tabs stop polling:** `useLive` polls only while the page is visible. In the walk, each screen has its own browser context so all stay in the foreground; `bringToFront()` on one page puts the others in its context in the background.
 - **Build while the dev server runs:** `NEXT_DIST_DIR=.next-check npx next build`, then `git checkout tsconfig.json` and delete `.next-check` (the build adds that folder to `tsconfig.json`).
 - **Stale sessions in dev:** a walk that fails midway leaves a live session, and three live sessions block the next walk. End them from the dashboard, or restart the dev server.
+- **Walk right after a build or an install:** the dev server recompiles when `tsconfig.json` or `package.json` changes, and the walk's 8-second waits can time out meanwhile. Run the walk again once the server has settled.
+- **Deleting an account in DynamoDB** deletes a session's rows 25 to a batch, 8 batches at a time. A session with tens of thousands of rows takes several seconds; time it during the load test.
 - **Live counts:** the counts row in DynamoDB keeps each count as a top-level attribute `c:<key>`, so `ADD` works for a word nobody has sent before.

@@ -27,11 +27,11 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
     authed(`/api/sessions/${id}/results`).then(async (r) => (r.ok ? setD(await r.json()) : setErr('Not found')));
   }, [email, id]);
 
-  const download = async () => {
-    const r = await authed(`/api/sessions/${id}/results?format=csv`);
+  const download = async (format: 'csv' | 'xlsx') => {
+    const r = await authed(`/api/sessions/${id}/results?format=${format}`);
     if (!r.ok) return setErr('Download failed');
     const blob = await r.blob();
-    const name = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') ?? '')?.[1] ?? 'results.csv';
+    const name = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') ?? '')?.[1] ?? `results.${format}`;
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
     a.click();
     URL.revokeObjectURL(a.href);
@@ -43,7 +43,10 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
     <main className="wrap stack">
       <div className="spread">
         <a href="/app">← Presentations</a>
-        <button className="primary" onClick={download}>Download CSV</button>
+        <div className="row">
+          <button onClick={() => download('xlsx')}>Download Excel</button>
+          <button className="primary" onClick={() => download('csv')}>Download CSV</button>
+        </div>
       </div>
       <div className="spread">
         <h1>{d.session.title}</h1>

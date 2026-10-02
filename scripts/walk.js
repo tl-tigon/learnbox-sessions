@@ -1,8 +1,9 @@
 ﻿/* Walk on the in-memory dev server: a facilitator builds a deck in the editor, presents it, five
    phones join by code and answer every slide type, the big screen and control view show live
    counts, a moderated Q&A runs (ask, approve, upvote, highlight, answered, hide), a quiz question
-   is played (start, answer, reveal, podium), the session ends and the CSV downloads. Then a
-   survey run. */
+   is played (start, answer, reveal, podium), the session ends and the CSV and Excel files
+   download. Then a survey run. Last, the account is deleted, which also leaves the dev server
+   clean for the next walk. */
 const fs = require('fs'), path = require('path');
 const { chromium } = require('C:/Users/tejas/OneDrive/Documents/Workspace/LMS/Trust Sim/capture-tool/node_modules/playwright-core');
 const BASE = 'http://localhost:3200';
@@ -255,6 +256,9 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     check('CSV has every slide', /"Goa","3"/.test(csv) && /"growth","3"/.test(csv) && /"Idea number 2"/.test(csv) && /"5","2"/.test(csv), csv.split('\r\n').slice(0, 4).join(' | '));
     check('CSV has the questions', csv.includes('"Will targets change mid-year?","Asha","3","Answered"') && csv.includes('"When is the new CRM live?","Anonymous","1","Hidden"'));
     check('CSV has the quiz and the leaderboard', csv.includes('"Jupiter","3","Yes"') && /"Leaderboard"\r\n"Rank","Name","Points"\r\n"1","Asha","\d+"/.test(csv));
+    const [xl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Download Excel")')]);
+    const xlsx = fs.readFileSync(await xl.path());
+    check('Excel file downloads', xl.suggestedFilename().endsWith('.xlsx') && xlsx.length > 4000 && xlsx.subarray(0, 2).toString() === 'PK', `${xl.suggestedFilename()} ${xlsx.length} bytes`);
     const full = await p.evaluate(async (id) => await (await fetch(`/api/sessions/${id}/results`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).text(), sessionId);
     check('results carry no phone tokens', !/"token"/.test(full) && full.includes('"points"'));
     const codeAfter = await phones[0].evaluate(async (c) => (await fetch(`/api/join/${c}`)).status, code);
@@ -290,6 +294,21 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
     // Someone else's session is hidden
     const other = await p.evaluate(async (id) => (await fetch(`/api/sessions/${id}/results`, { headers: { authorization: 'Bearer dev:someone@else.com' } })).status, sessionId);
     check("another account cannot read this session's results", other === 404, String(other));
+    // Delete the account: everything it owns goes
+    await p.goto(`${BASE}/app/account`);
+    await p.click('button:has-text("Delete account")');
+    await p.waitForSelector('text=Its presentations, sessions and all answers are removed.');
+    await p.screenshot({ path: path.join(OUT, '18-account-delete.png') });
+    await p.click('section:has-text("Delete this account?") button.danger');
+    await p.waitForURL(`${BASE}/`);
+    const left = await p.evaluate(async (id) => {
+      const h = { authorization: 'Bearer dev:walk@example.com' };
+      const pres = (await (await fetch('/api/presentations', { headers: h })).json()).presentations.length;
+      const sess = (await (await fetch('/api/sessions', { headers: h })).json()).sessions.length;
+      const results = (await fetch(`/api/sessions/${id}/results`, { headers: h })).status;
+      return `${pres},${sess},${results}`;
+    }, sessionId);
+    check('deleting the account removes its presentations, sessions and results', left === '0,0,404', left);
     check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   } catch (e) { check('walk ran to the end', false, String(e).slice(0, 500)); }
   await browser.close();

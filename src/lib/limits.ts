@@ -25,4 +25,6 @@ export const LIMITS = {
   boardSize: 10,
   /** A session closes itself this long after it starts. */
   sessionHours: 24,
+  /** A session's rows (people, answers, questions, scores) are deleted this long after they are written. */
+  keepDays: 365,
 } as const;

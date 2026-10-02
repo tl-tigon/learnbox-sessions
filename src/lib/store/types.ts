@@ -30,6 +30,8 @@ export interface Store {
   setState(id: string, next: SessionState, fromSeq: number): Promise<Session | null>;
   /** Marks the session ended and frees its code. */
   endSession(s: Session): Promise<void>;
+  /** Removes the session and everything recorded in it, and frees its code. */
+  deleteSession(s: Session): Promise<void>;
 
   /** Adds a person, or finds them again. `full` when the session is at its people limit and they are new. */
   join(sessionId: string, token: string, nickname: string, cap: number): Promise<{ person: Person | null; full: boolean; people: number }>;

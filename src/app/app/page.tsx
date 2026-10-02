@@ -36,6 +36,7 @@ export default function Dashboard() {
         <strong>LearnBox Sessions</strong>
         <div className="row small">
           <span className="muted">{email}</span>
+          <a className="btn" href="/app/account">Account</a>
           <button onClick={async () => { await signOut(); router.push('/'); }}>Sign out</button>
         </div>
       </div>

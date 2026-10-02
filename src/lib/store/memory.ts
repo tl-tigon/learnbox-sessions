@@ -80,6 +80,16 @@ export function memoryStore(db: Db = freshDb()): Store {
       }
       if (db.codes.get(s.code) === s.id) db.codes.delete(s.code);
     },
+    async deleteSession(s) {
+      if (db.codes.get(s.code) === s.id) db.codes.delete(s.code);
+      db.sessions.delete(s.id);
+      db.people.delete(s.id);
+      db.answers.delete(s.id);
+      for (const k of [...db.tallies.keys()]) if (k.startsWith(`${s.id}#`)) db.tallies.delete(k);
+      db.questions?.delete(s.id);
+      db.upvotes?.delete(s.id);
+      db.scores?.delete(s.id);
+    },
 
     async join(sessionId, token, nickname, cap) {
       const ppl = peopleOf(sessionId);

@@ -23,16 +23,20 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 ## Commands
 - `npm run dev`: dev server on http://localhost:3200. It uses the in-memory store and development sign-in from `.env.local`.
 - `npm test`: vitest, `src/**/*.test.ts`.
-- `npm run typecheck`, then `npx next build`.
+- `npm run typecheck`, then `npx next build`. While the dev server is running, build with `NEXT_DIST_DIR=.next-check npx next build`, then `git checkout tsconfig.json` and delete `.next-check`.
+- `node scripts/walk.js`: the browser walk, with the dev server running.
 
 ## Stack and layout
 - **Framework**: Next.js 15 App Router, TypeScript, React 19, plain CSS (`src/app/globals.css`, tokens only, until the Claude Design handoff). No Tailwind or UI kits.
 - **Model** (`src/lib/types.ts`):
   - Presentation → slides.
-  - Session = a run with a **snapshot** of the slides, a code, `state {current, showResults, locked, seq}` and a display key.
+  - Session = a run with a **snapshot** of the slides, a code, `state {current, showResults, locked, highlight, quiz, played, seq}` and a display key.
 - **Rules**, pure and tested:
-  - `src/lib/engine/`: slide cleaning, answer checks, words and profanity.
+  - `src/lib/engine/`: slide cleaning, answer checks, words and profanity, Q&A rules (`questions.ts`), quiz phases, points and ranking (`quiz.ts`).
   - `src/lib/live.ts`: start, control, respond, the views for each screen, results.
+  - `src/lib/qa.ts`: ask, upvote, moderate.
+  - `src/lib/export.ts`: results as CSV and Excel, from the same blocks.
+  - `src/lib/account.ts`: deleting everything an account owns.
 - **Storage**: `src/lib/store/`, one `Store` interface with two implementations, `memory.ts` (dev and tests) and `dynamo.ts`. Both must keep the same guarantees (see `types.ts`); new storage rules get a test in `src/lib/__tests__/`.
 - **Live push**:
   - `src/lib/push/`: AppSync Events, where the server publishes (IAM) and the browser subscribes (API key).
@@ -57,5 +61,6 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **The owner reads plans and updates in plain terms**: lead with what changes for facilitators and the audience, and keep code detail below that.
 - **Numbers** (codes, counts, timers, percentages) use the tabular/mono face. One primary action per view. Dark and light themes both.
 - **The server decides.** Answers, quiz timing and points are checked and timed on the server; never trust the phone.
+- **The audience is sent only what it may see.** A quiz question goes out without its correct option, a waiting or hidden question as id and status only, and no response carries another person's token.
 - **Every route that reads or changes a presentation or session checks ownership.** Someone else's resource returns 404, not 403.
 - **Audience text** (words, open answers, nicknames, questions) goes through `cleanText` / `isProfane`, with length limits from `LIMITS`.
