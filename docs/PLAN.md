@@ -63,10 +63,10 @@ Counts are a fast running total. The stored answers are the source of truth.
 ### Fair use (`src/lib/limits.ts`)
 | Limit | Value |
 |---|---|
-| People per session | 1,000 on Pro, 200 on Free |
+| People per session | 1,000 on Pro, 100 on Free |
 | Live sessions per account at once | 5 |
 | Sessions per account | 100 |
-| Polls, quizzes and surveys per session | 50 on Pro, 10 on Free (no surveys on Free) |
+| Polls, quizzes and surveys per session | 50 on Pro, 8 on Free (no surveys on Free) |
 | A session's code works for | 7 days |
 
 Also:

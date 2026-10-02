@@ -41,6 +41,6 @@ export const LIMITS = {
  * Everything not listed here is the same on both.
  */
 export const PLANS = {
-  free: { peoplePerSession: 200, interactionsPerSession: 10, surveys: false, downloads: false },
+  free: { peoplePerSession: 100, interactionsPerSession: 8, surveys: false, downloads: false },
   pro: { peoplePerSession: LIMITS.peoplePerSession, interactionsPerSession: LIMITS.interactionsPerSession, surveys: true, downloads: true },
 } as const;

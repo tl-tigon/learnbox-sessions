@@ -103,14 +103,14 @@ const FIRST = { timeout: 120000 };
     // ---- Plans: what Free refuses, then paying for Pro on the development payment page
     const sessionUrl = `${BASE}/app/sessions/${sessionId}`;
     const planNow = async () => (await api('GET', '/api/account')).body.plan;
-    const eleven = Array.from({ length: 11 }, (_, i) => ({ id: `rate10${String(i).padStart(2, '0')}`, type: 'rating', title: `Poll ${i + 1}`, max: 5 }));
+    const nine = Array.from({ length: 9 }, (_, i) => ({ id: `rate10${String(i).padStart(2, '0')}`, type: 'rating', title: `Poll ${i + 1}`, max: 5 }));
     const refused = [
       (await api('PUT', `/api/sessions/${sessionId}`, { interactions: [choice, ...more, quiz] })).status,
-      (await api('PUT', `/api/sessions/${sessionId}`, { interactions: eleven })).status,
+      (await api('PUT', `/api/sessions/${sessionId}`, { interactions: nine })).status,
       (await api('GET', `/api/sessions/${sessionId}/results?format=csv`)).status,
       (await api('GET', `/api/sessions/${sessionId}/results?format=xlsx`)).status,
     ];
-    check('Free: a survey, an 11th poll and the downloads are refused, and nothing is saved',
+    check('Free: a survey, a 9th poll and the downloads are refused, and nothing is saved',
       refused.join() === '402,402,402,402' && (await api('GET', `/api/sessions/${sessionId}`)).body.interactions.length === 2 && (await planNow()) === 'free', refused.join());
     /* An outcome nobody signed, posted the way the payment page posts one. */
     const forgedPay = await p.evaluate(async () => {
@@ -576,7 +576,7 @@ const FIRST = { timeout: 120000 };
     const cards = await p.$$eval('.s-plan', (els) => els.map((e) => `${e.querySelector('h2').textContent} ${e.querySelector('.price b').textContent} ${e.querySelector('a.btn').getAttribute('href')}`).join(' | '));
     const compared = await p.$$eval('.s-compare tbody tr:not(.group)', (rows) => rows.filter((r) => /^(People in a session|Surveys|Downloads)/.test(r.textContent)).map((r) => r.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
     check('site: Pricing shows Free and Pro with the price, and what differs',
-      cards === 'Free ₹0 /sign-in?mode=up | Pro ₹49 /app/account' && /People in a session\s?200\s?1,000/.test(compared) && /Surveys.*not included.*included/.test(compared), `${cards} · ${compared}`);
+      cards === 'Free ₹0 /sign-in?mode=up | Pro ₹49 /app/account' && /People in a session\s?100\s?1,000/.test(compared) && /Surveys.*not included.*included/.test(compared), `${cards} · ${compared}`);
     await p.screenshot({ path: path.join(OUT, '20b-site-pricing.png'), fullPage: true });
     await p.setViewportSize({ width: 390, height: 800 });
     await p.goto(`${BASE}/`, FIRST);

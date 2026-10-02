@@ -22,9 +22,9 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Results page with CSV and Excel downloads.
   - Account page: the plan (Free, or Pro and the date it runs to), paying for Pro, and deleting the account, which removes its sessions, all their answers, its plan and its orders.
 - **Plans** (2026-10-03): Free and Pro.
-  - Free: 200 people and 10 polls and quizzes in a session; no surveys; no CSV or Excel download. Pro: 1,000 people; 50 polls, quizzes and surveys; surveys; downloads. Everything else is the same on both.
-  - The server refuses what a plan does not hold (HTTP 402): saving an 11th poll or a survey, starting a survey, a download, the 201st person, copying a session that needs Pro.
-  - On Free the facilitator sees: "Polls 3 / 10"; Survey marked Pro on the types to add (it opens the account page); "Get Pro" in place of Add when the session is full; "Downloads are on Pro" on the results page; "Full · Get Pro" beside the people count at 200.
+  - Free: 100 people and 8 polls and quizzes in a session; no surveys; no CSV or Excel download. Pro: 1,000 people; 50 polls, quizzes and surveys; surveys; downloads. Everything else is the same on both.
+  - The server refuses what a plan does not hold (HTTP 402): saving a 9th poll or a survey, starting a survey, a download, the 101st person, copying a session that needs Pro.
+  - On Free the facilitator sees: "Polls 3 / 8"; Survey marked Pro on the types to add (it opens the account page); "Get Pro" in place of Add when the session is full; "Downloads are on Pro" on the results page; "Full · Get Pro" beside the people count at 100.
   - Pro costs ₹79 for 1 month (30 days) or ₹588 for 12 months (₹49 a month). Each is paid once and does not renew; a second payment adds its time to the end of the first. The amount is set on the server from the period chosen.
   - Paying: the account page asks for a name and a mobile number (PayU requires both; the number is not stored), then posts to PayU's payment page. PayU sends the browser back with a signed outcome. On each load of the account page the server also asks PayU about payments whose outcome never came back.
   - When Pro ends the account is on Free again. Its sessions keep what they hold and can be edited; they take no more polls, their surveys do not start, and they cannot be copied.
@@ -84,7 +84,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 ## Decisions by the owner
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
-- **2026-10-03**: two plans, Free and Pro. Free is generous (200 people, 10 polls and quizzes); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹79 for 1 month or ₹588 for 12 months (owner, 2026-10-03). Payments go through the owner's PayU (India) account.
+- **2026-10-03**: two plans, Free and Pro. Free holds 100 people and 8 polls and quizzes, with the full Q&A (first set at 200 and 10, tightened the same day); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹79 for 1 month or ₹588 for 12 months (owner, 2026-10-03). Payments go through the owner's PayU (India) account.
 - **2026-10-03**: PayU may add its convenience fee for the buyer on top of ₹588. The PayU account's website moves from `tigon.one` to `sessions.learnbox.one`.
 - **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
 - **2026-10-02**: switch to Slido's event model, and model the interface on Slido's.
@@ -103,8 +103,8 @@ These are in `src/lib/limits.ts`.
 | A session's code works for | 7 days | 24 hours |
 | Live sessions per account at once | 5 | 3 |
 | Sessions per account, live and ended | 100 | (50 presentations) |
-| Polls, quizzes and surveys per session | 50 on Pro, 10 on Free | (50 slides) |
-| People per session | 1,000 on Pro, 200 on Free | 1,000 |
+| Polls, quizzes and surveys per session | 50 on Pro, 8 on Free | (50 slides) |
+| People per session | 1,000 on Pro, 100 on Free | 1,000 |
 | Questions per person per session | 20 | 10 per slide |
 | Leaderboard rows on the big screen | 5 | 10 |
 

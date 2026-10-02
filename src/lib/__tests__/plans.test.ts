@@ -11,6 +11,7 @@ import type { Store } from '../store/types';
 import { INTERACTIONS, makePro, running, TOKEN } from './helpers';
 
 const DAY = 86400_000;
+const FREE = PLANS.free;
 const polls = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `poll${String(i).padStart(4, '0')}`, type: 'rating', title: `Poll ${i + 1}`, max: 5 }));
 const SURVEY = INTERACTIONS.find((i) => i.type === 'survey')!;
 const refusal = async (run: Promise<unknown>) => run.then(() => null, (e: { status?: number; message: string }) => `${e.status}: ${e.message}`);
@@ -21,13 +22,14 @@ afterEach(() => {
 });
 
 describe('the Free plan', () => {
-  it('holds 10 polls and quizzes in a session and refuses the 11th', async () => {
+  it('holds 8 polls and quizzes in a session and refuses the 9th', async () => {
     const db = memoryStore();
     const s = await createSession(db, 'free1', 'Free');
-    const ten = await editSession(db, s, { interactions: polls(10) });
-    expect(ten.interactions).toHaveLength(10);
-    expect(await refusal(editSession(db, ten, { interactions: polls(11) }))).toBe('402: Up to 10 polls and quizzes in a session on Free');
-    expect((await db.getSession(s.id))!.interactions).toHaveLength(10);
+    expect(FREE.interactionsPerSession).toBe(8);
+    const full = await editSession(db, s, { interactions: polls(8) });
+    expect(full.interactions).toHaveLength(8);
+    expect(await refusal(editSession(db, full, { interactions: polls(9) }))).toBe('402: Up to 8 polls and quizzes in a session on Free');
+    expect((await db.getSession(s.id))!.interactions).toHaveLength(8);
   });
 
   it('refuses a survey, however it is sent', async () => {
@@ -38,15 +40,16 @@ describe('the Free plan', () => {
     expect((await db.getSession(s.id))!.interactions).toHaveLength(0);
   });
 
-  it('holds 200 people in a session; Pro holds 1,000', async () => {
+  it('holds 100 people in a session; Pro holds 1,000', async () => {
     const db = memoryStore();
     const s = await createSession(db, 'free1', 'Free');
-    for (let i = 1; i <= 200; i++) expect((await joinSession(db, s, TOKEN(i), '')).full).toBe(false);
-    expect((await joinSession(db, s, TOKEN(201), '')).full).toBe(true);
+    expect(FREE.peoplePerSession).toBe(100);
+    for (let i = 1; i <= 100; i++) expect((await joinSession(db, s, TOKEN(i), '')).full).toBe(false);
+    expect((await joinSession(db, s, TOKEN(101), '')).full).toBe(true);
     /* Someone already in is found again, not counted again. */
     expect((await joinSession(db, s, TOKEN(7), '')).full).toBe(false);
     await makePro(db, 'free1');
-    expect((await joinSession(db, s, TOKEN(201), '')).full).toBe(false);
+    expect((await joinSession(db, s, TOKEN(101), '')).full).toBe(false);
     expect((await planOf(db, 'free1')).peoplePerSession).toBe(1000);
   });
 
