@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node --max-http-header-size=65536 node_modules/next/dist/bin/next dev -p 3200",
     "build": "next build",
-    "start": "node --max-http-header-size=65536 node_modules/next/dist/bin/next start -p 3200",
+    "build:lambda": "node scripts/build-lambda.mjs",
+    "preview": "node --max-http-header-size=65536 scripts/preview.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -29,6 +30,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.7.0",
     "vitest": "^5.0.0"
   }

@@ -5,8 +5,8 @@
  * and survey); the open card on the right, with a bar under it that starts and stops it.
  * Settings and replies open in a panel down the right side. Edits save as they are typed.
  */
-import { use, useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Confirm, Panel, Toast, type Ask } from '@/components/dialog';
 import { hasSettings, PollEditor, PollSettings, QuizEditor, SurveyEditor } from '@/components/editor';
 import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
@@ -19,16 +19,22 @@ import { authed } from '@/lib/auth/client';
 import { blankInteraction, INTERACTION_TYPES, withNewIds } from '@/lib/engine/polls';
 import { quizPhase } from '@/lib/engine/quiz';
 import { LIMITS, PLANS } from '@/lib/limits';
+import { joinPath, presentPath, resultsPath, sessionPath, shareLink } from '@/lib/links';
 import { useHost, withQuestion, type HostView } from '@/lib/use-host';
 import type { Interaction, InteractionType, QaSettings, Quiz, Tally } from '@/lib/types';
 
 interface Draft { title: string; interactions: Interaction[]; qa: QaSettings }
 type Act = (body: Record<string, unknown>) => Promise<boolean>;
 
-export default function HostPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+/** The session's id comes in the address as `?id=`. */
+export default function HostPage() {
+  return <Suspense><SignedInHost /></Suspense>;
+}
+
+function SignedInHost() {
+  const id = useSearchParams().get('id') ?? '';
   const email = useSignedIn();
-  if (!email) return null;
+  if (!email || !id) return null;
   return <Host id={id} />;
 }
 
@@ -247,9 +253,9 @@ function Host({ id }: { id: string }) {
   const stop = () => act({ action: 'activate', id: null });
   const answeredOf = (i: Interaction) => (i.type === 'quiz' ? Math.max(0, ...i.questions.map((q) => v.answered[q.id] ?? 0)) : i.type === 'survey' ? Math.max(0, ...i.polls.map((p) => v.answered[p.id] ?? 0)) : v.answered[i.id] ?? 0);
 
-  const joinLink = `${origin}/s/${v.code}`;
-  const projector = `${origin}/present/${id}#k=${v.displayKey}`;
-  const resultsHref = `/app/sessions/${id}/results`;
+  const joinLink = shareLink(origin, v.code);
+  const projector = `${origin}${presentPath(id, v.displayKey)}`;
+  const resultsHref = resultsPath(id);
   const pendingCount = v.questions.filter((q) => q.status === 'pending').length;
   const itemActive = !!item && v.state.active === item.id;
   const itemIndex = item ? draft.interactions.findIndex((i) => i.id === item.id) : -1;
@@ -292,7 +298,7 @@ function Host({ id }: { id: string }) {
           </Menu>
         )}
         <div className={ended ? '' : 'split'}>
-          {!ended && <a className="btn primary tall" href={`/present/${id}`} target="_blank" rel="noreferrer" aria-label="Present"><Icon name="screen" /><span className="wide-only">Present</span></a>}
+          {!ended && <a className="btn primary tall" href={presentPath(id)} target="_blank" rel="noreferrer" aria-label="Present"><Icon name="screen" /><span className="wide-only">Present</span></a>}
           <Menu label="More" className={ended ? 'outline icon-btn' : 'primary tall icon-btn'} trigger={<Icon name="more" size={20} />}>
             <a className="btn only-narrow" href={resultsHref} onClick={leaveTo(resultsHref)}><Icon name="trend" />Results</a>
             <button className="only-narrow" onClick={() => setPanel('session')}><Icon name="sliders" />Settings</button>
@@ -300,7 +306,7 @@ function Host({ id }: { id: string }) {
               await flush();
               const r = await authed('/api/sessions', { method: 'POST', body: JSON.stringify({ from: id }) });
               const j = await r.json().catch(() => ({}));
-              if (r.ok) router.push(`/app/sessions/${j.session.id}`);
+              if (r.ok) router.push(sessionPath(j.session.id));
               else setErr(j.error ?? 'Not copied');
             }}><Icon name="copy" />Duplicate session</button>
             {!ended && (
@@ -458,7 +464,7 @@ function Host({ id }: { id: string }) {
               <span className="grow" />
               {ended
                 ? <a className="btn" href={resultsHref} onClick={leaveTo(resultsHref)}><Icon name="trend" />Results</a>
-                : <a className="btn ghost" href={`/s/${v.code}`} target="_blank" rel="noreferrer"><Icon name="phone" />Participant view</a>}
+                : <a className="btn ghost" href={joinPath(v.code)} target="_blank" rel="noreferrer"><Icon name="phone" />Participant view</a>}
             </div>
           )}
         </section>

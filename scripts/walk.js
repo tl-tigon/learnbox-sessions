@@ -8,7 +8,8 @@
    Run with the dev server up: node scripts/walk.js */
 const fs = require('fs'), path = require('path');
 const { chromium } = require('C:/Users/tejas/OneDrive/Documents/Workspace/LMS/Trust Sim/capture-tool/node_modules/playwright-core');
-const BASE = 'http://localhost:3200';
+/* BASE=http://localhost:3300 runs it against the built files and the Lambda bundles (scripts/preview.js). */
+const BASE = process.env.BASE || 'http://localhost:3200';
 const OUT = path.join(__dirname, 'live-walk'); fs.mkdirSync(OUT, { recursive: true });
 const AUTH = { authorization: 'Bearer dev:walk@example.com', 'content-type': 'application/json' };
 const results = [];
@@ -47,8 +48,8 @@ const FIRST = { timeout: 120000 };
     /* Anything an earlier walk left behind goes first, so each run starts from an empty account. */
     await api('DELETE', '/api/account');
     await p.click('button:has-text("New session")', FIRST);
-    await p.waitForURL(/\/app\/sessions\/[^/]+$/, FIRST);
-    const sessionId = p.url().split('/').pop();
+    await p.waitForURL(/\/app\/session\?id=/, FIRST);
+    const sessionId = new URL(p.url()).searchParams.get('id');
     await p.waitForSelector('input[aria-label="Session name"]', FIRST);
     await p.fill('input[aria-label="Session name"]', 'Team offsite');
 
@@ -101,7 +102,7 @@ const FIRST = { timeout: 120000 };
       ] },
     ];
     // ---- Plans: what Free refuses, then paying for Pro on the development payment page
-    const sessionUrl = `${BASE}/app/sessions/${sessionId}`;
+    const sessionUrl = `${BASE}/app/session?id=${sessionId}`;
     const planNow = async () => (await api('GET', '/api/account')).body.plan;
     const nine = Array.from({ length: 9 }, (_, i) => ({ id: `rate10${String(i).padStart(2, '0')}`, type: 'rating', title: `Poll ${i + 1}`, max: 5 }));
     const refused = [
@@ -167,7 +168,7 @@ const FIRST = { timeout: 120000 };
     const projector = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
     const wall = await projector.newPage(); wall.setDefaultTimeout(20000);
     wall.on('pageerror', (e) => errs.push('wall: ' + e));
-    await wall.goto(`${BASE}/present/${sessionId}#k=${host.displayKey}`, FIRST);
+    await wall.goto(`${BASE}/present?id=${sessionId}#k=${host.displayKey}`, FIRST);
     await wall.waitForSelector(`text=# ${code.slice(0, 3)} ${code.slice(3)}`, FIRST);
     check('the big screen opens with the display key and shows the code', true);
 
@@ -481,7 +482,7 @@ const FIRST = { timeout: 120000 };
     await p.waitForFunction(() => [...document.querySelectorAll('.dcard .sub .opt.correct .val')].map((e) => e.textContent).join() === '3,2', null, WAIT);
     check('quiz: once played, its questions show how people voted', true);
     await p.click('a[aria-label="Results"]');
-    await p.waitForURL(/\/results$/, FIRST);
+    await p.waitForURL(/\/app\/session\/results\?id=/, FIRST);
     await p.waitForSelector('text=Download CSV', FIRST);
     await p.waitForSelector('h2:has-text("Leaderboard")', WAIT);
     await p.screenshot({ path: path.join(OUT, '17-results.png'), fullPage: true });
@@ -510,7 +511,7 @@ const FIRST = { timeout: 120000 };
     const whileRunning = await api('PATCH', `/api/sessions/${copyId}`, { action: 'reset', id: copyPoll.id });
     await api('PATCH', `/api/sessions/${copyId}`, { action: 'activate', id: null });
     const notMineReset = await api('PATCH', `/api/sessions/${copyId}`, { action: 'reset', id: copyPoll.id }, other);
-    await p.goto(`${BASE}/app/sessions/${copyId}`, FIRST);
+    await p.goto(`${BASE}/app/session?id=${copyId}`, FIRST);
     await p.waitForSelector('.icard:has-text("Where should we go?"):has-text("1 answered")', FIRST);
     await p.click('button[aria-label="More for Where should we go?"]');
     await p.click('[role="menu"] button:has-text("Reset results")');
@@ -520,7 +521,7 @@ const FIRST = { timeout: 120000 };
     check('Reset results clears a stopped poll\'s answers; it is refused while the poll runs, and for another account',
       copyVote.status === 200 && whileRunning.status === 409 && notMineReset.status === 404 && cleared === 0, `${copyVote.status},${whileRunning.status},${notMineReset.status},${cleared}`);
 
-    await p.goto(`${BASE}/app/sessions/${sessionId}`);
+    await p.goto(sessionUrl);
     await p.waitForSelector('input[aria-label="Session name"]', WAIT);
     await p.click('button[aria-label="More"]');
     await p.click('button:has-text("End session")');

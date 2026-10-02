@@ -18,6 +18,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
     - The Q&A shows the announcement field, chips for In review, Live and Answered, and the questions as plain rows. A row's actions are round buttons that show on it: Highlight, Mark answered, Reply, and Hide under More. Reply opens the question and its replies in a panel at the side.
     - Under it, a bar: Start; or Stop with Prev, hide results, close voting and Next (Prev and Next start the neighbouring poll); the quiz's next step; for the Q&A, "Close Q&A" (asks first) or "Open Q&A". "Participant view" opens the phone's screen.
     - "Reset results" in a card's menu deletes the answers of that poll, quiz or survey, after asking. It is off while the card is running. A quiz that is reset loses its scores and can be played again.
+    - Addresses: a screen's id is in the query string (`/app/session?id=…`, `/present?id=…`, `/s?c=…`), because the pages are plain files. The join link people share is `/j/<code>`, answered by the API with the session's name for chat previews (Slido's own join link previews generically).
     - Settings open in a panel down the right side: the session's links, the Q&A's two settings, a poll's settings. Ending or deleting a session, deleting a poll and closing the Q&A ask first in a dialog.
     - Edits save as they are typed.
   - Results page with CSV and Excel downloads.
@@ -60,7 +61,8 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 87 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- `npm test` runs 92 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- The same walk passes 75 of 75 against the production shape: the built files served as a CDN would and the API running through the Lambda bundles (`npm run preview`, then `BASE=http://localhost:3300 node scripts/walk.js`).
 - A browser walk passes 75 of 75 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
@@ -85,6 +87,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 ## Decisions by the owner
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
+- **2026-10-03**: no managed compute. The pages are plain files on a CDN and the API runs as Lambdas behind API Gateway, after a crawler flood once ran up a large bill on a managed-compute app. Keeping Lambdas warm is decided after a load test.
 - **2026-10-03**: two plans, Free and Pro. Free holds 100 people and 8 polls and quizzes, with the full Q&A (first set at 200 and 10, tightened the same day); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹79 for 1 month or ₹588 for 12 months (owner, 2026-10-03). Payments go through the owner's PayU (India) account.
 - **2026-10-03**: PayU may add its convenience fee for the buyer on top of ₹588. The PayU account's website moves from `tigon.one` to `sessions.learnbox.one`.
 - **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
@@ -115,7 +118,7 @@ These are in `src/lib/limits.ts`.
    - SES identity, with production access requested early because approval takes a day or more;
    - DynamoDB table and its `-dev` twin (on-demand, `PK`/`SK` strings, TTL on `expiresAt`);
    - AppSync Events API (namespace `live`; API key for subscribe, IAM for publish);
-   - Amplify Hosting app;
+   - the CDK stack: an S3 bucket and CloudFront distribution for the built files, the HTTP API with its three Lambdas and throttling, alarms;
    - Budgets alert.
 2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
 3. **OK to create a private GitHub repo** under `tl-tigon`.
@@ -135,12 +138,12 @@ These are in `src/lib/limits.ts`.
 9. **Copy for the owner to confirm**: "Create a session" in the phone's menu; the strip "LearnBox Sessions is free to use at your own meetings." with its "Create a session" button (it leads to `/sign-in?mode=up`); the two lines under the Q&A settings.
 
 ## Next steps
-1. **Provisioning**, on the owner's OK. Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then run the store tests against the dev table, and a load test of about 500 simulated phones.
+1. **Provisioning**, on the owner's OK: a CDK stack in `infra/` (as LearnBox has) with the table, the user pool, the Events API, the HTTP API and its three Lambdas from `dist/lambda/` and `routes.json`, throttling per route, reserved concurrency, the bucket and CloudFront distribution for `out/` with `/api/*` and `/j/*` forwarded to the gateway, and alarms. Then run the store tests against the dev table, and a load test of about 500 simulated phones.
 2. **The rest of v1**, each waiting on the owner: the site's copy, Terms and Privacy, the LearnBox places, cost alarms.
 3. **More of Slido**, if wanted: downvotes, labels, audience replies, a PowerPoint add-in.
 
 ## To check at the first deploy
-- **The caller's address.** `clientIp` in `src/lib/http.ts` takes the last entry of `X-Forwarded-For`. Confirm on Amplify that this is the viewer's address and not an internal hop; if it is a hop, every caller shares one limit.
+- **The caller's address.** `clientIp` in `src/lib/http.ts` takes the last entry of `X-Forwarded-For`. Behind CloudFront and API Gateway that entry may be CloudFront's own address, with the viewer's before it. Confirm with one request and, if so, take the entry before last; otherwise every caller shares one limit.
 - **Cookies from `learnbox.one`.** A browser sends cookies set for `.learnbox.one` to `sessions.learnbox.one` too. LearnBox Sessions sets none and reads none, but the request must still fit the host's header limit. Open the site in a browser that is signed in to LearnBox and confirm it loads.
 - **Store tests against DynamoDB.** The store has never run against a real table. Run the unit tests with `STORE=dynamo` on the dev table before anything else.
 - **Rows written while a session is being deleted** stay until their 12-month expiry. They belong to no session and are not reachable.

@@ -1,8 +1,10 @@
-import { NextResponse } from 'next/server';
 import { getUser, type User } from './auth/server';
 
+/* Plain web responses, so the same handlers run under Next.js in development and in Lambda in production. */
 export const json = (body: unknown, status = 200) =>
-  NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+/** Sends the browser to another address with a GET, as after a posted form. */
+export const seeOther = (url: string) => new Response(null, { status: 303, headers: { location: url, 'cache-control': 'no-store' } });
 export const fail = (status: number, error: string) => json({ error }, status);
 
 export async function readJson(req: Request): Promise<Record<string, unknown>> {

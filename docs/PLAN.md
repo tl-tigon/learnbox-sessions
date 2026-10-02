@@ -39,8 +39,8 @@ LearnBox Sessions is a product anyone can sign up for, free, with a paid Pro pla
 ## Approach
 
 ### Stack
-- **App**: Next.js 15 App Router and TypeScript, one app.
-- **Hosting**: its own AWS Amplify Hosting app. Pushing `main` deploys once it is connected.
+- **App**: Next.js 15 App Router and TypeScript, one codebase. It builds to plain files for the pages and to Lambda bundles for the API.
+- **Hosting** (owner's decision, 2026-10-03: no managed compute): the pages are static files on a CDN; the API is three Lambdas (audience, host, billing) behind an API Gateway HTTP API, with throttling per route and a cap on how much can run at once. The CDN forwards `/api/*` and `/j/*` to the gateway. Infrastructure is a CDK stack, to be written at provisioning. Whether copies are kept warm during sessions is decided from the load test.
 - **Facilitator sign-in**: Cognito, with self sign-up on, email confirmation and Google. Email goes through SES, because Cognito's built-in email is capped at about 50 a day; SES production access must be requested.
 - **Bot protection**: Cloudflare Turnstile checked in a pre-sign-up Lambda, plus a block on throwaway email domains.
 - **Audience**: anonymous. Each phone keeps a random token in the browser and can give a name.
@@ -80,7 +80,7 @@ Also:
 
 | # | What | Status |
 |---|---|---|
-| 0 | AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, Amplify app, budget alert; DNS for `sessions.learnbox.one`; private GitHub repo. **Each needs the owner's OK.** | Not started |
+| 0 | AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, the CDK stack (S3 and CloudFront for the files, HTTP API and three Lambdas for the API), budget alert; DNS for `sessions.learnbox.one`; private GitHub repo. **Each needs the owner's OK.** | Not started |
 | 1–3 | The first build: a slide deck with polls, Q&A and quiz | Built 2026-10-01 to 02, then replaced by the event model |
 | 4 | Results in Excel; account delete; 12-month expiry | **Built and tested** |
 | 5 | The event model: sessions as events, always-open Q&A, polls started one at a time, vote changes, ranking, surveys, quiz runs, replies, announcement, duplicate | **Built and tested** (2026-10-02) |

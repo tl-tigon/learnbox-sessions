@@ -7,6 +7,7 @@ import { Menu } from '@/components/menu';
 import { useSignedIn } from '@/components/use-signed-in';
 import { authed, signOut } from '@/lib/auth/client';
 import { LIMITS } from '@/lib/limits';
+import { resultsPath, sessionPath } from '@/lib/links';
 import type { SessionSummary } from '@/lib/store/types';
 
 type Filter = 'all' | 'live' | 'ended';
@@ -40,7 +41,7 @@ export default function Dashboard() {
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setErr(j.error ?? 'Not created');
-    router.push(`/app/sessions/${j.session.id}`);
+    router.push(sessionPath(j.session.id));
   };
   const remove = async (s: SessionSummary) => {
     if (!confirm(`Delete "${s.title}"? Its results are deleted with it.`)) return;
@@ -90,14 +91,14 @@ export default function Dashboard() {
           <div className="srows">
             {shown.map((s) => (
               <div key={s.id} className="srow">
-                <a className="main" href={`/app/sessions/${s.id}`}>
+                <a className="main" href={sessionPath(s.id)}>
                   <span className="row" style={{ flexWrap: 'nowrap' }}><span className="strong truncate">{s.title}</span>{isLive(s) && <span className="faint num" style={{ flex: 'none' }}># {s.code.slice(0, 3)} {s.code.slice(3)}</span>}</span>
                   <span className="tag num">{new Date(s.createdAt).toLocaleDateString()} · {s.interactions} polls</span>
                 </a>
                 {isLive(s) ? <span className="live-dot">Live</span> : <span className="tag">Ended</span>}
                 <button className="icon-btn ghost" aria-label={`Duplicate ${s.title}`} title="Duplicate" disabled={busy} onClick={() => create(s.id)}><Icon name="copy" /></button>
                 <Menu label={`More for ${s.title}`} className="icon-btn ghost" trigger={<Icon name="morev" />}>
-                  <a className="btn" href={`/app/sessions/${s.id}/results`}><Icon name="trend" />Results</a>
+                  <a className="btn" href={resultsPath(s.id)}><Icon name="trend" />Results</a>
                   <button className="danger" onClick={() => remove(s)}><Icon name="trash" />Delete</button>
                 </Menu>
               </div>

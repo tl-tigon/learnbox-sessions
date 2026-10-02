@@ -3,23 +3,31 @@
  * The big screen. The join instructions stay on the left; the right shows the poll or quiz the
  * facilitator has started, and otherwise the audience's questions.
  */
-import { use, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
 import { Qr } from '@/components/qr';
 import { QaWall } from '@/components/qa';
 import { QuizWall, useServerClock } from '@/components/quiz';
 import { PollResults } from '@/components/results';
 import { quizPhase } from '@/lib/engine/quiz';
+import { joinPath } from '@/lib/links';
 import { useWall } from '@/lib/use-host';
 
-export default function Present({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+/** The session's id comes in the address as `?id=`. */
+export default function PresentPage() {
+  return <Suspense><Present /></Suspense>;
+}
+
+function Present() {
+  const id = useSearchParams().get('id') ?? '';
   /* A projector PC that is not signed in opens the link with #k=<display key>. */
   const [key, setKey] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     setKey(new URLSearchParams(window.location.hash.slice(1)).get('k'));
   }, []);
   if (key === undefined) return null;
+  if (!id) return <main className="narrow"><p className="error">Not found</p></main>;
   return <Wall id={id} displayKey={key} />;
 }
 
@@ -53,7 +61,7 @@ function Wall({ id, displayKey }: { id: string; displayKey: string | null }) {
             <span>Join at</span>
             <b>{host}</b>
             <span className="code num"># {v.code.slice(0, 3)} {v.code.slice(3)}</span>
-            {origin && <div style={{ marginTop: 16 }}><Qr url={`${origin}/s/${v.code}`} size={180} /></div>}
+            {origin && <div style={{ marginTop: 16 }}><Qr url={`${origin}${joinPath(v.code)}`} size={180} /></div>}
           </div>
         )}
         <span className="muted num row"><Icon name="user" />{v.people}</span>

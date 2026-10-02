@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
 import { store } from '@/lib/store';
 import { finishOrder, siteOrigin } from '@/lib/billing';
+import { seeOther } from '@/lib/http';
 
-const toAccount = (req: Request, payment: string) => NextResponse.redirect(`${siteOrigin(req)}/app/account?payment=${payment}`, 303);
+const toAccount = (req: Request, payment: string) => seeOther(`${siteOrigin(req)}/app/account?payment=${payment}`);
 
 /**
  * Where the payment page sends the buyer's browser back, with the signed outcome as a form. The
@@ -19,4 +19,4 @@ export async function POST(req: Request) {
 }
 
 /** A browser that arrives without the form (a reload, a back button) goes to the account page. */
-export const GET = (req: Request) => NextResponse.redirect(`${siteOrigin(req)}/app/account`, 303);
+export const GET = (req: Request) => seeOther(`${siteOrigin(req)}/app/account`);

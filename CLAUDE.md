@@ -22,11 +22,17 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 ## Commands
 - `npm run dev`: dev server on http://localhost:3200. It uses the in-memory store and development sign-in from `.env.local`.
 - `npm test`: vitest, `src/**/*.test.ts`.
-- `npm run typecheck`, then `npx next build`. While the dev server is running, build with `NEXT_DIST_DIR=.next-check npx next build`, then `git checkout tsconfig.json` and delete `.next-check`.
+- `npm run typecheck`, then `npm run build` (the pages, as plain files in `out/`) and `npm run build:lambda` (the API, as `dist/lambda/<group>.js` with `routes.json`). While the dev server is running, build the pages with `NEXT_DIST_DIR=.next-check npx next build`: the files land in `.next-check`; afterwards `git checkout tsconfig.json` and delete it.
+- `npm run preview`: serves the built files and the Lambda bundles on http://localhost:3300 the way production does (`OUT=.next-check` when built beside the dev server). `BASE=http://localhost:3300 node scripts/walk.js` runs the walk against it.
 - `node scripts/walk.js`: the browser walk, with the dev server running.
 
 ## Stack and layout
 - **Framework**: Next.js 15 App Router, TypeScript, React 19, plain CSS (`src/app/globals.css`), Inter through `next/font`. No Tailwind or UI kits.
+- **No managed compute for pages** (owner's decision, 2026-10-03). The app builds to plain files (`output: 'export'`) for a CDN; no page is rendered on a server. A screen's id travels in the query string (`src/lib/links.ts`).
+- **The API** is in `src/api/`: one file per route, plain web `Request` in and `Response` out, no Next.js imports. `src/api/routes/` groups them (`audience`, `host`, `billing`) and `src/api/all.ts` lists them all.
+  - In development, `src/app/api/[...path]/route.dev.ts` and `src/app/j/[code]/route.dev.ts` hand every call to the same table; the `.dev.ts` name keeps them out of the static build (`pageExtensions` in `next.config.ts`).
+  - In production each group is one Lambda behind an API Gateway HTTP API: `src/api/lambda/adapter.ts` turns the gateway event into a `Request` and the `Response` back. `scripts/build-lambda.mjs` bundles each group and writes `dist/lambda/routes.json`, which the infrastructure reads to make the gateway's routes. The CDN forwards `/api/*` and `/j/*` to the gateway.
+  - `/j/<code>` is the join link people share: the API answers with a page carrying the session's name for chat previews, and sends the phone on to `/s?c=<code>`.
 - **Model** (`src/lib/types.ts`):
   - Session = an event with a code, Q&A settings, a list of interactions, a `state` and a display key.
   - Interaction = a poll (`choice`, `wordcloud`, `rating`, `open`, `ranking`), a quiz (a run of timed questions) or a survey (several polls sent together). Interactions are edited in place while the session runs.
@@ -39,10 +45,10 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
   - `src/lib/account.ts`: deleting everything an account owns.
 - **Storage**: `src/lib/store/`, one `Store` interface with two implementations, `memory.ts` (dev and tests) and `dynamo.ts`. Both must keep the same guarantees (see `types.ts`); new storage rules get a test in `src/lib/__tests__/`.
 - **Screens**:
-  - `/` front page with the code field; `/s/<code>` the phone;
+  - `/` front page with the code field; `/s?c=<code>` the phone; `/j/<code>` the join link people share;
   - the site, in `src/app/(site)/` under one top bar and footer: `/`, `/product`, `/features/<slug>` (polls, qa, word-cloud, quizzes, surveys, results), `/use-cases`, `/pricing`. What its pages say is in `src/lib/site.ts`; its pictures are drawings of the product's screens in `src/components/site/`;
-  - `/app` the facilitator's sessions; `/app/sessions/<id>` the facilitator's screen; `/app/sessions/<id>/results`; `/app/account`;
-  - `/present/<id>` the big screen, also opened on a projector with `#k=<displayKey>`.
+  - `/app` the facilitator's sessions; `/app/session?id=<id>` the facilitator's screen; `/app/session/results?id=<id>`; `/app/account`;
+  - `/present?id=<id>` the big screen, also opened on a projector with `#k=<displayKey>`.
 - **Three views of a session** (`live.ts`): `audienceView` for a phone, `wallView` for the big screen, `hostView` for the facilitator. Only `hostView` holds questions waiting for review, every poll's answered count and the display key. With `?show=<id>` it also carries the stored results of the interaction open on the facilitator's screen, unless that one is running.
 - **Live push**:
   - `src/lib/push/`: AppSync Events, where the server publishes (IAM) and the browser subscribes (API key).

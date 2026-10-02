@@ -3,7 +3,8 @@
  * The audience's phone. It joins with the code and shows two tabs: Q&A, open for the whole
  * session, and Polls, which holds whatever the facilitator has started.
  */
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Dialog } from '@/components/dialog';
 import { Icon } from '@/components/icons';
 import { PollForm, SurveyForm } from '@/components/poll-form';
@@ -39,8 +40,21 @@ interface View {
 
 const activeId = (a: ActiveForAudience | null) => (!a ? null : a.kind === 'poll' ? a.poll.id : a.kind === 'survey' ? a.survey.id : a.id);
 
-export default function AudiencePage({ params }: { params: Promise<{ code: string }> }) {
-  const { code } = use(params);
+/** The code comes in the address as `?c=`; without one, the front page has the field for it. */
+export default function AudiencePage() {
+  return <Suspense><ByCode /></Suspense>;
+}
+
+function ByCode() {
+  const code = useSearchParams().get('c') ?? '';
+  useEffect(() => {
+    if (!code) window.location.replace('/');
+  }, [code]);
+  if (!code) return null;
+  return <Audience code={code} />;
+}
+
+function Audience({ code }: { code: string }) {
   const [id, setId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 

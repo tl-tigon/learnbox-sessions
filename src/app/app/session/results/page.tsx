@@ -1,6 +1,7 @@
 'use client';
 /** A session's results: every poll and quiz question, each quiz's leaderboard, and the audience's questions. */
-import { use, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
 import { Leaderboard } from '@/components/quiz';
 import { PollResults, QuizResults } from '@/components/results';
@@ -8,6 +9,7 @@ import { useSignedIn } from '@/components/use-signed-in';
 import { authed } from '@/lib/auth/client';
 import { sortQuestions, type PublicQuestion } from '@/lib/engine/questions';
 import type { BoardEntry } from '@/lib/engine/quiz';
+import { sessionPath } from '@/lib/links';
 import type { Poll, QuizQuestion, Tally } from '@/lib/types';
 
 type Item =
@@ -26,8 +28,13 @@ interface Data {
 
 const STATUS = { pending: 'Waiting', live: 'Approved', answered: 'Answered', hidden: 'Hidden' } as const;
 
-export default function SessionResults({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+/** The session's id comes in the address as `?id=`. */
+export default function ResultsPage() {
+  return <Suspense><SessionResults /></Suspense>;
+}
+
+function SessionResults() {
+  const id = useSearchParams().get('id') ?? '';
   const email = useSignedIn();
   const [d, setD] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -54,7 +61,7 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
   return (
     <div className="apppage">
       <header className="apphead">
-        <a className="btn round" href={`/app/sessions/${id}`} aria-label="Back to the session"><Icon name="left" /></a>
+        <a className="btn round" href={sessionPath(id)} aria-label="Back to the session"><Icon name="left" /></a>
         <span className="headtitle grow truncate">{d.session.title}</span>
         {d.downloads ? (
           <>

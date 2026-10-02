@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Icon } from '@/components/icons';
+import { joinPath } from '@/lib/links';
 
 export function JoinBar() {
   const router = useRouter();
@@ -11,7 +12,7 @@ export function JoinBar() {
   return (
     <div className="s-joinbar">
       <label htmlFor="code">Joining as a participant?</label>
-      <form className="join" onSubmit={(e) => { e.preventDefault(); if (digits.length === 6) router.push(`/s/${digits}`); }}>
+      <form className="join" onSubmit={(e) => { e.preventDefault(); if (digits.length === 6) router.push(joinPath(digits)); }}>
         <span className="hash" aria-hidden>#</span>
         <input id="code" className="num" inputMode="numeric" autoComplete="off" placeholder="Enter code here" aria-label="Session code" value={digits} onChange={(e) => setCode(e.target.value)} />
         <button className="primary" aria-label="Join" disabled={digits.length !== 6}><Icon name="right" /></button>
