@@ -9,3 +9,6 @@ next-env.d.ts
 .env.*.local
 .records/
 scripts/live-walk/
+
+# Browser snapshots and screenshots from manual checks. They can hold names from other accounts; never commit them.
+.playwright-mcp/

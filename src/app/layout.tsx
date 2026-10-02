@@ -12,8 +12,12 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body>
+        {/* A theme chosen on this device is applied before the page paints; with none chosen, the device's own setting decides. */}
+        <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('la-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}" }} />
+        {children}
+      </body>
     </html>
   );
 }

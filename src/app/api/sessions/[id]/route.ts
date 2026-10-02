@@ -15,10 +15,11 @@ const failed = (e: unknown) => {
  * audience may see, so a projector holding the display key can read it without being signed in.
  */
 export async function GET(req: Request, ctx: Ctx) {
-  const wall = new URL(req.url).searchParams.get('view') === 'wall';
+  const query = new URL(req.url).searchParams;
+  const wall = query.get('view') === 'wall';
   const s = await ownedSession(req, (await ctx.params).id, wall);
   if (s instanceof Response) return s;
-  return json(wall ? await wallView(store(), s) : await hostView(store(), s));
+  return json(wall ? await wallView(store(), s) : await hostView(store(), s, query.get('show')));
 }
 
 /** The facilitator's edits: title, interactions, Q&A settings. */

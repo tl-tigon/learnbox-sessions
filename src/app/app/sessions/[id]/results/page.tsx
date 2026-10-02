@@ -50,12 +50,12 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
   if (!d) return <main className="narrow"><p className={err ? 'error' : 'muted'}>{err ?? 'Loading…'}</p></main>;
   let n = 0;
   return (
-    <>
-      <header className="topbar">
-        <a className="btn icon-btn ghost" href={`/app/sessions/${id}`} aria-label="Back to the session"><Icon name="left" /></a>
-        <span className="strong grow truncate">{d.session.title}</span>
-        <button onClick={() => download('xlsx')}><Icon name="download" />Download Excel</button>
-        <button className="primary" onClick={() => download('csv')}><Icon name="download" />Download CSV</button>
+    <div className="apppage">
+      <header className="apphead">
+        <a className="btn round" href={`/app/sessions/${id}`} aria-label="Back to the session"><Icon name="left" /></a>
+        <span className="headtitle grow truncate">{d.session.title}</span>
+        <button className="tall" onClick={() => download('xlsx')}><Icon name="download" />Download Excel</button>
+        <button className="primary tall" onClick={() => download('csv')}><Icon name="download" />Download CSV</button>
       </header>
       <main className="wrap stack" style={{ maxWidth: 760 }}>
         <span className="tag num">{new Date(d.session.createdAt).toLocaleString()} · # {d.session.code} · {d.people} joined · {d.session.status === 'live' ? 'Live' : 'Ended'}</span>
@@ -106,6 +106,6 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
           </section>
         )}
       </main>
-    </>
+    </div>
   );
 }

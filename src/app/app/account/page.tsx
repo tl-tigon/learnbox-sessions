@@ -2,6 +2,7 @@
 /** The facilitator's account: the email, a password change, and deleting the account with all its data. */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Icon } from '@/components/icons';
 import { authed, changePassword, DEV_AUTH, removeSignIn } from '@/lib/auth/client';
 import { useSignedIn } from '@/components/use-signed-in';
 
@@ -50,10 +51,12 @@ export default function Account() {
   };
 
   return (
+    <div className="apppage">
+    <header className="apphead">
+      <a className="btn round" href="/app" aria-label="All sessions"><Icon name="left" /></a>
+      <h1 className="headtitle">Account</h1>
+    </header>
     <main className="wrap stack" style={{ maxWidth: 560 }}>
-      <div className="spread"><a href="/app">← Sessions</a></div>
-      <h1>Account</h1>
-
       <section className="card stack">
         <label>Email<input value={email} readOnly /></label>
       </section>
@@ -86,5 +89,6 @@ export default function Account() {
         {err && <p className="error" role="alert">{err}</p>}
       </section>
     </main>
+    </div>
   );
 }

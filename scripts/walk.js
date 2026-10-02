@@ -12,7 +12,8 @@ const OUT = path.join(__dirname, 'live-walk'); fs.mkdirSync(OUT, { recursive: tr
 const AUTH = { authorization: 'Bearer dev:walk@example.com', 'content-type': 'application/json' };
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  · ' + detail : ''}`); };
-const WAIT = { timeout: 10000 };
+/* The dev server also compiles each API route on its first use, and again after a minute unused. */
+const WAIT = { timeout: 30000 };
 /* The dev server compiles each page the first time it is opened. */
 const FIRST = { timeout: 120000 };
 
@@ -42,15 +43,18 @@ const FIRST = { timeout: 120000 };
     await p.fill('input[aria-label="Session name"]', 'Team offsite');
 
     // ---- Build a multiple choice poll and a quiz in the editor
-    const add = async (type) => { await p.click('section[aria-label="Polls"] button:has-text("Add")'); await p.click(`.menu .items button:has-text("${type}")`); };
+    /* A new session opens on the types to add. */
+    await p.waitForSelector('button.typecard:has-text("Quiz")', WAIT);
+    check('a new session opens on the types to add', (await p.$$('button.typecard')).length === 7);
+    const add = async (type) => { await p.click('.hostlist button.primary:has-text("Add")'); await p.click(`button.typecard:has-text("${type}")`); };
     await add('Multiple choice');
-    await p.fill('label:text-is("Question") input', 'Where should we go?');
+    await p.fill('textarea[aria-label="Question"]', 'Where should we go?');
     await p.fill('input[aria-label="Option 1"]', 'Goa');
     await p.fill('input[aria-label="Option 2"]', 'Coorg');
     await p.click('button:has-text("Add option")');
     await p.fill('input[aria-label="Option 3"]', 'Lonavala');
     await add('Quiz');
-    await p.fill('label:has-text("Quiz name") input', 'Planets');
+    await p.fill('textarea[aria-label="Quiz name"]', 'Planets');
     await p.fill('input[aria-label="Question 1"]', 'Which planet is the largest?');
     await p.fill('input[aria-label="Option 1"]', 'Earth');
     await p.fill('input[aria-label="Option 2"]', 'Jupiter');
@@ -89,7 +93,7 @@ const FIRST = { timeout: 120000 };
     const put = await api('PUT', `/api/sessions/${sessionId}`, { interactions: [choice, ...more, quiz] });
     check('the API takes the remaining polls', put.status === 200 && put.body.interactions.length === 7, String(put.status));
     await p.reload();
-    await p.waitForSelector('button.item:has-text("Session feedback")', WAIT);
+    await p.waitForSelector('.icard:has-text("Session feedback")', WAIT);
     host = (await api('GET', `/api/sessions/${sessionId}`)).body;
     const code = host.code;
 
@@ -139,8 +143,10 @@ const FIRST = { timeout: 120000 };
     check('Q&A: no phone is sent another person\'s token', !JSON.stringify(list).includes('token'));
 
     // Review before showing
+    await p.click('button:has-text("Q&A settings")');
     await p.check('label.switch:has-text("Review questions") input');
     await p.waitForSelector('[role="status"]:has-text("Saved")', WAIT);
+    await p.click('button[aria-label="Close settings"]');
     await phones[1].fill('textarea[aria-label="Your question"]', Q2);
     await phones[1].click('form button:has-text("Send"):visible');
     await phones[1].waitForSelector('text=Waiting for review', WAIT);
@@ -220,10 +226,18 @@ const FIRST = { timeout: 120000 };
     const hidden = (await phoneApi(phones[2], 'GET', `/api/live/${sessionId}?t={t}`)).body;
     check('polls: hidden results are kept from phones and the big screen', hidden.active.tally === null && (await wall.$$('.bar')).length === 0);
     await p.click('button:has-text("Results hidden")');
+    await p.waitForFunction(() => [...document.querySelectorAll('.dcard .opt .val')].map((e) => e.textContent).join() === '40%,40%,20%', null, WAIT);
+    check('polls: the facilitator sees each option\'s share under it', true);
+    await p.screenshot({ path: path.join(OUT, '07b-host-poll.png') });
 
     // ---- Word cloud, rating, open text, ranking
     await p.click('button[aria-label="Start One word for this year"]');
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("One word for this year")', WAIT);
+    /* A poll that is no longer running still shows its results when opened. */
+    await p.click('.icard:has-text("Where should we go?") button.title');
+    await p.waitForFunction(() => [...document.querySelectorAll('.dcard .opt .val')].map((e) => e.textContent).join() === '40%,40%,20%', null, WAIT);
+    check('polls: a poll that has stopped shows its stored results when opened', true);
+    await p.click('.icard:has-text("One word for this year") button.title');
     const words = [['Growth', 'trust'], ['growth'], ['Trust.'], ['speed'], ['growth']];
     for (let i = 0; i < 5; i++) for (const w of words[i]) { await phones[i].fill('input[aria-label="Your word"]', w); await phones[i].click('button:has-text("Send"):visible'); await phones[i].waitForFunction(() => document.querySelector('input[aria-label="Your word"]')?.value === '', null, WAIT); }
     await wall.waitForSelector('.cloud span:has-text("speed")', WAIT);
@@ -252,7 +266,8 @@ const FIRST = { timeout: 120000 };
       await phones[i].click('button:has-text("Send"):visible');
       await phones[i].waitForSelector('text=Sent', WAIT);
     }
-    await wall.waitForFunction(() => document.querySelectorAll('.bar').length === 3 && /^1\.\s*Quality/.test(document.querySelector('.bar')?.textContent ?? ''), null, WAIT);
+    /* Wait for the last phone's order to reach the big screen, not only the first. */
+    await wall.waitForFunction(() => document.querySelectorAll('.bar').length === 3 && /^1\.\s*Quality\s*13/.test(document.querySelector('.bar')?.textContent ?? ''), null, WAIT).catch(() => {});
     const order = await wall.$$eval('.bar', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
     check('ranking: the big screen shows the combined order with points', /1\. Quality\s?13.*2\. Speed\s?12.*3\. Cost\s?5/.test(order), order);
     await wall.screenshot({ path: path.join(OUT, '08-wall-ranking.png') });
@@ -368,7 +383,10 @@ const FIRST = { timeout: 120000 };
     check('a made-up or unjoined phone is refused', forged === 400 && stranger === 403, `${forged},${stranger}`);
 
     // ---- Results and downloads
-    await p.click('a:has-text("Results")');
+    await p.click('button:has-text("Close quiz")');
+    await p.waitForFunction(() => [...document.querySelectorAll('.dcard .sub .opt.correct .val')].map((e) => e.textContent).join() === '3,2', null, WAIT);
+    check('quiz: once played, its questions show how people voted', true);
+    await p.click('a[aria-label="Results"]');
     await p.waitForURL(/\/results$/, FIRST);
     await p.waitForSelector('text=Download CSV', FIRST);
     await p.waitForSelector('h2:has-text("Leaderboard")', WAIT);
@@ -403,8 +421,21 @@ const FIRST = { timeout: 120000 };
     ];
     check('an ended session takes no questions or answers, and its code is freed', afterEnd.join() === '409,409,404', afterEnd.join());
 
+    /* The phone's menu: the code, and a way to another session. */
+    await phones[0].click('button[aria-label="Menu"]');
+    await phones[0].waitForSelector(`[role="dialog"]:has-text("# ${code.slice(0, 3)} ${code.slice(3)}")`, WAIT);
+    await phones[0].check('label.switch:has-text("Dark mode") input');
+    check('the phone\'s menu shows the code and switches the theme', (await phones[0].evaluate(() => document.documentElement.dataset.theme)) === 'dark');
+    await phones[0].screenshot({ path: path.join(OUT, '17b-phone-menu.png') });
+    await phones[0].click('[role="dialog"] button[aria-label^="Close"]');
+
     await p.goto(`${BASE}/app`);
     await p.waitForSelector('h1:has-text("Sessions")', FIRST);
+    await p.waitForSelector('.srow', WAIT);
+    await p.click('.chips button:has-text("Ended")');
+    const endedRows = await p.$$eval('.srow', (els) => els.map((e) => e.textContent).join(' | '));
+    check('the sessions list filters to the ended session', (await p.$$('.srow')).length === 1 && /Team offsite/.test(endedRows), endedRows);
+    await p.click('.chips button:has-text("All")');
     await p.screenshot({ path: path.join(OUT, '18-dashboard.png') });
     await p.goto(`${BASE}/app/account`, FIRST);
     await p.click('button:has-text("Delete account")');
@@ -415,7 +446,17 @@ const FIRST = { timeout: 120000 };
     check('deleting the account removes its sessions and their results', left === '0,404', left);
     await p.screenshot({ path: path.join(OUT, '19-front-page.png') });
     check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
-  } catch (e) { check('walk ran to the end', false, String(e).slice(0, 600)); }
+  } catch (e) {
+    check('walk ran to the end', false, String(e).slice(0, 600));
+    /* What each screen showed when the walk stopped: the facilitator, the big screen, then the phones. */
+    let n = 0;
+    for (const ctx of browser.contexts()) for (const pg of ctx.pages()) {
+      n += 1;
+      await pg.screenshot({ path: path.join(OUT, `fail-${n}.png`) }).catch(() => {});
+      const alerts = await pg.$$eval('[role="alert"]', (els) => els.map((x) => x.textContent).join(' | ')).catch(() => '');
+      if (alerts) console.log(`  screen ${n}: ${alerts}`);
+    }
+  }
   await browser.close();
   const failed = results.filter((x) => !x).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);

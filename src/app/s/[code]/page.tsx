@@ -4,6 +4,7 @@
  * session, and Polls, which holds whatever the facilitator has started.
  */
 import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { Dialog } from '@/components/dialog';
 import { Icon } from '@/components/icons';
 import { PollForm, SurveyForm } from '@/components/poll-form';
 import { QaPhone } from '@/components/qa';
@@ -143,6 +144,23 @@ function Joined({ id }: { id: string }) {
   }, [v, current]);
 
   const [naming, setNaming] = useState(false);
+  const [menu, setMenu] = useState(false);
+  /* Dark or light as shown now: the choice made on this device, or else the device's own setting. */
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const chosen = document.documentElement.dataset.theme;
+    setDark(chosen ? chosen === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }, []);
+  const setTheme = (on: boolean) => {
+    const theme = on ? 'dark' : 'light';
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem('la-theme', theme);
+    } catch {
+      /* Storage is off in some private windows; the theme then lasts for this page. */
+    }
+    setDark(on);
+  };
   const setName = useCallback(async (name: string): Promise<string | null> => {
     const r = await post(`/api/live/${id}`, { token, nickname: name });
     const j = await r.json().catch(() => ({}));
@@ -168,20 +186,41 @@ function Joined({ id }: { id: string }) {
   return (
     <>
       <header className="appbar">
-        <span className="title truncate">{v.title}</span>
+        <span className="start">
+          <button className="avatar" aria-label="Menu" onClick={() => setMenu(true)}><Icon name="menu" size={20} /></button>
+          <span className="title truncate">{v.title}</span>
+        </span>
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'qa'} onClick={() => setTab('qa')}><Icon name="chat" />Q&A</button>
           <button role="tab" aria-selected={tab === 'polls'} onClick={() => setTab('polls')}>
             <Icon name="bars" />Polls{a && tab !== 'polls' && !ended && <span className="badge" aria-label="A poll is open" />}
           </button>
         </div>
-        <button className="avatar end" aria-label={v.nickname ? `Name: ${v.nickname}` : 'Add your name'} onClick={() => setNaming((x) => !x)}>
+        <button className="avatar end" aria-label={v.nickname ? `Name: ${v.nickname}` : 'Add your name'} onClick={() => setNaming(true)}>
           {v.nickname ? v.nickname.charAt(0).toUpperCase() : <Icon name="user" />}
         </button>
       </header>
 
+      {naming && (
+        <Dialog label="Your name" onClose={() => setNaming(false)}>
+          <NameCard name={v.nickname} onSave={async (n) => { const e = await setName(n); if (!e) setNaming(false); return e; }} onClose={() => setNaming(false)} />
+        </Dialog>
+      )}
+      {menu && (
+        <Dialog label={v.title} onClose={() => setMenu(false)}>
+          <span className="muted num"># {v.code.slice(0, 3)} {v.code.slice(3)}</span>
+          <section>
+            <a className="btn ghost start" href="/"><Icon name="swap" />Enter another code</a>
+            <label className="switch"><span className="row"><Icon name="moon" />Dark mode</span><input type="checkbox" checked={dark} onChange={(e) => setTheme(e.target.checked)} /></label>
+          </section>
+          <section>
+            <a className="btn wide" href="/sign-in">Create a session</a>
+            <span className="wordmark" style={{ justifySelf: 'center' }}>LearnBox Sessions</span>
+          </section>
+        </Dialog>
+      )}
+
       <main className="column stack">
-        {naming && <NameCard name={v.nickname} onSave={async (n) => { const e = await setName(n); if (!e) setNaming(false); return e; }} onClose={() => setNaming(false)} />}
         {ended && <div className="card notice"><span className="dot"><Icon name="lock" /></span>Session ended</div>}
 
         <div hidden={tab !== 'qa'}>
@@ -190,7 +229,7 @@ function Joined({ id }: { id: string }) {
 
         {!ended && (
           <section className="stack" hidden={tab !== 'polls'}>
-            {!a && <div className="card notice"><span className="dot"><Icon name="bars" /></span>No active poll</div>}
+            {!a && <div className="none"><Icon name="bars" size={40} />No active poll</div>}
             {a?.kind === 'poll' && (
               <>
                 <PollForm key={a.poll.id} poll={a.poll} mine={a.mine} locked={v.state.locked} name={v.nickname} people={a.tally?.people}
@@ -222,7 +261,7 @@ function NameCard({ name, onSave, onClose }: { name: string; onSave: (name: stri
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   return (
-    <form className="card stack" onSubmit={async (e) => {
+    <form className="stack" onSubmit={async (e) => {
       e.preventDefault();
       setBusy(true);
       setErr(null);
@@ -230,7 +269,7 @@ function NameCard({ name, onSave, onClose }: { name: string; onSave: (name: stri
       setBusy(false);
       if (problem) setErr(problem);
     }}>
-      <label>Your name<input value={value} maxLength={LIMITS.nicknameChars} autoFocus onChange={(e) => setValue(e.target.value)} /></label>
+      <input aria-label="Your name" placeholder="Your name" value={value} maxLength={LIMITS.nicknameChars} autoFocus onChange={(e) => setValue(e.target.value)} />
       {err && <p className="error small" role="alert">{err}</p>}
       <div className="row">
         <button type="submit" className="primary" disabled={busy || !value.trim()}>Save</button>

@@ -466,11 +466,31 @@ export async function wallView(db: Store, s: Session) {
   };
 }
 
-/** What the facilitator's screen sees: everything in the session, including questions that wait for approval. */
-export async function hostView(db: Store, s: Session) {
+/**
+ * The stored counts of an interaction the facilitator has open and that is not running: a poll's
+ * own, or those of each question of a quiz or survey. The running one is left out; its counts
+ * come with the view, held back where the audience's are.
+ */
+async function shownResults(db: Store, s: Session, id: string | null, tallies: Record<string, Tally>) {
+  const i = id && id !== s.state.active ? s.interactions.find((x) => x.id === id) : undefined;
+  if (!i) return null;
+  const polls = i.type === 'quiz' ? i.questions.map((q) => ({ id: q.id, open: false })) : (i.type === 'survey' ? i.polls : [i]).map((p) => ({ id: p.id, open: p.type === 'open' }));
+  const texts: Record<string, { text: string; at: string }[]> = {};
+  await Promise.all(polls.filter((p) => p.open).map(async (p) => {
+    texts[p.id] = (await db.pollAnswers(s.id, p.id, 500)).map((r) => ({ text: r.answer.type === 'open' ? r.answer.text : '', at: r.at }));
+  }));
+  return { id: i.id, tallies: Object.fromEntries(polls.map((p) => [p.id, tallies[p.id] ?? { people: 0, counts: {} }])), texts };
+}
+
+/**
+ * What the facilitator's screen sees: everything in the session, including questions that wait
+ * for approval. `show` is the interaction open on that screen; its stored results come along.
+ */
+export async function hostView(db: Store, s: Session, show: string | null = null) {
   const now = Date.now();
   const [people, results, questions, tallies] = await Promise.all([db.countPeople(s.id), activeResults(db, s, now), db.listQuestions(s.id), db.listTallies(s.id)]);
   return {
+    shown: await shownResults(db, s, show, tallies),
     id: s.id, code: s.code, title: s.title, status: isClosed(s) ? ('ended' as const) : ('live' as const),
     state: s.state, serverNow: now, people, closesAt: s.closesAt, createdAt: s.createdAt, displayKey: s.displayKey, rev: s.rev ?? 1,
     qa: s.qa,

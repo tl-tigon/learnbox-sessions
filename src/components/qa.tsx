@@ -111,11 +111,26 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
     setData((cur) => (cur && !cur.some((q) => q.id === j.question.id) ? [...cur, j.question] : cur));
   };
 
+  /* Upvotes tapped on this phone and still on their way, each with the count it had when tapped.
+     The button shows them as counted at once, and a reload in between cannot take that back. */
+  const [sent, setSent] = useState<Record<string, number>>({});
   const vote = async (q: MyQuestion) => {
-    setData((cur) => cur?.map((x) => (x.id === q.id ? { ...x, voted: true, votes: x.votes + 1 } : x)) ?? cur);
+    setSent((cur) => ({ ...cur, [q.id]: q.votes }));
     const r = await post(`${base}/${q.id}/vote`, {});
-    if (!r.ok && r.status !== 409) void refresh();
+    const j = await r.json().catch(() => ({}));
+    /* Counted now, or counted earlier (409): either way this person has voted. */
+    if (r.ok || r.status === 409) {
+      setData((cur) => cur?.map((x) => (x.id === q.id ? { ...x, voted: true, votes: r.ok ? Math.max(x.votes, Number(j.votes) || 0) : x.votes } : x)) ?? cur);
+    }
+    setSent((cur) => {
+      const rest = { ...cur };
+      delete rest[q.id];
+      return rest;
+    });
+    if (!r.ok) void refresh();
   };
+  const votedOn = (q: MyQuestion) => q.voted || sent[q.id] !== undefined;
+  const votesOf = (q: MyQuestion) => (q.voted || sent[q.id] === undefined ? q.votes : Math.max(q.votes, sent[q.id] + 1));
 
   const list = sortQuestions(data ?? [], order);
   return (
@@ -158,8 +173,8 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
                 </span>
               </div>
               {state.highlight === q.id && <Icon name="pin" label="Being answered now" />}
-              <button type="button" className="votes num" aria-pressed={q.voted} aria-label={`Upvote, ${q.votes}`}
-                disabled={ended || q.voted || q.status !== 'live'} onClick={() => vote(q)}>{q.votes}<Icon name="thumb" /></button>
+              <button type="button" className="votes num" aria-pressed={votedOn(q)} aria-label={`Upvote, ${votesOf(q)}`}
+                disabled={ended || votedOn(q) || q.status !== 'live'} onClick={() => vote(q)}>{votesOf(q)}<Icon name="thumb" /></button>
             </div>
             <div className="text">{q.text}</div>
             <Replies q={q} />

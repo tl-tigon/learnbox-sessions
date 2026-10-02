@@ -42,7 +42,7 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
   - `/` front page with the code field; `/s/<code>` the phone;
   - `/app` the facilitator's sessions; `/app/sessions/<id>` the facilitator's screen; `/app/sessions/<id>/results`; `/app/account`;
   - `/present/<id>` the big screen, also opened on a projector with `#k=<displayKey>`.
-- **Three views of a session** (`live.ts`): `audienceView` for a phone, `wallView` for the big screen, `hostView` for the facilitator. Only `hostView` holds questions waiting for review, every poll's answered count and the display key.
+- **Three views of a session** (`live.ts`): `audienceView` for a phone, `wallView` for the big screen, `hostView` for the facilitator. Only `hostView` holds questions waiting for review, every poll's answered count and the display key. With `?show=<id>` it also carries the stored results of the interaction open on the facilitator's screen, unless that one is running.
 - **Live push**:
   - `src/lib/push/`: AppSync Events, where the server publishes (IAM) and the browser subscribes (API key).
   - `src/lib/use-live.ts`: polls when push is down. `src/lib/use-host.ts`: the facilitator's and the big screen's data.
@@ -59,6 +59,8 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **Never commit** `.env*` files or secrets.
 - **The interface follows `design/slido-study/STUDY.md`** (owner's decision, 2026-10-02). It is built here in code.
   - One accent, LearnBox's forest green. One typeface, Inter, at 14px and 12px. White cards with a hairline border and no shadow. One full-width primary action per phone screen.
+  - The facilitator's screen follows Slido's host screen: a header, a rail, a list of cards, the open card with its results under each option, and a bar that starts and stops it.
+  - Screenshots of the owner's Slido account hold their clients' names. They stay in `.playwright-mcp/` (ignored by git) and never go into the repo.
   - Slido's name, wordmark, exact green, images and wording are never used.
   - Every colour is a token in `globals.css`. Dark and light themes both.
 - **It must work cleanly.** The owner's bar: nothing clunky, buggy or glitchy, and no way around a rule. A rule is enforced on the server and has a test that tries to break it; a flow is checked in the browser walk.

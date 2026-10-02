@@ -1,7 +1,7 @@
 /** Cases found by reviewing the code for bugs and ways around the rules. Each one failed before its fix. */
 import { describe, expect, it } from 'vitest';
 import { memoryStore } from '../store/memory';
-import { control, createSession, editSession, respond, respondQuiz, respondSurvey, sessionResults } from '../live';
+import { control, createSession, editSession, hostView, respond, respondQuiz, respondSurvey, sessionResults } from '../live';
 import { LIMITS } from '../limits';
 import type { Quiz, Session } from '../types';
 import { INTERACTIONS, running, TOKEN } from './helpers';
@@ -139,5 +139,48 @@ describe('the store', () => {
     await control(db, s, { action: 'lock', on: true });
     expect(await db.updateSession(s.id, { title: 'Stale' }, s.state.seq)).toBeNull();
     expect(await db.updateSession(s.id, { title: 'Fresh' }, s.state.seq + 1)).toMatchObject({ title: 'Fresh' });
+  });
+});
+
+describe('the results of an interaction opened on the screen of the facilitator', () => {
+  it('a poll that has stopped comes with its stored counts and written answers', async () => {
+    const { db, s } = await running();
+    let cur = await control(db, s, { action: 'activate', id: 'choice1' });
+    await respond(db, cur, TOKEN(1), 'choice1', { optionIds: ['opta'] });
+    await respond(db, cur, TOKEN(2), 'choice1', { optionIds: ['optb'] });
+    cur = await control(db, cur, { action: 'activate', id: 'open1' });
+    await respond(db, cur, TOKEN(1), 'open1', { text: 'More time' });
+    cur = await control(db, cur, { action: 'activate', id: null });
+    expect((await hostView(db, cur, 'choice1')).shown).toEqual({ id: 'choice1', tallies: { choice1: { people: 2, counts: { opta: 1, optb: 1 } } }, texts: {} });
+    const open = (await hostView(db, cur, 'open1')).shown;
+    expect(open?.tallies.open1.people).toBe(1);
+    expect(open?.texts.open1.map((t) => t.text)).toEqual(['More time']);
+    expect((await hostView(db, cur, 'rating1')).shown?.tallies).toEqual({ rating1: { people: 0, counts: {} } });
+    expect((await hostView(db, cur)).shown).toBeNull();
+    expect((await hostView(db, cur, 'no-such-id')).shown).toBeNull();
+  });
+
+  it('the running quiz comes with nothing extra, so the votes of an open question stay back; once closed, each question has its counts', async () => {
+    const { db, s } = await running();
+    let cur = await control(db, s, { action: 'activate', id: 'quiz1' });
+    cur = await control(db, cur, { action: 'quiz-next' });
+    await respondQuiz(db, cur, TOKEN(1), 'ques1', { optionId: 'qopb' });
+    const open = await hostView(db, cur, 'quiz1');
+    expect(open.shown).toBeNull();
+    expect(open.tally).toEqual({ people: 1, counts: {} });
+    cur = await control(db, cur, { action: 'quiz-reveal' });
+    cur = await control(db, cur, { action: 'activate', id: null });
+    expect((await hostView(db, cur, 'quiz1')).shown?.tallies).toEqual({ ques1: { people: 1, counts: { qopb: 1 } }, ques2: { people: 0, counts: {} } });
+  });
+
+  it('a survey that has stopped comes with the counts of each of its questions', async () => {
+    const { db, s } = await running();
+    let cur = await control(db, s, { action: 'activate', id: 'survey1' });
+    await respondSurvey(db, cur, TOKEN(1), 'survey1', { srate: { value: 4 }, sopen: { text: 'Shorter' }, spick: { optionIds: ['syes'] } });
+    expect((await hostView(db, cur, 'survey1')).shown).toBeNull();
+    cur = await control(db, cur, { action: 'activate', id: null });
+    const shown = (await hostView(db, cur, 'survey1')).shown;
+    expect(shown?.tallies).toEqual({ srate: { people: 1, counts: { '4': 1 } }, sopen: { people: 1, counts: {} }, spick: { people: 1, counts: { syes: 1 } } });
+    expect(shown?.texts.sopen.map((t) => t.text)).toEqual(['Shorter']);
   });
 });

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import { onPushStatus, pushConfigured, subscribe } from './push/client';
 import type { PushEvent } from './push/events';
 
@@ -48,6 +48,13 @@ export function useLive<T>(
     }
   }, []);
 
+  /* A change made on this screen (a vote just counted, a control just applied) must not be undone
+     by a reload that began before it: a load in flight is dropped, and the next one fetches afresh. */
+  const change = useCallback((next: SetStateAction<T | null>) => {
+    latest.current += 1;
+    setData(next);
+  }, []);
+
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -82,5 +89,5 @@ export function useLive<T>(
     };
   }, [enabled, key]);
 
-  return { data, setData, error, refresh, pushUp };
+  return { data, setData: change, error, refresh, pushUp };
 }

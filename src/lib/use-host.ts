@@ -39,6 +39,8 @@ export interface HostView extends Shared {
   interactions: Interaction[];
   /** How many have answered each poll and quiz question. */
   answered: Record<string, number>;
+  /** Stored results of the interaction open on this screen, when it is not the running one: by poll or quiz question. */
+  shown: { id: string; tallies: Record<string, Tally>; texts: Record<string, { text: string; at: string }[]> } | null;
 }
 
 /** A question as it now is, put into a list: replaced, added, or taken out once hidden. */
@@ -110,14 +112,14 @@ export function useWall(id: string, displayKey: string | null) {
   return useScreen(id, load, countsIdOf, applyMore);
 }
 
-/** The facilitator's screen. */
-export function useHost(id: string) {
+/** The facilitator's screen. `show` is the interaction open on it, whose stored results are loaded with the view. */
+export function useHost(id: string, show: string | null = null) {
   const load = useCallback(async () => {
-    const r = await authed(`/api/sessions/${id}`);
+    const r = await authed(`/api/sessions/${id}${show ? `?show=${encodeURIComponent(show)}` : ''}`);
     if (r.status === 401 || r.status === 404) throw new Error(r.status === 401 ? 'Sign in' : 'Not found');
     if (!r.ok) throw new Error('Connection lost');
     return (await r.json()) as HostView;
-  }, [id]);
+  }, [id, show]);
   const countsIdOf = useCallback((v: HostView) => {
     const a = v.interactions.find((i) => i.id === v.state.active);
     if (!a || a.type === 'survey') return null;
