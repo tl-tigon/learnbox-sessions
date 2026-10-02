@@ -44,6 +44,7 @@ function SignIn() {
           <label>Email<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
           <button className="primary" disabled={busy}>Continue</button>
         </form>
+        {err && <p className="error small" role="alert">{err}</p>}
       </main>
     );
   }

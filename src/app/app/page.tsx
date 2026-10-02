@@ -82,7 +82,7 @@ export default function Dashboard() {
           <input type="search" aria-label="Search sessions" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         {err && <p className="error" role="alert">{err}</p>}
-        {sessions === null ? <p className="muted">Loading…</p> : (
+        {sessions === null ? !err && <p className="muted">Loading…</p> : (
           <div className="srows">
             {shown.map((s) => (
               <div key={s.id} className="srow">

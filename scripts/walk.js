@@ -31,6 +31,15 @@ const FIRST = { timeout: 120000 };
 
     // ---- Sign in and make a session
     await p.goto(`${BASE}/sign-in`, FIRST);
+    /* An address the server would refuse is turned away at sign-in; one already held sends the screen back to sign-in. */
+    await p.fill('input[type="email"]', 'a@aa');
+    await p.click('button:has-text("Continue")');
+    await p.waitForSelector('[role="alert"]:has-text("Enter a full email address")', WAIT);
+    check('sign-in refuses an address the server would not accept', /\/sign-in$/.test(p.url()) && (await p.evaluate(() => localStorage.getItem('la-dev-email'))) === null);
+    await p.evaluate(() => localStorage.setItem('la-dev-email', 'a@aa'));
+    await p.goto(`${BASE}/app`, FIRST);
+    await p.waitForURL(/\/sign-in$/, FIRST);
+    check('a sign-in the server refuses goes back to the sign-in page', (await p.evaluate(() => localStorage.getItem('la-dev-email'))) === null);
     await p.fill('input[type="email"]', 'walk@example.com');
     await p.click('button:has-text("Continue")');
     await p.waitForURL(/\/app$/, FIRST);

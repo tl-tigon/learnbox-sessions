@@ -21,6 +21,7 @@ import {
   updatePassword,
 } from 'aws-amplify/auth';
 import { request } from '../net';
+import { isEmail } from './email';
 
 const POOL = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
 const CLIENT = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
@@ -77,7 +78,10 @@ export async function currentEmail(): Promise<string | null> {
 }
 
 export async function devSignIn(email: string) {
-  localStorage.setItem(DEV_KEY, email.trim().toLowerCase());
+  const e = email.trim().toLowerCase();
+  /* The server takes only a full address, so one it would refuse is turned away here. */
+  if (!isEmail(e)) throw new Error('Enter a full email address');
+  localStorage.setItem(DEV_KEY, e);
 }
 
 export async function emailSignUp(email: string, password: string) {
@@ -134,11 +138,22 @@ export async function removeSignIn() {
   await deleteUser();
 }
 
-/** fetch with the facilitator's token attached. */
+/**
+ * fetch with the facilitator's token attached. When the server refuses the sign-in this browser
+ * holds (expired, or not one it accepts), the sign-in is dropped and the sign-in page opens, so
+ * no screen is left waiting on requests that cannot succeed.
+ */
+let leaving = false;
 export async function authed(url: string, init: RequestInit = {}): Promise<Response> {
   const t = await idToken();
   const headers = new Headers(init.headers);
   if (t) headers.set('authorization', `Bearer ${t}`);
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  return request(url, { ...init, headers, cache: 'no-store' });
+  const r = await request(url, { ...init, headers, cache: 'no-store' });
+  if (r.status === 401 && !leaving && typeof window !== 'undefined') {
+    leaving = true;
+    await signOut().catch(() => {});
+    window.location.replace('/sign-in');
+  }
+  return r;
 }

@@ -39,7 +39,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 
 **Tests:**
 - `npm test` runs 61 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
-- A browser walk passes 57 of 57 checks: `node scripts/walk.js`, with `npm run dev` running.
+- A browser walk passes 59 of 59 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
   - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.

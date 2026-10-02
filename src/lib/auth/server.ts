@@ -5,6 +5,7 @@
  * It is refused whenever NODE_ENV is production, whatever AUTH_MODE says.
  */
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
+import { isEmail } from './email';
 
 export interface User { sub: string; email: string }
 
@@ -21,7 +22,7 @@ export async function getUser(req: Request): Promise<User | null> {
   if (token.startsWith('dev:')) {
     if (!devAuth()) return null;
     const email = token.slice(4).toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return null;
+    if (!isEmail(email)) return null;
     return { sub: `dev-${email.replace(/[^a-z0-9]/g, '-')}`, email };
   }
   if (!verifier) return null;
