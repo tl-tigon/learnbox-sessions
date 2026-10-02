@@ -114,6 +114,7 @@ These are in `src/lib/limits.ts`.
 
 ## To check at the first deploy
 - **The caller's address.** `clientIp` in `src/lib/http.ts` takes the last entry of `X-Forwarded-For`. Confirm on Amplify that this is the viewer's address and not an internal hop; if it is a hop, every caller shares one limit.
+- **Cookies from `learnbox.one`.** A browser sends cookies set for `.learnbox.one` to `sessions.learnbox.one` too. LearnBox Sessions sets none and reads none, but the request must still fit the host's header limit. Open the site in a browser that is signed in to LearnBox and confirm it loads.
 - **Store tests against DynamoDB.** The store has never run against a real table. Run the unit tests with `STORE=dynamo` on the dev table before anything else.
 - **Rows written while a session is being deleted** stay until their 12-month expiry. They belong to no session and are not reachable.
 
@@ -138,6 +139,7 @@ These are in `src/lib/limits.ts`.
 
 ## Gotchas found so far
 - **PowerShell writes:** in Windows PowerShell 5.1, `Get-Content` / `Set-Content` mangle UTF-8 characters such as "·". Use the Edit/Write tools for files that contain them.
+- **"HTTP ERROR 431" on localhost (2026-10-03).** A browser sends every cookie stored for `localhost` to every port, so cookies left by other local projects count against this server. Node refuses a request whose headers pass 16 KB. The `dev` and `start` scripts now run Node with `--max-http-header-size=65536`. This app sets no cookies.
 - **Production guards:** `next start` (production) refuses the memory store and dev sign-in by design. Use `npm run dev` (port 3200) for local walks, or set `STORE=dynamo` with real Cognito.
 - **Background tabs stop polling:** `useLive` polls only while the page is visible. In the walk, each screen has its own browser context so all stay in the foreground.
 - **Build while the dev server runs:** `NEXT_DIST_DIR=.next-check npx next build`, then `git checkout tsconfig.json` and delete `.next-check` (the build adds that folder to `tsconfig.json`).

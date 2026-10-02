@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3200",
+    "dev": "node --max-http-header-size=65536 node_modules/next/dist/bin/next dev -p 3200",
     "build": "next build",
-    "start": "next start -p 3200",
+    "start": "node --max-http-header-size=65536 node_modules/next/dist/bin/next start -p 3200",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
