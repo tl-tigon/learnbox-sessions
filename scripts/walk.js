@@ -485,6 +485,8 @@ const FIRST = { timeout: 120000 };
     await p.screenshot({ path: path.join(OUT, '19-front-page.png') });
 
     // ---- The site: its menus, its pages and the working example on a product page
+    /* With reduced motion the example's made-up audience stays still, so its numbers can be checked. */
+    await p.emulateMedia({ reducedMotion: 'reduce' });
     await p.hover('.s-head button:has-text("Product")');
     await p.click('.s-drop a:has-text("Live polls")');
     await p.waitForURL(`${BASE}/features/polls`, FIRST);
@@ -492,14 +494,14 @@ const FIRST = { timeout: 120000 };
     check('site: the Product menu opens a product page', (await p.$$('.s-drop')).length === 0);
     const shares = () => p.$$eval('.s-try-screen .mk-bar b', (els) => els.map((e) => e.textContent).join(' '));
     const before = await shares();
-    await p.click('.s-try-phone [role="radio"]:has-text("Hiring plan")');
+    await p.click('.s-try-phone [role="radio"]:has-text("Too fast")');
     await p.click('.s-try-phone button:has-text("Send")');
     const voted = await shares();
     await p.click('.s-try-phone button:has-text("Edit response")');
-    await p.click('.s-try-phone [role="radio"]:has-text("Roadmap")');
+    await p.click('.s-try-phone [role="radio"]:has-text("About right")');
     await p.click('.s-try-phone button:has-text("Send")');
     const moved = await shares();
-    check('site: a vote in the example moves the big screen, and a changed vote counts once', before === '47% 21% 32%' && voted === '45% 25% 30%' && moved === '50% 20% 30%', `${before} | ${voted} | ${moved}`);
+    check('site: a vote in the example moves the big screen, and a changed vote counts once', before === '16% 63% 21%' && voted === '15% 60% 25%' && moved === '15% 65% 20%', `${before} | ${voted} | ${moved}`);
     await p.screenshot({ path: path.join(OUT, '20-site-polls.png') });
     const bad = [];
     for (const u of ['/', '/product', '/features/qa', '/features/word-cloud', '/features/quizzes', '/features/surveys', '/features/results', '/use-cases', '/pricing']) {
@@ -520,8 +522,9 @@ const FIRST = { timeout: 120000 };
     check('site: on a phone the menu opens as a page and closes on a choice', (await p.$$('.s-drawer')).length === 0);
     await p.setViewportSize({ width: 1366, height: 800 });
     await p.goto(`${BASE}/`, FIRST);
+    await p.emulateMedia({ reducedMotion: 'no-preference' });
     await p.click('.s-scenes button:has-text("Quiz")');
-    await p.waitForSelector('.s-frame .mk-board', WAIT);
+    await p.waitForSelector('.hd .mk-board', WAIT);
     await p.screenshot({ path: path.join(OUT, '21-site-home.png') });
     check('site: the front page picture shows the scene chosen', true);
     check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));

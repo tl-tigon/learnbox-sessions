@@ -70,13 +70,34 @@
 }
 
 /* The front page's hero: heading, line, button, then the picture */
-.s-hero { text-align: center; padding: 40px 0 72px; }
+/* The phone flies in from beyond the page's edge; the section clips it there, so the page never scrolls sideways. */
+.s-hero { text-align: center; padding: 40px 0 72px; overflow: hidden; overflow: clip; }
 .s-hero .s-in { display: grid; justify-items: center; gap: 24px; }
 .s-hero h1 { max-width: 18ch; }
 .s-hero .s-lead { max-width: 56ch; }
 .s-hero .s-actions { justify-content: center; }
 .s-stage { width: min(920px, 100%); margin-top: 32px; display: grid; gap: 28px; justify-items: center; }
-.s-frame { width: 100%; }
+/* The stage: the big screen and the phone move over it between scenes. */
+.hd { position: relative; width: 100%; aspect-ratio: 16 / 9.1; perspective: 1600px; }
+.hd-screen, .hd-phone { position: absolute; transition: transform 900ms cubic-bezier(0.3, 0.7, 0.2, 1), opacity 600ms ease; will-change: transform; }
+.hd-screen { left: 0; top: 3%; width: 80%; transform-origin: 50% 60%; }
+.hd-phone { right: 0; top: 7%; width: 25%; }
+.hd .mk-wall main { padding-right: 8cqw; }
+.hd .mk-none { height: 100%; }
+.hd.still .hd-screen, .hd.still .hd-phone { transition: none; }
+/* Where the person's finger is */
+.hd-touch { position: absolute; width: 17%; aspect-ratio: 1; border-radius: 50%; background: rgba(0, 0, 0, 0.16); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 2px 8px rgba(0, 0, 0, 0.2); transform: translate(-50%, -50%) scale(1.25); opacity: 0; pointer-events: none; transition: left 420ms cubic-bezier(0.3, 0.7, 0.2, 1), top 420ms cubic-bezier(0.3, 0.7, 0.2, 1), transform 160ms ease, opacity 220ms ease, background 160ms; }
+.hd-touch.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.hd-touch.down { transform: translate(-50%, -50%) scale(0.7); background: rgba(0, 0, 0, 0.3); }
+/* The phone's camera, finding the code on the big screen */
+.mk-body.hd-cam { background: var(--device); place-items: center; grid-template-rows: minmax(0, 1fr); }
+.hd-cam > i { width: 56%; aspect-ratio: 1; border-radius: 9cqw; box-shadow: inset 0 0 0 1.4cqw rgba(255, 255, 255, 0.85); display: grid; place-items: center; color: #fff; transition: box-shadow 250ms, background 250ms; }
+.hd-cam > i.on { box-shadow: inset 0 0 0 1.4cqw var(--accent); background: var(--accent); }
+.hd-cam svg.icon { width: 16cqw !important; height: 16cqw !important; }
+.hd-caret::after { content: ''; display: inline-block; width: 1.5px; height: 1.05em; margin-left: 1px; vertical-align: text-bottom; background: var(--accent); animation: hd-blink 900ms steps(2, start) infinite; }
+@keyframes hd-blink { to { visibility: hidden; } }
+.hd-right .mk-opt.picked { box-shadow: inset 0 0 0 2px var(--ok); background: var(--accent-soft); }
+.mk-sent b { margin-left: 0.4em; }
 .s-scenes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .s-scenes button, .s-scenes button:hover:not(:disabled) { position: relative; min-height: 40px; padding: 0 16px; background: transparent; box-shadow: none; color: var(--text-2); font-size: 14px; overflow: hidden; }
 .s-scenes button:hover:not(:disabled) { background: var(--soft); }
@@ -180,6 +201,7 @@
 .s-try { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: clamp(24px, 5vw, 72px); align-items: start; max-width: 1080px; margin: 0 auto; }
 .s-try h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; color: var(--accent); }
 .s-try-screen { position: sticky; top: 96px; }
+.s-try-note { grid-column: 1 / -1; text-align: center; color: var(--text-3); font-size: 14px; }
 
 /* The last band and the footer */
 .s-cta { background: var(--accent-strong); color: #fff; padding: 96px 0; text-align: center; }
@@ -260,6 +282,7 @@
 .mk-note { font-size: 0.8em; color: var(--text-2); }
 .mk-none { display: grid; justify-items: center; align-content: center; gap: 1cqw; color: var(--text-3); font-size: 2.2cqw; font-weight: 500; }
 .mk-none svg { width: 2em !important; height: 2em !important; }
+.mk-page .mk-none { font-size: 1em; gap: 0.5em; padding: 2.5em 0; }
 
 .mk-bars { display: grid; gap: 0.8em; }
 .mk-bar { display: grid; gap: 0.25em; }
@@ -268,6 +291,10 @@
 .mk-bar > div > i { height: 0.8em; min-width: 0.8em; flex: none; border-radius: 999px; background: var(--bar); transition: width 500ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mk-bar.lead > div > i { background: var(--accent); }
 .mk-bar > div > b { font-weight: 600; }
+/* Bars with the label beside the bar: a rating's five rows fit the screen. */
+.mk-tight .mk-bars { gap: 0.4em; font-size: 0.86em; }
+.mk-tight .mk-bar { grid-template-columns: 1.2em minmax(0, 1fr); align-items: center; gap: 0.4em; }
+.mk-panel:has(.mk-tight) { gap: 1.2cqw; }
 .mk-cloud { display: flex; flex-wrap: wrap; gap: 0.2em 0.9em; align-items: baseline; justify-content: center; line-height: 1.1; padding: 0.4em 0; }
 .mk-cloud span { transition: font-size 400ms ease; }
 .mk-texts { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; font-size: 0.9em; }
@@ -397,11 +424,34 @@ button.mk-opt:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--text-3); 
 .mk-startbar > i { width: 2.9em; height: 2.9em; border-radius: 0.55em; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .mk-startbar > span { display: inline-flex; align-items: center; gap: 0.5em; font-weight: 500; margin-left: 0.6em; }
 
+/*
+ * A picture plays when it is scrolled to: it waits with its bars empty and its rows out, and the
+ * class is taken off once it is in view. Without scripts, or with reduced motion, it shows finished.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .s-play .mk-bar > div > i { transition: width 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 250ms; }
+  .s-play :is(.mk-screen, .mk-duo-phone, .mk-solo > div, .mk-paper) { transition: transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 500ms ease; }
+  .s-play .mk-duo-phone { transition-delay: 150ms; }
+  .s-play :is(.mk-wq, .mk-q, .mk-row, .mk-opt, .mk-cloud span, .mk-texts span, .mk-qrow, .mk-block, .mk-letters span, .a-types span, .mk-scale i) { transition: transform 500ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 400ms ease; transition-delay: 350ms; }
+  .s-play :is(.mk-wq, .mk-q, .mk-row, .mk-opt, .mk-cloud span, .mk-texts span, .mk-qrow, .mk-block, .mk-letters span, .a-types span, .mk-scale i):nth-child(2) { transition-delay: 470ms; }
+  .s-play :is(.mk-wq, .mk-q, .mk-row, .mk-opt, .mk-cloud span, .mk-texts span, .mk-qrow, .mk-block, .mk-letters span, .a-types span, .mk-scale i):nth-child(3) { transition-delay: 590ms; }
+  .s-play :is(.mk-wq, .mk-q, .mk-row, .mk-opt, .mk-cloud span, .mk-texts span, .mk-qrow, .mk-block, .mk-letters span, .a-types span, .mk-scale i):nth-child(4) { transition-delay: 710ms; }
+  .s-play :is(.mk-wq, .mk-q, .mk-row, .mk-opt, .mk-cloud span, .mk-texts span, .mk-qrow, .mk-block, .mk-letters span, .a-types span, .mk-scale i):nth-child(n + 5) { transition-delay: 830ms; }
+  html.js .s-play.wait .mk-bar > div > i { width: 0 !important; transition: none; }
+  html.js .s-play.wait :is(.mk-screen, .mk-paper) { opacity: 0; transform: translateY(5%); transition: none; }
+  html.js .s-play.wait :is(.mk-duo-phone, .mk-solo > div) { opacity: 0; transform: translateY(12%); transition: none; }
+  html.js .s-play.wait :is(.mk-wq, .mk-q, .mk-row, .mk-opt, .mk-cloud span, .mk-texts span, .mk-qrow, .mk-block, .mk-letters span, .a-types span, .mk-scale i) { opacity: 0; transform: translateY(0.9em); transition: none; }
+  .s-cards li, .s-jump a, .site .btn, .s-tablist button, .s-acc > div { transition: transform 200ms ease, box-shadow 200ms ease, background 150ms ease; }
+  .s-cards li:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08); }
+  .site .btn.primary.big:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16); }
+}
+.site .btn.primary:hover { background: var(--accent-strong); }
+.s-cta .btn:hover { transform: translateY(-1px); }
+
 /* A part arriving in a drawing */
-.mk-in { animation: mk-in 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.mk-in { animation: mk-in 450ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes mk-in { from { opacity: 0; transform: translateY(0.7em); } }
-.s-frame { animation: s-swap 350ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  .mk-in, .s-frame, .s-swap, .s-drop { animation: none; }
+  .mk-in, .s-swap, .s-drop, .hd-caret::after { animation: none; }
   .mk-bar > div > i, .mk-cloud span, .mk-row, .s-scenes i b { transition: none; }
 }

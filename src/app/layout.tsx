@@ -14,8 +14,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body>
-        {/* A theme chosen on this device is applied before the page paints; with none chosen, the device's own setting decides. */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('la-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}" }} />
+        {/* Every screen is light. Dark, chosen in the phone's menu, is applied to the phone's screens before they paint. The `js` class tells the site's pictures that scripts run, so they may wait to be scrolled to. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js');try{if(location.pathname.indexOf('/s/')===0&&localStorage.getItem('la-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}" }} />
         {children}
       </body>
     </html>

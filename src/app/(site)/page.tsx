@@ -13,7 +13,7 @@ import { feature, inSentence } from '@/lib/site';
 /* Draft copy, kept to plain statements; the owner edits the wording. */
 const AREAS = (['polls', 'qa', 'quizzes', 'surveys', 'results'] as const).map((slug) => {
   const f = feature(slug)!;
-  return { icon: f.icon, title: f.nav, text: f.lead, href: `/features/${f.slug}`, more: `More about ${inSentence(f)}`, visual: <Visual name={f.visual} /> };
+  return { icon: f.icon, title: f.nav, text: f.lead, href: `/features/${f.slug}`, more: `More about ${inSentence(f)}`, visual: <Visual name={slug === 'polls' ? 'rating' : f.visual} /> };
 });
 
 export default function Home() {

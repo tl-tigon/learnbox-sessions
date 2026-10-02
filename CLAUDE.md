@@ -64,7 +64,8 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
   - The facilitator's screen follows Slido's host screen: a header, a rail, a list of cards, the open card with its results under each option, and a bar that starts and stops it.
   - Screenshots of the owner's Slido account hold their clients' names. They stay in `.playwright-mcp/` (ignored by git) and never go into the repo.
   - Slido's name, wordmark, exact green, images and wording are never used.
-  - Every colour is a token in `globals.css`. Dark and light themes both.
+  - Every colour is a token in `globals.css`.
+  - **Every screen is light** (owner's decision, 2026-10-03), whatever the device's own setting. Dark is a choice a person makes in the phone's menu, and it applies to the phone's screens only.
 - **It must work cleanly.** The owner's bar: nothing clunky, buggy or glitchy, and no way around a rule. A rule is enforced on the server and has a test that tries to break it; a flow is checked in the browser walk.
 - **No invented UI copy**: no taglines, welcome lines or encouragement. Use labels, names and numbers. Buttons say what they do. A state with nothing to show uses a short label ("No active poll", "Questions closed").
   - The site's copy (`src/lib/site.ts` and the pages in `src/app/(site)/`) is a draft the owner edits. It is plain statements: no creative writing and no long explanation. Every statement about the product is true of the code, and its numbers come from `LIMITS`.

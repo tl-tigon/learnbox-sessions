@@ -96,7 +96,7 @@ export function Sheet({ children }: { children: ReactNode }) {
 
 export function Panel({ title, side, children }: { title: string; side?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="mk-panel">
+    <div className="mk-panel mk-in">
       <div className="mk-title"><b>{title}</b>{side}</div>
       {children}
     </div>
@@ -124,7 +124,7 @@ export function Bars({ rows }: { rows: BarRow[] }) {
   return (
     <div className="mk-bars">
       {rows.map((r) => (
-        <div key={r.key} className={`mk-bar ${r.lead ? 'lead' : ''}`}>
+        <div key={r.key} className={`mk-bar mk-in ${r.lead ? 'lead' : ''}`}>
           <span>{r.label}{r.mine && <Icon name="user" />}</span>
           <div><i style={{ width: `calc(${Math.max(0, Math.min(1, r.share))} * (100% - 5ch))` }} /><b className="num">{r.value}</b></div>
         </div>
@@ -164,7 +164,7 @@ export function WallQuestions({ items }: { items: MockQuestion[] }) {
 export function PhoneQuestion({ q, onVote }: { q: MockQuestion; onVote?: () => void }) {
   const votes = <>{q.votes}<Icon name="thumb" /></>;
   return (
-    <div className={`mk-q mk-in ${q.hi ? 'hi' : ''}`}>
+    <div className={`mk-q mk-in ${q.hi ? 'hi' : ''}`} data-q={q.id}>
       <div className="head">
         <i className="mk-dot">{initial(q.name)}</i>
         <span className="who"><b>{q.name || 'Anonymous'}</b><small>now</small></span>

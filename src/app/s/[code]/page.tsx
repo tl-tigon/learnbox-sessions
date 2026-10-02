@@ -150,15 +150,25 @@ function Joined({ id }: { id: string }) {
 
   const [naming, setNaming] = useState(false);
   const [menu, setMenu] = useState(false);
-  /* Dark or light as shown now: the choice made on this device, or else the device's own setting. */
+  /* Light, unless dark was chosen on this device. The choice holds for the phone's screens; leaving them puts the page back to light. */
   const [dark, setDark] = useState(false);
   useEffect(() => {
-    const chosen = document.documentElement.dataset.theme;
-    setDark(chosen ? chosen === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
+    let chosen = false;
+    try {
+      chosen = localStorage.getItem('la-theme') === 'dark';
+    } catch {
+      /* Storage is off in some private windows. */
+    }
+    if (chosen) document.documentElement.dataset.theme = 'dark';
+    setDark(chosen);
+    return () => {
+      delete document.documentElement.dataset.theme;
+    };
   }, []);
   const setTheme = (on: boolean) => {
     const theme = on ? 'dark' : 'light';
-    document.documentElement.dataset.theme = theme;
+    if (on) document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
     try {
       localStorage.setItem('la-theme', theme);
     } catch {

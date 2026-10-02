@@ -41,6 +41,8 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Front page: the code field in a pill; the heading and one button; a moving picture of the big screen and a phone playing a poll, the Q&A, a word cloud and a quiz; where a session runs; the five parts of a session, opening one at a time beside their picture; three cards; three steps; a working example (vote on the drawn phone, the drawn big screen follows); a band with one button; a footer of links.
   - `/product` (the tour), `/features/polls`, `qa`, `word-cloud`, `quizzes`, `surveys`, `results`, `/use-cases`, `/pricing` (one free plan, its lines from `LIMITS`).
   - Every picture is a drawing of the product's own screens in code; nothing is a photograph or a video.
+  - The picture under the front page's heading tells one session as a story, as slido.com's video does: a phone scans the code and joins, votes, types and upvotes a question, sends a word, plays a quiz. The big screen and the phone move between scenes and a touch mark shows each tap (`src/components/site/hero-demo.tsx`).
+  - Every other picture plays once when it is scrolled to (`play.tsx`). The working examples have a made-up audience answering alongside, and say so.
 - **Audience**: joins at `/` or `/s/<code>` with no account. The phone has two tabs, Q&A and Polls; starting a poll brings the Polls tab forward, and stopping it brings the Q&A back. After a vote the options give way to the results, with "Edit response" under them. A menu holds the session's name and code, "Enter another code", a dark mode switch and "Create a session"; the profile button sets the person's name. Once a person has answered or asked, a strip at the foot of the page offers "Create a session".
 - **Big screen** `/present/<id>`: join instructions with code and QR on the left; the questions or the running poll on the right. Opens on a projector that isn't signed in with `#k=<displayKey>`.
 - **Fair-use caps, rate limits and the profanity filter.**
@@ -70,6 +72,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 ## Decisions by the owner
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
+- **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
 - **2026-10-02**: switch to Slido's event model, and model the interface on Slido's.
   - The interface is built here in code from `design/slido-study/STUDY.md`. This replaces the earlier rule that a Claude Design handoff was the visual authority.
   - Identity: LearnBox's forest green with Inter.

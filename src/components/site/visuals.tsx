@@ -5,6 +5,7 @@ import {
   AskRow, Bars, barRows, Board, BOARD, Btn, Cloud, CODE, Duo, Field, Options, Panel, People, Phone, PhoneBoard, PhoneQuestion, PhoneVoted,
   PLabel, POLL, QUESTIONS, QUIZ, Screen, Sent, Sheet, Solo, WallQuestions, WORDS,
 } from './mock';
+import { Play } from './play';
 
 const LABEL: Record<VisualName, string> = {
   poll: 'A multiple choice poll on the big screen and on a phone',
@@ -50,7 +51,7 @@ function drawing(name: VisualName) {
             <Screen icon="star" label="Rating" count={24}>
               <Panel title={RATING.title}>
                 <div className="mk-avg num">4.2 <small>/ 5</small></div>
-                <Bars rows={RATING.counts.map((c, i) => ({ key: String(i), label: <span className="num">{i + 1}</span>, value: String(c), share: c / 11 }))} />
+                <div className="mk-tight"><Bars rows={RATING.counts.map((c, i) => ({ key: String(i), label: <span className="num">{i + 1}</span>, value: String(c), share: c / 11 }))} /></div>
               </Panel>
             </Screen>
           )}
@@ -212,9 +213,9 @@ function drawing(name: VisualName) {
   }
 }
 
-/** A drawing of the product's screens. It reads as one image. */
+/** A drawing of the product's screens. It reads as one image, and plays when it is scrolled to. */
 export function Visual({ name }: { name: VisualName }) {
-  return <div className="s-visual" role="img" aria-label={LABEL[name]}>{drawing(name)}</div>;
+  return <Play className="s-visual" label={LABEL[name]}>{drawing(name)}</Play>;
 }
 
 function art(name: ArtName) {
@@ -224,7 +225,7 @@ function art(name: ArtName) {
     case 'code':
       return <div className="a-code"><small>Join at</small><b>sessions.learnbox.one</b><b className="num big"># {CODE}</b></div>;
     case 'bars':
-      return <div className="a-card"><Bars rows={barRows(POLL.options, POLL.counts)} /></div>;
+      return <div className="a-card"><Bars rows={barRows(['Yes', 'No', 'Not sure'], [15, 5, 4])} /></div>;
     case 'question':
       return <div className="a-stack"><PhoneQuestion q={{ ...QUESTIONS[0], voted: true }} /></div>;
     case 'highlight':
@@ -248,5 +249,5 @@ function art(name: ArtName) {
 
 /** The small drawing on a step card. */
 export function Art({ name }: { name: ArtName }) {
-  return <div className="s-art" aria-hidden><div>{art(name)}</div></div>;
+  return <Play className="s-art"><div>{art(name)}</div></Play>;
 }

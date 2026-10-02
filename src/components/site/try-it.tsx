@@ -1,23 +1,49 @@
 'use client';
 /**
  * A working example on the site: vote or ask on the drawn phone, and the drawn big screen follows.
- * It runs in the visitor's browser on made-up answers; nothing is sent anywhere.
+ * A made-up audience answers alongside while the example is in view. It runs in the visitor's
+ * browser; nothing is sent anywhere.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/icons';
-import { Bars, barRows, Panel, People, Phone, PhoneQuestion, PLabel, POLL, QUESTIONS, Screen, Sent, WallQuestions, type MockQuestion } from './mock';
+import { Bars, barRows, Panel, People, Phone, PhoneQuestion, PLabel, QUESTIONS, Screen, Sent, WallQuestions, type MockQuestion } from './mock';
 
-const BASE = [9, 4, 6];
+const POLL = { title: 'How was the pace today?', options: ['Too slow', 'About right', 'Too fast'], counts: [3, 12, 4] };
+/* Which option each of the made-up audience picks, in the order they answer. */
+const VOTES = [1, 1, 2, 1, 0, 1, 1, 2, 1, 1, 0, 1, 2, 1, 1, 1, 2, 0, 1, 1, 1, 2, 1, 1, 0, 1, 1, 2, 1, 1];
+/* Which question each of them upvotes. */
+const UPVOTES = ['a', 'b', 'a', 'c', 'a', 'b', 'a', 'a', 'c', 'b', 'a', 'b', 'a', 'c', 'a', 'b', 'a', 'a'];
 const MAX = 140;
 
+/** A count that rises by one every `ms` while the example is in view, up to `limit`. It stays at 0 for reduced motion. */
+function useAudience(ms: number, limit: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let seen = false;
+    const io = new IntersectionObserver(([e]) => { seen = e.isIntersecting; }, { threshold: 0.3 });
+    if (ref.current) io.observe(ref.current);
+    const id = setInterval(() => {
+      if (seen && !document.hidden) setN((v) => Math.min(limit, v + 1));
+    }, ms);
+    return () => {
+      clearInterval(id);
+      io.disconnect();
+    };
+  }, [ms, limit]);
+  return [ref, n] as const;
+}
+
 function PollDemo() {
+  const [ref, arrived] = useAudience(1500, VOTES.length);
   const [pick, setPick] = useState<number | null>(null);
   const [sent, setSent] = useState<number | null>(null);
   const [editing, setEditing] = useState(true);
-  const counts = BASE.map((c, i) => c + (sent === i ? 1 : 0));
+  const counts = POLL.counts.map((c, i) => c + VOTES.slice(0, arrived).filter((v) => v === i).length + (sent === i ? 1 : 0));
   const people = counts.reduce((a, b) => a + b, 0);
   return (
-    <>
+    <div className="s-try" ref={ref}>
       <div className="s-try-phone">
         <h3><Icon name="phone" size={20} />On a phone</h3>
         <Phone>
@@ -45,15 +71,17 @@ function PollDemo() {
         <h3><Icon name="screen" size={20} />On the big screen</h3>
         <Screen icon="choice" label="Multiple choice" count={people} people={people}><Panel title={POLL.title}><Bars rows={barRows(POLL.options, counts)} /></Panel></Screen>
       </div>
-    </>
+      <p className="s-try-note">An example with made-up answers. It runs in your browser.</p>
+    </div>
   );
 }
 
 function QaDemo() {
+  const [ref, arrived] = useAudience(1800, UPVOTES.length);
   const [added, setAdded] = useState<MockQuestion[]>([]);
   const [up, setUp] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
-  const all = [...QUESTIONS, ...added].map((q) => ({ ...q, votes: q.votes + (up.includes(q.id) ? 1 : 0), voted: up.includes(q.id) }));
+  const all = [...QUESTIONS, ...added].map((q) => ({ ...q, votes: q.votes + UPVOTES.slice(0, arrived).filter((id) => id === q.id).length + (up.includes(q.id) ? 1 : 0), voted: up.includes(q.id) }));
   /* Most upvoted first; equal votes keep the order they were asked in. */
   const list = all.map((q, i) => ({ q, i })).sort((a, b) => b.q.votes - a.q.votes || a.i - b.i).map((x) => x.q);
   const text = draft.replace(/\s+/g, ' ').trim();
@@ -63,7 +91,7 @@ function QaDemo() {
     setDraft('');
   };
   return (
-    <>
+    <div className="s-try" ref={ref}>
       <div className="s-try-phone">
         <h3><Icon name="phone" size={20} />On a phone</h3>
         <Phone tab="qa">
@@ -80,10 +108,11 @@ function QaDemo() {
         <h3><Icon name="screen" size={20} />On the big screen</h3>
         <Screen icon="chat" label="Q&A" count={list.length} countIcon="chat"><WallQuestions items={list.slice(0, 3)} /></Screen>
       </div>
-    </>
+      <p className="s-try-note">An example with made-up questions. It runs in your browser.</p>
+    </div>
   );
 }
 
 export function TryIt({ kind }: { kind: 'poll' | 'qa' }) {
-  return <div className="s-try">{kind === 'poll' ? <PollDemo /> : <QaDemo />}</div>;
+  return kind === 'poll' ? <PollDemo /> : <QaDemo />;
 }

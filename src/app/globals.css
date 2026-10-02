@@ -35,36 +35,7 @@
   --font: var(--font-inter), Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --accent: #3aa374;
-    --accent-strong: #14472f;
-    --accent-soft: rgba(58, 163, 116, 0.16);
-    --accent-ink: #06130c;
-    --bg: #111412;
-    --page: #0c0f0d;
-    --panel: #111412;
-    --surface: #191d1a;
-    --soft: #232824;
-    --softer: rgba(255, 255, 255, 0.05);
-    --wall: #0e110f;
-    --line: #2d332f;
-    --text: #f0f3f1;
-    --text-2: #b9c0bb;
-    --text-3: #8f9892;
-    --bar: #4a524c;
-    --info: #9fd0f5;
-    --info-bg: #12293a;
-    --info-line: rgba(159, 208, 245, 0.4);
-    --warn-bg: rgba(255, 176, 59, 0.14);
-    --warn: #ffb03b;
-    --danger: #ff6b6b;
-    --danger-soft: rgba(255, 107, 107, 0.16);
-    --ok: #3aa374;
-    --device: #3b423d;
-    color-scheme: dark;
-  }
-}
+/* Every screen is light. Dark is a choice a person makes in the phone's menu, and it applies to the phone's screens only. */
 :root[data-theme='dark'] {
   --accent: #3aa374;
   --accent-strong: #14472f;

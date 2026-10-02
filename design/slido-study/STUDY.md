@@ -163,11 +163,18 @@ Studied on 2026-10-02 at 1440px and 390px wide: the home page, the menus, the pr
   - award badges, a carousel of customer quotes with photographs, a row of customer logos;
   - a green band with one heading and one button;
   - a footer of five columns of links.
+- **The video, frame by frame.** It is one story with the objects moving in space, and that movement is most of why the page feels alive (the page itself has no scroll effects):
+  - the browser window swings up into view showing the join code and QR code; a phone flies in tilted, stops over the QR code, and turns green once joined; participant tiles light up one by one;
+  - the poll's question appears, then its options one at a time; the phone turns to show the poll; a grey touch circle lands on an option, then on Send; the bars grow on both;
+  - the view moves in on the phone alone for the Q&A: a touch on the ask box, the question typed letter by letter, Send; the window swings back in with questions arriving; a touch upvotes one;
+  - a word cloud builds on a laptop beside four video-call faces, and the view pulls back to a photograph of a meeting room with the cloud on its TV.
+- **What else gives it life**: photographs of people (the video-call faces, hands holding phones, customer portraits), a second colour (blue for the participant's side) and coloured avatars and tool logos, a display typeface for headings, and headings written with a voice.
 - **A product page** (live Q&A): the heading at the left with a short list and a button, a picture at the right; "in 3 steps" as three green cards with a drawing each; "See how it works", a real event in two frames, "Participant mode" (a phone) and "Present mode" (the screen), where a vote on one shows on the other; then rows that alternate sides and background, each a small label, a 38px heading, two lines and a picture; a grid of six smaller features, icon, title and line; the tools band; quotes; the green band.
 - **Type**: headings in Slido's own sans at 64px and 38px bold; text in Inter at 16px, 20px for the lead line; buttons 56px tall with a 4px radius.
 
 **How LearnBox Sessions' site differs:**
-- The pictures are drawings of LearnBox Sessions' own screens, built in code (`src/components/site/mock.tsx`). The one under the home page's heading plays a poll, the Q&A, a word cloud and a quiz in turn; four labels under it choose the scene.
+- The pictures are drawings of LearnBox Sessions' own screens, built in code (`src/components/site/mock.tsx`). The one under the home page's heading tells the same kind of story in five scenes (join, poll, Q&A, word cloud, quiz), with the screen and phone moving between them and a touch mark for each tap; five labels under it choose the scene. The other pictures play once when scrolled to.
+- It has no photographs, one colour and one typeface, and plain headings. Those are the owner's choices to revisit.
 - "Try it" is a working example in the page: a vote or a question on the drawn phone shows on the drawn big screen. It runs in the visitor's browser.
 - The menus are Product (the tour and six pages), Use cases (one page, five sections) and Pricing (one free plan).
 - The band under the picture says where a session runs: a projector, a shared browser tab in a video call, phones, the code and QR code. LearnBox Sessions has no add-ins for other tools, so no logos.
