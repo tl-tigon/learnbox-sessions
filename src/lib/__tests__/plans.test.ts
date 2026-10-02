@@ -111,7 +111,7 @@ describe('paying for Pro', () => {
     back.hash = responseHash(back, 'testsalt');
     return { ...back, ...change };
   }
-  const start = (db: Store) => startOrder(db, USER, { name: 'Asha Rao', phone: '98765 43210' }, ORIGIN);
+  const start = (db: Store, period = 'year') => startOrder(db, USER, { name: 'Asha Rao', phone: '98765 43210', period }, ORIGIN);
 
   it('signs the request and the outcome as PayU documents them', () => {
     const sha = (s: string) => createHash('sha512').update(s).digest('hex');
@@ -125,6 +125,11 @@ describe('paying for Pro', () => {
     expect(gateway()!.payUrl).toBe('https://test.payu.in/_payment');
     vi.stubEnv('PAYU_ENV', 'live');
     expect(gateway()!.payUrl).toBe('https://secure.payu.in/_payment');
+    /* The stand-in page can be asked for with keys set, in development only. */
+    vi.stubEnv('PAYU_ENV', 'standin');
+    expect(gateway()!.dev).toBe(false);
+    vi.stubEnv('AUTH_MODE', 'dev');
+    expect(gateway()).toMatchObject({ dev: true, key: 'dev', payUrl: '/api/billing/dev-gateway' });
   });
 
   it('writes a pending order and a signed form for 588.00', async () => {
@@ -138,10 +143,24 @@ describe('paying for Pro', () => {
     expect((await accountView(db, 'buyer-1')).plan).toBe('free');
   });
 
+  it('one month costs 79.00 and gives 30 days; the amount is set by the period, not by the browser', async () => {
+    const db = memoryStore();
+    const { fields } = await startOrder(db, USER, { name: 'Asha Rao', phone: '9876543210', period: 'month', amount: '1.00', days: 9999 }, ORIGIN);
+    expect(fields).toMatchObject({ amount: '79.00', productinfo: 'LearnBox Sessions Pro 1 month' });
+    expect(await finishOrder(db, outcome(fields, 'success'))).toBe('paid');
+    expect(Math.round(((await db.getAccount('buyer-1'))!.proUntil * 1000 - Date.now()) / DAY)).toBe(30);
+    /* A month's payment reported as if it were for the year's order gives nothing more. */
+    const year = await start(db);
+    expect(await finishOrder(db, outcome({ ...year.fields, amount: '79.00' }, 'success'))).toBe('failed');
+    expect(Math.round(((await db.getAccount('buyer-1'))!.proUntil * 1000 - Date.now()) / DAY)).toBe(30);
+    expect(await refusal(startOrder(db, USER, { name: 'Asha Rao', phone: '9876543210', period: 'decade' }, ORIGIN))).toBe('400: Choose 1 month or 12 months');
+    expect(await refusal(startOrder(db, USER, { name: 'Asha Rao', phone: '9876543210' }, ORIGIN))).toBe('400: Choose 1 month or 12 months');
+  });
+
   it('asks for a name and a mobile number', async () => {
     const db = memoryStore();
-    expect(await refusal(startOrder(db, USER, { name: '', phone: '9876543210' }, ORIGIN))).toBe('400: Enter your name in English letters');
-    expect(await refusal(startOrder(db, USER, { name: 'Asha', phone: '12345' }, ORIGIN))).toBe('400: Enter a mobile number');
+    expect(await refusal(startOrder(db, USER, { name: '', phone: '9876543210', period: 'year' }, ORIGIN))).toBe('400: Enter your name in English letters');
+    expect(await refusal(startOrder(db, USER, { name: 'Asha', phone: '12345', period: 'year' }, ORIGIN))).toBe('400: Enter a mobile number');
     expect(await db.listOrders('buyer-1')).toEqual([]);
   });
 
@@ -170,7 +189,7 @@ describe('paying for Pro', () => {
   it('believes nothing that is not signed for this order, this account and this amount', async () => {
     const db = memoryStore();
     const { fields } = await start(db);
-    const other = await startOrder(db, { sub: 'someone-else', email: 'x@example.com' }, { name: 'X', phone: '9876543210' }, ORIGIN);
+    const other = await startOrder(db, { sub: 'someone-else', email: 'x@example.com' }, { name: 'X', phone: '9876543210', period: 'year' }, ORIGIN);
     const tries = [
       outcome(fields, 'failure', { status: 'success' }),
       outcome(fields, 'success', { amount: '1.00' }),

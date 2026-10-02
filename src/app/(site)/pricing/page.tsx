@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon } from '@/components/icons';
 import { Cta } from '@/components/site/blocks';
-import { PRO_PRICE } from '@/lib/plans';
+import { YEAR_PER_MONTH } from '@/lib/plans';
 import { COMPARE, PLAN_CARDS } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -23,7 +23,7 @@ export default function Pricing() {
       <section className="s-top center">
         <div className="s-in">
           <h1>Pricing</h1>
-          <p className="s-lead num">Free, or Pro at ₹{PRO_PRICE.rupeesPerMonth} a month.</p>
+          <p className="s-lead num">Free, or Pro from ₹{YEAR_PER_MONTH} a month.</p>
           <div className="s-plans">
             {PLAN_CARDS.map((p) => (
               <div key={p.name} className={`s-plan ${p.pro ? 'pro' : ''}`}>

@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { devAuth, type User } from '../auth/server';
 import { cleanText } from '../engine/words';
 import { LiveError } from '../live';
-import { PRO_PRICE, PRO_RUPEES, planName } from '../plans';
+import { isPeriod, periodLabel, planName, PRO_OPTIONS } from '../plans';
 import type { Order, Store } from '../store/types';
 import { lookUp, requestHash, signedByPayu, type PayuRequest } from './payu';
 
@@ -27,11 +27,12 @@ export const DEV_GATEWAY = '/api/billing/dev-gateway';
 
 /**
  * PayU when its key and salt are set (its test site unless PAYU_ENV=live). In development with
- * no keys, a stand-in page on this server that signs as PayU does. Otherwise payments are off.
+ * no keys, or with PAYU_ENV=standin, a stand-in page on this server that signs as PayU does.
+ * Otherwise payments are off.
  */
 export function gateway(): Gateway | null {
   const key = process.env.PAYU_KEY, salt = process.env.PAYU_SALT;
-  if (key && salt) {
+  if (key && salt && !(process.env.PAYU_ENV === 'standin' && devAuth())) {
     const live = process.env.PAYU_ENV === 'live';
     return {
       key, salt, dev: false,
@@ -46,8 +47,6 @@ export function gateway(): Gateway | null {
 /** This site's own address, for the links PayU sends the buyer back to. SITE_URL when the server sits behind a proxy. */
 export const siteOrigin = (req: Request) => (process.env.SITE_URL || new URL(req.url).origin).replace(/\/$/, '');
 
-export const PRODUCT =`LearnBox Sessions Pro ${PRO_PRICE.months} months`;
-const AMOUNT = PRO_RUPEES.toFixed(2);
 /** PayU takes a transaction id of up to 25 letters and digits. */
 const newTxn = () => Date.now().toString(36).padStart(9, '0') + randomBytes(8).toString('hex');
 
@@ -55,16 +54,19 @@ const newTxn = () => Date.now().toString(36).padStart(9, '0') + randomBytes(8).t
 export async function accountView(db: Store, sub: string) {
   const account = await db.getAccount(sub);
   const plan = planName(account);
-  return { plan, proUntil: plan === 'pro' ? account!.proUntil : null, payments: !!gateway(), rupees: PRO_RUPEES, months: PRO_PRICE.months };
+  return { plan, proUntil: plan === 'pro' ? account!.proUntil : null, payments: !!gateway() };
 }
 
 /**
- * Writes a pending order and returns the form the browser posts to the payment page. PayU needs
- * the buyer's name and mobile number; the number goes to PayU and is not kept here.
+ * Writes a pending order for the period chosen and returns the form the browser posts to the
+ * payment page. The amount comes from the period, never from the browser. PayU needs the buyer's
+ * name and mobile number; the number goes to PayU and is not kept here.
  */
 export async function startOrder(db: Store, user: User, raw: Record<string, unknown>, origin: string): Promise<{ action: string; fields: Record<string, string> }> {
   const g = gateway();
   if (!g) throw new LiveError(503, 'Payments are not set up');
+  if (!isPeriod(raw.period)) throw new LiveError(400, 'Choose 1 month or 12 months');
+  const option = PRO_OPTIONS[raw.period];
   const firstname = cleanText(typeof raw.name === 'string' ? raw.name : '').replace(/[^A-Za-z .]/g, '').trim().slice(0, 60);
   /* The name is part of what is signed, so it is kept to characters PayU passes through unchanged. */
   if (!firstname) throw new LiveError(400, 'Enter your name in English letters');
@@ -73,10 +75,10 @@ export async function startOrder(db: Store, user: User, raw: Record<string, unkn
   const hour = Date.now() - 3600_000;
   if ((await db.listOrders(user.sub)).filter((o) => Date.parse(o.createdAt) > hour).length >= 10) throw new LiveError(429, 'Too many tries. Wait an hour.');
 
-  const order: Order = { id: newTxn(), sub: user.sub, amount: AMOUNT, days: PRO_PRICE.days, status: 'pending', createdAt: new Date().toISOString() };
+  const order: Order = { id: newTxn(), sub: user.sub, amount: option.rupees.toFixed(2), days: option.days, status: 'pending', createdAt: new Date().toISOString() };
   await db.addOrder(order);
   const back = `${origin}/api/billing/return`;
-  const request: PayuRequest = { key: g.key, txnid: order.id, amount: order.amount, productinfo: PRODUCT, firstname, email: user.email, phone, surl: back, furl: back, udf1: user.sub };
+  const request: PayuRequest = { key: g.key, txnid: order.id, amount: order.amount, productinfo: `LearnBox Sessions Pro ${periodLabel(raw.period)}`, firstname, email: user.email, phone, surl: back, furl: back, udf1: user.sub };
   return { action: g.payUrl, fields: { ...request, hash: requestHash(request, g.salt) } };
 }
 

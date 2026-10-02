@@ -55,9 +55,9 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **Limits**: all fair-use numbers are in `src/lib/limits.ts`.
 - **Plans** (owner's decision, 2026-10-03): Free and Pro.
   - `PLANS` in `limits.ts` holds what differs: Free has 200 people and 10 polls and quizzes in a session; Pro has 1,000 people, 50 polls, quizzes and surveys, surveys, and the CSV and Excel downloads.
-  - `src/lib/plans.ts`: the price (₹49 a month, paid once as ₹588 for 12 months, no renewal) and `planOf`, which every check reads. An account is on Pro until `proUntil`; with nothing stored it is on Free.
+  - `src/lib/plans.ts`: the price in `PRO_OPTIONS` (₹79 for 1 month or ₹588 for 12 months, each paid once, no renewal) and `planOf`, which every check reads. An account is on Pro until `proUntil`; with nothing stored it is on Free.
   - A plan refuses with HTTP 402. When Pro ends, a session keeps what it holds and takes no more; its surveys do not start.
-  - `src/lib/billing/`: PayU's hosted checkout. An order is written, the browser posts a signed form to PayU, and PayU's signed outcome comes back to `/api/billing/return`. With no `PAYU_KEY`, development uses a stand-in payment page (`/api/billing/dev-gateway`) and production has payments off.
+  - `src/lib/billing/`: PayU's hosted checkout. An order is written, the browser posts a signed form to PayU, and PayU's signed outcome comes back to `/api/billing/return`. With no `PAYU_KEY`, or with `PAYU_ENV=standin`, development uses a stand-in payment page (`/api/billing/dev-gateway`) and production has payments off.
 
 ## Rules
 - **Ask the owner before creating anything outside this machine**: every AWS resource, the GitHub repo and any deploy. AWS account `281627750083`, profile `personal`, region `ap-south-1`.

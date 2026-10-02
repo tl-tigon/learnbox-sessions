@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/icons';
 import { authed, changePassword, DEV_AUTH, removeSignIn } from '@/lib/auth/client';
 import { useSignedIn } from '@/components/use-signed-in';
-import { FREE_HOLDS, PRO_ADDS, PRO_PRICE, PRO_RUPEES } from '@/lib/plans';
+import { FREE_HOLDS, periodLabel, PRO_ADDS, PRO_OPTIONS, YEAR_PER_MONTH, type ProPeriod } from '@/lib/plans';
 
 const PASSWORD_RULE = /^(?=.*\d).{8,}$/;
 
 interface PlanInfo { plan: 'free' | 'pro'; proUntil: number | null; payments: boolean }
-const PRICE = `₹${PRO_RUPEES} for ${PRO_PRICE.months} months`;
+const PERIODS: ProPeriod[] = ['year', 'month'];
 /* What the payment page sent the browser back with. */
 const OUTCOME: Record<string, { ok: boolean; text: string }> = {
   paid: { ok: true, text: 'Payment received' },
@@ -30,6 +30,7 @@ export default function Account() {
   const [info, setInfo] = useState<PlanInfo | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [period, setPeriod] = useState<ProPeriod>('year');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [paying, setPaying] = useState(false);
@@ -75,7 +76,7 @@ export default function Account() {
     setPaying(true);
     setPayErr(null);
     try {
-      const r = await authed('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ name, phone }) });
+      const r = await authed('/api/billing/checkout', { method: 'POST', body: JSON.stringify({ name, phone, period }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error ?? 'Not started');
       const form = Object.assign(document.createElement('form'), { method: 'post', action: j.action });
@@ -125,21 +126,28 @@ export default function Account() {
           : <p className="muted num">{FREE_HOLDS}</p>)}
         {info && !pro && (
           <>
-            <h3 className="num">Pro · {PRICE}</h3>
+            <h3>Pro</h3>
             <ul className="ticks num">{PRO_ADDS.map((line) => <li key={line}><Icon name="check" />{line}</li>)}</ul>
           </>
         )}
         {info && !info.payments && <p className="muted">Payments are not set up</p>}
-        {info?.payments && pro && !adding && <div className="row"><button className="num" onClick={() => setAdding(true)}>Add {PRO_PRICE.months} months · ₹{PRO_RUPEES}</button></div>}
+        {info?.payments && pro && !adding && <div className="row"><button onClick={() => setAdding(true)}>Add time</button></div>}
         {info?.payments && (!pro || adding) && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void pay(); }}>
+            <div className="chips num" role="group" aria-label="Period">
+              {PERIODS.map((k) => (
+                <button key={k} type="button" aria-pressed={period === k} disabled={paying} onClick={() => setPeriod(k)}>
+                  {periodLabel(k)} · ₹{PRO_OPTIONS[k].rupees}{k === 'year' && <span className="count"> (₹{YEAR_PER_MONTH} a month)</span>}
+                </button>
+              ))}
+            </div>
             <label>Name<input value={name} maxLength={60} autoComplete="name" disabled={paying} onChange={(e) => setName(e.target.value)} /></label>
             <label>Mobile number<input type="tel" inputMode="tel" value={phone} maxLength={20} autoComplete="tel" disabled={paying} onChange={(e) => setPhone(e.target.value)} /></label>
             <div className="row">
-              <button type="submit" className="primary tall num" disabled={paying || !name.trim() || !phone.trim()}>Pay ₹{PRO_RUPEES}</button>
+              <button type="submit" className="primary tall num" disabled={paying || !name.trim() || !phone.trim()}>Pay ₹{PRO_OPTIONS[period].rupees}</button>
               {payErr && <span className="error" role="alert">{payErr}</span>}
             </div>
-            <p className="muted small num">Paid once on PayU for {PRO_PRICE.months} months. It does not renew.</p>
+            <p className="muted small num">Paid once on PayU for {periodLabel(period)}. It does not renew.</p>
           </form>
         )}
       </section>

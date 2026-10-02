@@ -5,7 +5,7 @@
  */
 import type { IconName } from '@/components/icons';
 import { LIMITS, PLANS } from './limits';
-import { PRO_PRICE, PRO_RUPEES } from './plans';
+import { PRO_OPTIONS, YEAR_PER_MONTH } from './plans';
 
 /** A drawing of the product's screens (`src/components/site/mock.tsx`). */
 export type VisualName =
@@ -294,7 +294,7 @@ export const PLAN_CARDS: PlanCard[] = [
     action: 'Create free account', href: '/sign-in?mode=up',
   },
   {
-    name: 'Pro', price: `₹${PRO_PRICE.rupeesPerMonth}`, per: 'a month', note: `₹${PRO_RUPEES} paid once for ${PRO_PRICE.months} months. It does not renew.`,
+    name: 'Pro', price: `₹${YEAR_PER_MONTH}`, per: 'a month', note: `Paid as ₹${PRO_OPTIONS.year.rupees} for ${PRO_OPTIONS.year.months} months, or ₹${PRO_OPTIONS.month.rupees} for 1 month. It does not renew.`,
     intro: 'Everything in Free, and',
     lines: [
       `Up to ${n(PLANS.pro.peoplePerSession)} people in a session`,

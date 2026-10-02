@@ -10,7 +10,7 @@ export interface Person { token: string; nickname: string; joinedAt: string }
 export interface Account { proUntil: number }
 /**
  * One payment for Pro. `id` is the transaction id sent to the payment gateway, `amount` is in
- * rupees as the gateway takes it ("588.00"), `days` is how long it buys and `ref` is the
+ * rupees as the gateway takes it ("79.00"), `days` is how long it buys and `ref` is the
  * gateway's own id for the payment.
  */
 export interface Order { id: string; sub: string; amount: string; days: number; status: 'pending' | 'paid' | 'failed'; createdAt: string; paidAt?: string; ref?: string }

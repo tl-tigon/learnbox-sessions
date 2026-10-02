@@ -127,25 +127,28 @@ const FIRST = { timeout: 120000 };
     await p.waitForSelector('#plan .pill-pro:has-text("Free")', FIRST);
     check('Free: Survey is marked Pro on the types to add, and opens the account page', true);
     await p.screenshot({ path: path.join(OUT, '01c-account-free.png') });
-    const payWith = async (button) => {
+    const payWith = async (button, period, rupees) => {
       await p.fill('#plan label:has-text("Name") input', 'Walk Tester');
       await p.fill('#plan label:has-text("Mobile number") input', '98765 43210');
-      await p.click('#plan button:has-text("Pay ₹588")');
+      await p.click(`#plan .chips button:has-text("${period}")`);
+      await p.click(`#plan button:has-text("Pay ₹${rupees}")`);
       await p.waitForSelector('h1:has-text("Development payment page")', FIRST);
+      const asked = await p.textContent('main');
+      if (!asked.includes(`₹${rupees}.00`) || !asked.includes(`Pro ${period}`)) throw new Error(`the payment page asked for: ${asked}`);
       const posted = await p.$$eval(`form:has(button:text-is("${button}")) input`, (els) => Object.fromEntries(els.map((e) => [e.name, e.value])));
       await p.click(`button:text-is("${button}")`);
       await p.waitForURL(/\/app\/account$/, FIRST);
       return posted;
     };
-    await payWith('Fail');
+    await payWith('Fail', '1 month', 79);
     await p.waitForSelector('#plan [role="alert"]:has-text("Payment not completed")', WAIT);
-    check('a payment that fails leaves the account on Free', (await planNow()) === 'free');
-    const paid = await payWith('Pay');
+    check('a payment for 1 month at ₹79 that fails leaves the account on Free', (await planNow()) === 'free');
+    const paid = await payWith('Pay', '12 months', 588);
     await p.waitForSelector('#plan [role="status"]:has-text("Payment received")', WAIT);
     await p.waitForSelector('#plan:has-text("Pro until")', WAIT);
     const account = (await api('GET', '/api/account')).body;
     const days = Math.round((account.proUntil * 1000 - Date.now()) / 86400000);
-    check('a payment that succeeds puts the account on Pro for 365 days', account.plan === 'pro' && days === 365, `${account.plan} ${days}`);
+    check('a payment for 12 months at ₹588 that succeeds puts the account on Pro for 365 days', account.plan === 'pro' && days === 365, `${account.plan} ${days}`);
     await p.screenshot({ path: path.join(OUT, '01d-account-pro.png') });
     /* The same signed outcome posted a second time, as a reload of the return would. */
     const paidAgain = await p.evaluate(async (fields) => (await fetch('/api/billing/return', { method: 'POST', body: new URLSearchParams(fields) })).url, paid);

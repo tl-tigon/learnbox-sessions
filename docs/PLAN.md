@@ -8,7 +8,7 @@
 LearnBox Sessions is a product anyone can sign up for, free, with a paid Pro plan for larger sessions (2026-10-03). Facilitators use it with any audience, in a room or on a call.
 
 **Facilitators**
-- Sign up with email (confirmed by a code) or with Google. Every account starts on Free. Pro is ₹49 a month, paid once as ₹588 for 12 months through PayU, and adds 1,000 people, 50 polls, surveys and downloads.
+- Sign up with email (confirmed by a code) or with Google. Every account starts on Free. Pro is ₹79 for 1 month or ₹588 for 12 months, each paid once through PayU, and adds 1,000 people, 50 polls, surveys and downloads.
 - Make a session. Its 6-digit code works for up to 7 days.
 - Add polls, quizzes and surveys to it, before or during the session.
 - Run it from the session screen (laptop or phone): start one poll at a time, lock voting, show or hide results, and moderate the Q&A beside it.

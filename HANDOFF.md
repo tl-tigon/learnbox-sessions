@@ -25,13 +25,13 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Free: 200 people and 10 polls and quizzes in a session; no surveys; no CSV or Excel download. Pro: 1,000 people; 50 polls, quizzes and surveys; surveys; downloads. Everything else is the same on both.
   - The server refuses what a plan does not hold (HTTP 402): saving an 11th poll or a survey, starting a survey, a download, the 201st person, copying a session that needs Pro.
   - On Free the facilitator sees: "Polls 3 / 10"; Survey marked Pro on the types to add (it opens the account page); "Get Pro" in place of Add when the session is full; "Downloads are on Pro" on the results page; "Full · Get Pro" beside the people count at 200.
-  - Pro costs ₹49 a month, paid once as ₹588 for 12 months. It does not renew; a second payment adds 12 months to the end of the first.
+  - Pro costs ₹79 for 1 month (30 days) or ₹588 for 12 months (₹49 a month). Each is paid once and does not renew; a second payment adds its time to the end of the first. The amount is set on the server from the period chosen.
   - Paying: the account page asks for a name and a mobile number (PayU requires both; the number is not stored), then posts to PayU's payment page. PayU sends the browser back with a signed outcome. On each load of the account page the server also asks PayU about payments whose outcome never came back.
   - When Pro ends the account is on Free again. Its sessions keep what they hold and can be edited; they take no more polls, their surveys do not start, and they cannot be copied.
   - **Run against PayU's test site** (2026-10-03) with PayU's public test key (`gtKFFx`) and test card, in three cases: a payment that succeeds (PayU's signed outcome came back and the account became Pro), one that fails (the account stayed on Free), and one that succeeds while the browser never comes back (the next load of the account page asked PayU and gave Pro). That run found one fault, now fixed and tested: when PayU adds charges for the buyer, its lookup gives the total as `amt` and the order's amount as `transaction_amount`.
     - PayU's own payment page for that public test merchant does not load (PayU's storage answers "Access Denied"), so the test card was sent with the request and PayU went straight to its test bank. The page a buyer picks a payment method on has therefore not been seen from this product.
     - **Not yet run with the owner's own keys.** The keys the owner put in `.env.local` are Live keys; PayU's test site refuses them. With them set and `PAYU_ENV` not `live`, Pay opens PayU's error page.
-    - The browser walk pays on the stand-in page, which is used only when no PayU key is set: run it with `PAYU_KEY` and `PAYU_SALT` commented out, or start the server with both set to nothing.
+    - The browser walk pays on the stand-in page, which is used only when no PayU key is set: start the dev server for it with `PAYU_ENV=standin npm run dev`.
 - **Q&A, open for the whole session**
   - The audience asks from a sheet (with a name; left empty, the question is anonymous if that is allowed) and upvotes, one vote per person.
   - A person can withdraw their own question while it is live or waiting for review.
@@ -84,7 +84,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 ## Decisions by the owner
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
-- **2026-10-03**: two plans, Free and Pro. Free is generous (200 people, 10 polls and quizzes); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹49 a month. Payments go through the owner's PayU (India) account.
+- **2026-10-03**: two plans, Free and Pro. Free is generous (200 people, 10 polls and quizzes); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹79 for 1 month or ₹588 for 12 months (owner, 2026-10-03). Payments go through the owner's PayU (India) account.
 - **2026-10-03**: PayU may add its convenience fee for the buyer on top of ₹588. The PayU account's website moves from `tigon.one` to `sessions.learnbox.one`.
 - **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
 - **2026-10-02**: switch to Slido's event model, and model the interface on Slido's.
@@ -124,7 +124,7 @@ These are in `src/lib/limits.ts`.
    - a convenience fee added by PayU for the buyer is accepted (owner, 2026-10-03). If the first live payment shows one, the account page and the Pricing page must say so beside ₹588;
    - whether the account takes international cards (the price is in rupees only);
    - whether ₹588 includes GST, and who issues the invoice. Nothing here makes an invoice;
-   - how the price is charged: built as one payment of ₹588 for 12 months with no renewal (Slido's annual plan works the same way). A ₹49 one-month option is a small change; a card charged every month needs PayU's subscriptions product and is not built;
+   - a card charged by itself every month needs PayU's subscriptions product and a bank mandate from the buyer; it is not built. Both periods are single payments;
    - a refund is made by hand in the PayU dashboard; Pro stays on the account until its date unless the row is changed.
 5. **The site's copy**: the draft is in `src/lib/site.ts` and the pages in `src/app/(site)/`. Also for the owner: whether the Pricing page should promise the limits it lists; the line "Zoom, Teams, Meet, Webex: share the big screen's browser tab"; the use cases chosen (training, team meetings, all-hands, events, classrooms).
    - Left out until real ones exist: customer quotes, customer logos, awards.
