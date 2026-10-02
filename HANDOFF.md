@@ -85,6 +85,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
 - **2026-10-03**: two plans, Free and Pro. Free is generous (200 people, 10 polls and quizzes); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹49 a month. Payments go through the owner's PayU (India) account.
+- **2026-10-03**: PayU may add its convenience fee for the buyer on top of ₹588. The PayU account's website moves from `tigon.one` to `sessions.learnbox.one`.
 - **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
 - **2026-10-02**: switch to Slido's event model, and model the interface on Slido's.
   - The interface is built here in code from `design/slido-study/STUDY.md`. This replaces the earlier rule that a Claude Design handoff was the visual authority.
@@ -118,9 +119,9 @@ These are in `src/lib/limits.ts`.
 2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
 3. **OK to create a private GitHub repo** under `tl-tigon`.
 4. **PayU**, to switch payments on:
-   - the owner's PayU account is approved for `www.tigon.one` (seen 2026-10-03). Payments for LearnBox Sessions come from `sessions.learnbox.one`: ask PayU whether that site can be added to the account or needs its own. PayU checks a site for contact, terms, privacy and refund pages, which this site does not have yet. Do not change the account's website while `tigon.one` takes payments through it;
+   - the owner's PayU account is approved for `www.tigon.one` (seen 2026-10-03), which takes no payments, so its website can be changed to `sessions.learnbox.one` (owner, 2026-10-03). Change it once that site is live with the pages PayU checks for: contact, terms, privacy and refunds. Those pages need the company's legal name, a contact address and the refund rule;
    - the keys in `.env.local` are the Live ones. Either test keys from the dashboard's Test Mode (if the account still has it), or the owner's go-ahead for `PAYU_ENV=live` and one real payment of ₹588, refunded afterwards from the dashboard;
-   - whether PayU adds a convenience fee for the buyer on this account (its test merchant added ₹36.24 to ₹588);
+   - a convenience fee added by PayU for the buyer is accepted (owner, 2026-10-03). If the first live payment shows one, the account page and the Pricing page must say so beside ₹588;
    - whether the account takes international cards (the price is in rupees only);
    - whether ₹588 includes GST, and who issues the invoice. Nothing here makes an invoice;
    - how the price is charged: built as one payment of ₹588 for 12 months with no renewal (Slido's annual plan works the same way). A ₹49 one-month option is a small change; a card charged every month needs PayU's subscriptions product and is not built;
