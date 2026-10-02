@@ -129,7 +129,8 @@ export type ControlAction =
   | { action: 'quiz-next' }
   | { action: 'quiz-reveal' }
   | { action: 'quiz-board'; on: boolean }
-  | { action: 'touch' };
+  | { action: 'touch' }
+  | { action: 'forget-quiz'; id: string };
 
 export const CONTROL_ACTIONS = ['activate', 'results', 'lock', 'qa-open', 'announce', 'quiz-next', 'quiz-reveal', 'quiz-board'];
 
@@ -184,6 +185,8 @@ export function applyControl(s: Session, a: ControlAction, now = Date.now()): Se
       const played = a.on && isLastQuestion(quiz, q) && !st.played?.includes(quiz.id) ? [...(st.played ?? []), quiz.id] : st.played;
       return next({ quiz: { ...q, board: !!a.on }, played });
     }
+    /* After a reset: the quiz counts as never played, so it can be played again. */
+    case 'forget-quiz': return next({ played: st.played?.filter((id) => id !== a.id), quiz: st.quiz?.quizId === a.id ? null : st.quiz });
     case 'touch': {
       /* After an edit: nothing in the state may point at an interaction that is no longer there. */
       const quizIds = new Set(s.interactions.filter((i) => i.type === 'quiz').map((i) => i.id));
@@ -234,6 +237,23 @@ export async function control(db: Store, s: Session, a: ControlAction): Promise<
     cur = fresh;
   }
   throw new LiveError(409, 'Try again');
+}
+
+/**
+ * Deletes the answers of one poll, quiz or survey, so it can be run again from nothing. It must
+ * be stopped first: nothing can arrive while its answers are being deleted. A quiz also loses
+ * its scores and can be played again.
+ */
+export async function resetInteraction(db: Store, s: Session, id: unknown): Promise<Session> {
+  if (isClosed(s)) throw new LiveError(409, 'This session has ended');
+  const i = s.interactions.find((x) => x.id === id);
+  if (!i) throw new LiveError(404, 'Not found');
+  if (s.state.active === i.id) throw new LiveError(409, 'Stop it first');
+  const pollIds = i.type === 'quiz' ? i.questions.map((q) => q.id) : i.type === 'survey' ? i.polls.map((p) => p.id) : [i.id];
+  const after = i.type === 'quiz' ? await control(db, s, { action: 'forget-quiz', id: i.id }) : s;
+  await db.clearAnswers(s.id, pollIds);
+  if (i.type === 'quiz') await db.clearScores(s.id, i.id);
+  return after;
 }
 
 export async function endSession(db: Store, s: Session): Promise<void> {

@@ -146,6 +146,16 @@ export function memoryStore(db: Db = freshDb()): Store {
       return Object.fromEntries([...talliesOf(sessionId)].map(([id, t]) => [id, clone(t)]));
     },
 
+    async clearAnswers(sessionId, pollIds) {
+      const all = answersOf(sessionId);
+      for (const [k, a] of all) if (pollIds.includes(a.pollId)) all.delete(k);
+      for (const id of pollIds) talliesOf(sessionId).delete(id);
+    },
+    async clearScores(sessionId, quizId) {
+      const all = scoresOf(sessionId);
+      for (const k of [...all.keys()]) if (k.startsWith(`${quizId}#`)) all.delete(k);
+    },
+
     async addQuestion(sessionId, q) {
       questionsOf(sessionId).set(q.id, clone(q));
     },

@@ -228,6 +228,13 @@ function Host({ id }: { id: string }) {
       if (selected === target.id) setView('qa');
     },
   });
+  const reset = (target: Interaction) => setConfirm({
+    title: `Reset "${nameOf(target)}"`,
+    text: target.type === 'quiz' ? 'Its answers and scores are deleted. It can be played again.' : 'Its answers are deleted.',
+    action: 'Reset results',
+    danger: true,
+    run: () => void act({ action: 'reset', id: target.id }),
+  });
   const reorder = (index: number, by: number) => edit((d) => {
     const next = [...d.interactions];
     [next[index], next[index + by]] = [next[index + by], next[index]];
@@ -362,6 +369,7 @@ function Host({ id }: { id: string }) {
                         <button disabled={index === 0} onClick={() => reorder(index, -1)}><Icon name="up" />Move up</button>
                         <button disabled={index === draft.interactions.length - 1} onClick={() => reorder(index, 1)}><Icon name="down" />Move down</button>
                         {room && <button onClick={() => duplicate(i)}><Icon name="copy" />Duplicate</button>}
+                        <button disabled={active || (answeredOf(i) === 0 && !(i.type === 'quiz' && v.state.played?.includes(i.id)))} onClick={() => reset(i)}><Icon name="restore" />Reset results</button>
                         <button className="danger" onClick={() => remove(i)}><Icon name="trash" />Delete</button>
                       </Menu>
                     </div>

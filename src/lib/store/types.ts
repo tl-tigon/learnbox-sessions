@@ -80,6 +80,11 @@ export interface Store {
   /** Ids of the questions this person has upvoted in the session. */
   myUpvotes(sessionId: string, token: string): Promise<string[]>;
 
+  /** Deletes every answer to these polls or quiz questions, and their counts. */
+  clearAnswers(sessionId: string, pollIds: string[]): Promise<void>;
+  /** Deletes every player's score in the quiz. */
+  clearScores(sessionId: string, quizId: string): Promise<void>;
+
   /** Adds a quiz answer's points to the player's total in that quiz and returns their score. */
   addScore(sessionId: string, quizId: string, token: string, nickname: string, questionId: string, points: number): Promise<Score>;
   /** Every player who has answered a question of the quiz. */

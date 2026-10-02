@@ -60,6 +60,23 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     return opts.limit ? out.slice(0, opts.limit) : out;
   }
 
+  /** Deletes rows by key, 25 to a batch, a few batches at a time, trying again what the table did not take. */
+  async function deleteKeys(keys: { PK: string; SK: string }[]) {
+    const batches = [];
+    for (let i = 0; i < keys.length; i += 25) batches.push(keys.slice(i, i + 25));
+    for (let i = 0; i < batches.length; i += 8) {
+      await Promise.all(batches.slice(i, i + 8).map(async (batch) => {
+        let pending = batch.map((k) => ({ DeleteRequest: { Key: { PK: k.PK, SK: k.SK } } }));
+        for (let attempt = 0; pending.length && attempt < 6; attempt++) {
+          const r = await ddb.send(new BatchWriteCommand({ RequestItems: { [table]: pending } }));
+          pending = r.UnprocessedItems?.[table] ?? [];
+          if (pending.length) await new Promise((done) => setTimeout(done, 100 * 2 ** attempt));
+        }
+        if (pending.length) throw new Error('Could not delete every row');
+      }));
+    }
+  }
+
   /** When a row written now is deleted by the table's TTL. */
   const expiry = () => Math.floor(Date.now() / 1000) + LIMITS.keepDays * 86400;
 
@@ -236,20 +253,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
           ProjectionExpression: 'PK, SK',
           ExclusiveStartKey: start,
         }));
-        const keys = page.Items ?? [];
-        const batches = [];
-        for (let i = 0; i < keys.length; i += 25) batches.push(keys.slice(i, i + 25));
-        for (let i = 0; i < batches.length; i += 8) {
-          await Promise.all(batches.slice(i, i + 8).map(async (batch) => {
-            let pending = batch.map((k) => ({ DeleteRequest: { Key: { PK: k.PK, SK: k.SK } } }));
-            for (let attempt = 0; pending.length && attempt < 6; attempt++) {
-              const r = await ddb.send(new BatchWriteCommand({ RequestItems: { [table]: pending } }));
-              pending = r.UnprocessedItems?.[table] ?? [];
-              if (pending.length) await new Promise((done) => setTimeout(done, 100 * 2 ** attempt));
-            }
-            if (pending.length) throw new Error('Could not delete every row of the session');
-          }));
-        }
+        await deleteKeys(page.Items ?? []);
         start = page.LastEvaluatedKey;
       } while (start);
       await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${s.ownerSub}`, SK: `SESS#${s.id}` } }));
@@ -385,6 +389,16 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     async listTallies(sessionId) {
       const rows = await queryAll(`SESS#${sessionId}`, 'TALLY#');
       return Object.fromEntries(rows.map((r) => [String(r.SK).slice('TALLY#'.length), tallyFrom(r)]));
+    },
+
+    async clearAnswers(sessionId, pollIds) {
+      for (const pollId of pollIds) {
+        await deleteKeys(await queryAll(`SESS#${sessionId}`, `ANS#${pollId}#`));
+        await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: `SESS#${sessionId}`, SK: `TALLY#${pollId}` } }));
+      }
+    },
+    async clearScores(sessionId, quizId) {
+      await deleteKeys(await queryAll(`SESS#${sessionId}`, `SCORE#${quizId}#`));
     },
 
     async addQuestion(sessionId, q) {

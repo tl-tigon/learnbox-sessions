@@ -2,7 +2,7 @@
    a facilitator makes a session and builds polls and a quiz in the editor; a projector opens the
    big screen with the display key; five phones join by code. Then Q&A (ask, upvote, review, reply,
    highlight, announcement, closing), each poll type (with a changed vote, locked voting and hidden
-   results), a survey, a quiz to its final leaderboard, the results downloads, the ways around the
+   results), a survey, a quiz to its final leaderboard, the results downloads, resetting a poll, the ways around the
    rules that must be refused, a duplicate, ending, and deleting the account. The account starts on
    Free: what Free refuses is tried, then Pro is paid for on the development payment page.
    Run with the dev server up: node scripts/walk.js */
@@ -501,6 +501,25 @@ const FIRST = { timeout: 120000 };
     const copy = await api('POST', '/api/sessions', { from: sessionId });
     const copied = (await api('GET', `/api/sessions/${copy.body.session.id}`)).body;
     check('a duplicate has the same polls, a new code and no answers', copy.status === 201 && copied.interactions.length === 7 && copied.code !== code && Object.keys(copied.answered).length === 0 && copied.questions.length === 0);
+    // ---- Reset results: a vote in the copy, cleared from the poll's menu
+    const copyId = copy.body.session.id;
+    const [copyPoll] = copied.interactions;
+    await phoneApi(phones[1], 'POST', `/api/live/${copyId}`, {});
+    await api('PATCH', `/api/sessions/${copyId}`, { action: 'activate', id: copyPoll.id });
+    const copyVote = await phoneApi(phones[1], 'POST', `/api/live/${copyId}/answer`, { pollId: copyPoll.id, answer: { optionIds: [copyPoll.options[0].id] } });
+    const whileRunning = await api('PATCH', `/api/sessions/${copyId}`, { action: 'reset', id: copyPoll.id });
+    await api('PATCH', `/api/sessions/${copyId}`, { action: 'activate', id: null });
+    const notMineReset = await api('PATCH', `/api/sessions/${copyId}`, { action: 'reset', id: copyPoll.id }, other);
+    await p.goto(`${BASE}/app/sessions/${copyId}`, FIRST);
+    await p.waitForSelector('.icard:has-text("Where should we go?"):has-text("1 answered")', FIRST);
+    await p.click('button[aria-label="More for Where should we go?"]');
+    await p.click('[role="menu"] button:has-text("Reset results")');
+    await p.click('[role="alertdialog"] button:has-text("Reset results")');
+    await p.waitForSelector('.icard:has-text("Where should we go?"):has-text("0 answered")', WAIT);
+    const cleared = (await api('GET', `/api/sessions/${copyId}`)).body.answered[copyPoll.id] ?? 0;
+    check('Reset results clears a stopped poll\'s answers; it is refused while the poll runs, and for another account',
+      copyVote.status === 200 && whileRunning.status === 409 && notMineReset.status === 404 && cleared === 0, `${copyVote.status},${whileRunning.status},${notMineReset.status},${cleared}`);
+
     await p.goto(`${BASE}/app/sessions/${sessionId}`);
     await p.waitForSelector('input[aria-label="Session name"]', WAIT);
     await p.click('button[aria-label="More"]');

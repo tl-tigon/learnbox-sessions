@@ -1,6 +1,6 @@
 import { store } from '@/lib/store';
 import { fail, json, readJson } from '@/lib/http';
-import { control, CONTROL_ACTIONS, editSession, endSession, hostView, LiveError, wallView, type ControlAction } from '@/lib/live';
+import { control, CONTROL_ACTIONS, editSession, endSession, hostView, LiveError, resetInteraction, wallView, type ControlAction } from '@/lib/live';
 import { ownedSession } from '@/lib/owner';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -34,7 +34,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 }
 
-/** A control: start or stop an interaction, show results, lock voting, open Q&A, announce, quiz steps, end. */
+/** A control: start or stop an interaction, show results, lock voting, open Q&A, announce, quiz steps, reset an interaction's results, end. */
 export async function PATCH(req: Request, ctx: Ctx) {
   const s = await ownedSession(req, (await ctx.params).id);
   if (s instanceof Response) return s;
@@ -44,6 +44,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       if (s.status === 'live') await endSession(store(), s);
       return json({ ok: true });
     }
+    if (body.action === 'reset') return json({ state: (await resetInteraction(store(), s, body.id)).state });
     if (!CONTROL_ACTIONS.includes(String(body.action))) return fail(400, 'Unknown action');
     const next = await control(store(), s, body as unknown as ControlAction);
     return json({ state: next.state });
