@@ -1,7 +1,7 @@
 import { store } from '@/lib/store';
 import { clientIp, fail, json, limited } from '@/lib/http';
 import { isCode } from '@/lib/ids';
-import { isClosed, needsName } from '@/lib/live';
+import { isClosed } from '@/lib/live';
 
 type Ctx = { params: Promise<{ code: string }> };
 
@@ -15,5 +15,5 @@ export async function GET(req: Request, ctx: Ctx) {
   const id = await db.sessionIdForCode(code);
   const s = id ? await db.getSession(id) : null;
   if (!s || isClosed(s)) return fail(404, 'No session with that code');
-  return json({ id: s.id, title: s.title, mode: s.mode, needsName: needsName(s) });
+  return json({ id: s.id, title: s.title });
 }

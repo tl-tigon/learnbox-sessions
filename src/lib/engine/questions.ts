@@ -4,30 +4,36 @@
  */
 import { LIMITS } from '../limits';
 import { cleanText, isProfane } from './words';
-import type { QaSlide, Question, QuestionStatus } from '../types';
+import type { QaSettings, Question, QuestionStatus, Reply } from '../types';
 
 /** A question without the asker's token. `name` is empty when it was asked anonymously. */
-export interface PublicQuestion { id: string; text: string; name: string; votes: number; status: QuestionStatus; at: string }
+export interface PublicQuestion { id: string; text: string; name: string; votes: number; status: QuestionStatus; at: string; replies: Reply[] }
 
-export const publicQuestion = (q: Question): PublicQuestion => ({ id: q.id, text: q.text, name: q.name, votes: q.votes, status: q.status, at: q.at });
+export const publicQuestion = (q: Question): PublicQuestion => ({ id: q.id, text: q.text, name: q.name, votes: q.votes, status: q.status, at: q.at, replies: q.replies ?? [] });
 
 /** Statuses the whole audience sees. */
 export const isShown = (status: QuestionStatus) => status === 'live' || status === 'answered';
 
 export type CheckedQuestion = { ok: true; text: string; name: string } | { ok: false; error: string };
 
-/** `nickname` is the name the person joined with, used when they send none with the question. */
-export function checkQuestion(slide: QaSlide, raw: unknown, nickname: string): CheckedQuestion {
+/** `nickname` is the name the person already gave, used when they send none with the question. */
+export function checkQuestion(settings: QaSettings, raw: unknown, nickname: string): CheckedQuestion {
   const r = (raw ?? {}) as Record<string, unknown>;
   const text = cleanText(typeof r.text === 'string' ? r.text : '');
   if (!text) return { ok: false, error: 'Type a question' };
   if (text.length > LIMITS.questionChars) return { ok: false, error: `Up to ${LIMITS.questionChars} characters` };
   if (isProfane(text)) return { ok: false, error: 'That question has a blocked word' };
-  if (slide.anonymous && r.anonymous === true) return { ok: true, text, name: '' };
+  if (settings.anonymous && r.anonymous === true) return { ok: true, text, name: '' };
   const name = cleanText(typeof r.nickname === 'string' ? r.nickname : '').slice(0, LIMITS.nicknameChars) || nickname;
   if (!name) return { ok: false, error: 'Add your name' };
   if (isProfane(name)) return { ok: false, error: 'Choose another name' };
   return { ok: true, text, name };
+}
+
+/** The facilitator's reply, tidied. Null when there is nothing to send. */
+export function checkReply(raw: unknown): string | null {
+  const text = cleanText(typeof raw === 'string' ? raw : '').slice(0, LIMITS.replyChars);
+  return text || null;
 }
 
 export type QuestionOrder = 'top' | 'recent';

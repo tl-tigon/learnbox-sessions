@@ -1,21 +1,29 @@
 /**
- * Quiz rules that need no storage: where a question is in its run, the points an answer earns,
- * and how scores become a leaderboard. Every time here is the server's clock.
+ * Quiz rules that need no storage: where a quiz is in its run, the points an answer earns, and
+ * how scores become a leaderboard. Every time here is the server's clock.
  */
 import { LIMITS } from '../limits';
-import type { QuizSlide, QuizState, Score, SessionState, Slide } from '../types';
+import type { Quiz, QuizQuestion, QuizState, Score, SessionState } from '../types';
 
 /**
- * ready: on the slide, not started. open: taking answers. closed: time is up, not yet revealed.
- * revealed: the correct answer and the points are shown.
+ * lobby: players give their names. open: the question takes answers. closed: time is up, and how
+ * people voted is shown. revealed: the correct answer and each player's points are shown.
+ * board: the leaderboard is up.
  */
-export type QuizPhase = 'ready' | 'open' | 'closed' | 'revealed';
+export type QuizPhase = 'lobby' | 'open' | 'closed' | 'revealed' | 'board';
 
-export function quizPhase(state: Pick<SessionState, 'quiz'>, slideId: string, now: number): QuizPhase {
-  const q = state.quiz;
-  if (!q || q.slideId !== slideId) return 'ready';
+export function quizPhase(q: QuizState, now: number): QuizPhase {
+  if (q.board) return 'board';
+  if (q.index < 0) return 'lobby';
   if (q.revealed) return 'revealed';
   return now < q.closesAt ? 'open' : 'closed';
+}
+
+/** The quiz in play and its current question, when the session state points at this quiz. */
+export function quizInPlay(state: Pick<SessionState, 'quiz' | 'active'>, quiz: Quiz): { q: QuizState; question: QuizQuestion | null } | null {
+  const q = state.quiz;
+  if (!q || q.quizId !== quiz.id || state.active !== quiz.id) return null;
+  return { q, question: quiz.questions[q.index] ?? null };
 }
 
 /** A correct answer earns half the points for being right and up to half more for being fast. */
@@ -26,22 +34,30 @@ export function quizPoints(correct: boolean, elapsedMs: number, seconds: number)
   return Math.round(half + half * (1 - used));
 }
 
-/** The state of a question as it opens, and as it is revealed. */
-export const openQuiz = (slide: QuizSlide, now: number): QuizState => ({ slideId: slide.id, openedAt: now, closesAt: now + slide.seconds * 1000, revealed: false });
-export const revealQuiz = (slide: QuizSlide, q: QuizState, now: number): QuizState => ({ ...q, closesAt: Math.min(q.closesAt, now), revealed: true, correct: slide.correctId });
-/** A question that has already been played is shown revealed when the presenter comes back to it. */
-export const playedQuiz = (slide: QuizSlide): QuizState => ({ slideId: slide.id, openedAt: 0, closesAt: 0, revealed: true, correct: slide.correctId });
+export const lobby = (quiz: Quiz): QuizState => ({ quizId: quiz.id, index: -1, openedAt: 0, closesAt: 0, revealed: false, board: false });
+export const openQuestion = (quiz: Quiz, index: number, now: number): QuizState => ({
+  quizId: quiz.id, index, openedAt: now, closesAt: now + quiz.questions[index].seconds * 1000, revealed: false, board: false,
+});
+/** Revealing also ends the countdown. */
+export const reveal = (quiz: Quiz, q: QuizState, now: number): QuizState => ({ ...q, closesAt: Math.min(q.closesAt, now), revealed: true, correct: quiz.questions[q.index].correctId });
+/** A quiz that has been played to the end, as it is shown when the facilitator opens it again. */
+export const finished = (quiz: Quiz): QuizState => {
+  const index = quiz.questions.length - 1;
+  return { quizId: quiz.id, index, openedAt: 0, closesAt: 0, revealed: true, correct: quiz.questions[index]?.correctId, board: true };
+};
+
+export const isLastQuestion = (quiz: Quiz, q: QuizState) => q.index >= quiz.questions.length - 1;
 
 export interface BoardEntry { nickname: string; total: number; last: number; rank: number; prevRank: number }
 
 /**
  * Scores as a leaderboard, best first. Equal totals share a rank. `prevRank` is the rank before
- * the question `latestSlideId`, so a screen can show who rose and who fell. After the first
- * question nobody had a rank before, so `prevRank` equals `rank`.
+ * the question `latestId`, so a screen can show who rose and who fell. After the first question
+ * nobody had a rank before, so `prevRank` equals `rank`.
  */
-export function rankBoard(scores: Score[], latestSlideId: string | null): (BoardEntry & { token: string })[] {
+export function rankBoard(scores: Score[], latestId: string | null): (BoardEntry & { token: string })[] {
   const rows = scores.map((s) => {
-    const last = latestSlideId && s.lastSlideId === latestSlideId ? s.last : 0;
+    const last = latestId && s.lastId === latestId ? s.last : 0;
     return { token: s.token, nickname: s.nickname, total: s.total, last, prev: s.total - last };
   });
   const rankOf = (value: number, key: 'total' | 'prev') => 1 + rows.filter((r) => r[key] > value).length;
@@ -57,16 +73,5 @@ export function rankBoard(scores: Score[], latestSlideId: string | null): (Board
 const withoutToken = ({ token: _token, ...e }: BoardEntry & { token: string }): BoardEntry => e;
 export const publicBoard = (board: (BoardEntry & { token: string })[], size: number): BoardEntry[] => board.slice(0, size).map(withoutToken);
 
-/** The last quiz question at or before a slide: the one a leaderboard there compares against. */
-export function latestQuizSlide(slides: Slide[], index: number): string | null {
-  for (let i = Math.min(index, slides.length - 1); i >= 0; i--) if (slides[i].type === 'quiz') return slides[i].id;
-  return null;
-}
-
-/** A leaderboard with no quiz question after it is the final one, shown as a podium. */
-export const isFinalBoard = (slides: Slide[], index: number) => !slides.slice(index + 1).some((s) => s.type === 'quiz');
-
-export const hasQuiz = (slides: Slide[]) => slides.some((s) => s.type === 'quiz');
-
-/** A slide as the audience may receive it: a quiz question without its correct answer. */
-export const forAudience = (slide: Slide): Slide => (slide.type === 'quiz' ? { ...slide, correctId: '' } : slide);
+/** A quiz question as the audience may receive it: without its correct answer. */
+export const forAudience = (question: QuizQuestion): QuizQuestion => ({ ...question, correctId: '' });

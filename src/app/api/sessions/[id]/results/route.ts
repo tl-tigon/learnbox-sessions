@@ -1,26 +1,21 @@
 import { store } from '@/lib/store';
-import { fail, isResponse, json, requireUser } from '@/lib/http';
+import { json } from '@/lib/http';
 import { sessionResults } from '@/lib/live';
+import { ownedSession } from '@/lib/owner';
 import { resultsCsv, resultsXlsx } from '@/lib/export';
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/** A session's results: as JSON for the results page, or with `?format=` as a CSV or Excel file. */
 export async function GET(req: Request, ctx: Ctx) {
-  const u = await requireUser(req);
-  if (isResponse(u)) return u;
-  const db = store();
-  const s = await db.getSession((await ctx.params).id);
-  if (!s || s.ownerSub !== u.sub) return fail(404, 'Not found');
-  const results = await sessionResults(db, s);
+  const s = await ownedSession(req, (await ctx.params).id);
+  if (s instanceof Response) return s;
+  const results = await sessionResults(store(), s);
   const format = new URL(req.url).searchParams.get('format');
   const name = `${s.title.replace(/[^\w -]/g, '').trim() || 'results'} ${s.createdAt.slice(0, 10)}`;
   if (format === 'csv') {
     return new Response(resultsCsv(results), {
-      headers: {
-        'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="${name}.csv"`,
-        'cache-control': 'no-store',
-      },
+      headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${name}.csv"`, 'cache-control': 'no-store' },
     });
   }
   if (format === 'xlsx') {

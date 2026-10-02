@@ -33,21 +33,3 @@ export function saveName(name: string) {
     /* fine: the name is asked for again next time */
   }
 }
-
-/** How many entries this phone has sent per slide, so a moved-back slide shows as answered. */
-export function sentCounts(sessionId: string): Record<string, number> {
-  try {
-    return JSON.parse(localStorage.getItem(`la-sent-${sessionId}`) ?? '{}');
-  } catch {
-    return {};
-  }
-}
-export function recordSent(sessionId: string, slideId: string, n: number) {
-  try {
-    const all = sentCounts(sessionId);
-    all[slideId] = Math.max(all[slideId] ?? 0, n);
-    localStorage.setItem(`la-sent-${sessionId}`, JSON.stringify(all));
-  } catch {
-    /* fine: the server still refuses duplicates */
-  }
-}

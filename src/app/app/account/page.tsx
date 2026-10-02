@@ -50,8 +50,8 @@ export default function Account() {
   };
 
   return (
-    <main className="wrap stack">
-      <div className="spread"><a href="/app">← Presentations</a></div>
+    <main className="wrap stack" style={{ maxWidth: 560 }}>
+      <div className="spread"><a href="/app">← Sessions</a></div>
       <h1>Account</h1>
 
       <section className="card stack">
@@ -74,7 +74,7 @@ export default function Account() {
         <h2>Delete account</h2>
         {confirming ? (
           <>
-            <p>Delete this account? Its presentations, sessions and all answers are removed.</p>
+            <p>Delete this account? Its sessions and all their answers are removed.</p>
             <div className="row">
               <button className="danger" disabled={busy} onClick={remove}>Delete account</button>
               <button disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>

@@ -4,27 +4,31 @@
  */
 export const LIMITS = {
   peoplePerSession: 1000,
-  liveSessionsPerAccount: 3,
-  presentationsPerAccount: 50,
-  slidesPerPresentation: 50,
+  liveSessionsPerAccount: 5,
+  sessionsPerAccount: 100,
+  interactionsPerSession: 50,
+  /** Questions in one quiz, and polls in one survey. */
+  itemsPerGroup: 20,
   optionsPerChoice: 10,
   entriesPerPerson: 3,
   titleChars: 200,
   optionChars: 80,
   wordChars: 25,
   openChars: 280,
-  contentChars: 1000,
+  announcementChars: 500,
   nicknameChars: 24,
   questionChars: 280,
-  questionsPerPerson: 10,
-  questionsPerSlide: 500,
+  replyChars: 500,
+  questionsPerPerson: 20,
+  questionsPerSession: 1000,
+  repliesPerQuestion: 10,
   quizOptions: 4,
   /** The most one quiz answer can earn: half for being right, half for speed. */
   quizPoints: 1000,
   /** Rows on the big screen's leaderboard. */
-  boardSize: 10,
-  /** A session closes itself this long after it starts. */
-  sessionHours: 24,
+  boardSize: 5,
+  /** A session's code works this long after the session is made, unless it is ended sooner. */
+  sessionDays: 7,
   /** A session's rows (people, answers, questions, scores) are deleted this long after they are written. */
   keepDays: 365,
 } as const;

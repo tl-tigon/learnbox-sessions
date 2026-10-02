@@ -1,77 +1,77 @@
 'use client';
+/** The facilitator's sessions: the live ones first, each opening its own screen. */
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { authed, signOut } from '@/lib/auth/client';
+import { Icon } from '@/components/icons';
 import { useSignedIn } from '@/components/use-signed-in';
-import type { PresentationSummary, SessionSummary } from '@/lib/store/types';
+import { authed, signOut } from '@/lib/auth/client';
+import { LIMITS } from '@/lib/limits';
+import type { SessionSummary } from '@/lib/store/types';
 
 export default function Dashboard() {
   const email = useSignedIn();
   const router = useRouter();
-  const [pres, setPres] = useState<PresentationSummary[] | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [p, s] = await Promise.all([authed('/api/presentations'), authed('/api/sessions')]);
-    if (!p.ok || !s.ok) return setErr('Could not load');
-    setPres((await p.json()).presentations);
-    setSessions((await s.json()).sessions);
+    const r = await authed('/api/sessions');
+    if (!r.ok) return setErr('Could not load');
+    setSessions((await r.json()).sessions);
   }, []);
   useEffect(() => {
     if (email) void load();
   }, [email, load]);
 
   const create = async () => {
-    const r = await authed('/api/presentations', { method: 'POST', body: JSON.stringify({ title: 'Untitled' }) });
-    const j = await r.json();
-    if (!r.ok) return setErr(j.error);
-    router.push(`/app/p/${j.presentation.id}`);
+    setBusy(true);
+    setErr(null);
+    const r = await authed('/api/sessions', { method: 'POST', body: JSON.stringify({ title: 'Untitled session' }) });
+    const j = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (!r.ok) return setErr(j.error ?? 'Not created');
+    router.push(`/app/sessions/${j.session.id}`);
   };
 
   if (!email) return null;
+  const live = sessions?.filter((s) => s.status === 'live') ?? [];
+  const ended = sessions?.filter((s) => s.status !== 'live') ?? [];
+
+  const row = (s: SessionSummary) => (
+    <a key={s.id} href={`/app/sessions/${s.id}`} className="card link spread">
+      <span className="stack grow" style={{ gap: 2 }}>
+        <span className="strong truncate">{s.title}</span>
+        <span className="tag num">{new Date(s.createdAt).toLocaleDateString()} · {s.interactions} polls</span>
+      </span>
+      {s.status === 'live' ? <span className="code-pill num"># {s.code.slice(0, 3)} {s.code.slice(3)}</span> : <span className="tag">Ended</span>}
+      {s.status === 'live' && <span className="live-dot">Live</span>}
+    </a>
+  );
+
   return (
-    <main className="wrap stack">
-      <div className="spread">
-        <strong>LearnBox Sessions</strong>
-        <div className="row small">
-          <span className="muted">{email}</span>
-          <a className="btn" href="/app/account">Account</a>
-          <button onClick={async () => { await signOut(); router.push('/'); }}>Sign out</button>
+    <>
+      <header className="topbar">
+        <a className="wordmark grow" href="/app">LearnBox Sessions</a>
+        <span className="muted truncate">{email}</span>
+        <a className="btn" href="/app/account">Account</a>
+        <button onClick={async () => { await signOut(); router.push('/'); }}>Sign out</button>
+      </header>
+      <main className="wrap stack" style={{ maxWidth: 760 }}>
+        <div className="spread">
+          <h1>Sessions</h1>
+          <button className="primary" disabled={busy} onClick={create}><Icon name="plus" />New session</button>
         </div>
-      </div>
-      {err && <p className="error" role="alert">{err}</p>}
-      <section className="stack">
-        <div className="spread"><h2>Presentations</h2><button className="primary" onClick={create}>New presentation</button></div>
-        {pres === null ? <p className="muted">Loading…</p> : !pres.length ? null : (
-          <div className="list">
-            {pres.map((p) => (
-              <a key={p.id} href={`/app/p/${p.id}`} className="card spread" style={{ color: 'inherit', textDecoration: 'none' }}>
-                <span>{p.title}</span>
-                <span className="muted small num">{p.slideCount} slides · {new Date(p.updatedAt).toLocaleDateString()}</span>
-              </a>
-            ))}
-          </div>
+        {sessions && <span className="tag num">{live.length} / {LIMITS.liveSessionsPerAccount} live · {sessions.length} / {LIMITS.sessionsPerAccount} sessions</span>}
+        {err && <p className="error" role="alert">{err}</p>}
+        {sessions === null ? <p className="muted">Loading…</p> : (
+          <>
+            <div className="list">{live.map(row)}</div>
+            {ended.length > 0 && <h2 style={{ marginTop: 12 }}>Ended <span className="count num">{ended.length}</span></h2>}
+            <div className="list">{ended.map(row)}</div>
+          </>
         )}
-      </section>
-      {sessions.length > 0 && (
-        <section className="stack">
-          <h2>Sessions</h2>
-          <div className="list">
-            {sessions.map((s) => (
-              <div key={s.id} className="card spread">
-                <span>{s.title} <span className="muted small num">· {s.code} · {new Date(s.createdAt).toLocaleString()}</span></span>
-                <span className="row">
-                  {s.status === 'live' && <a className="btn" href={`/control/${s.id}`}>Control</a>}
-                  {s.status === 'live' && <a className="btn" href={`/present/${s.id}`} target="_blank" rel="noreferrer">Screen</a>}
-                  <a className="btn" href={`/app/sessions/${s.id}`}>Results</a>
-                  <span className={s.status === 'live' ? 'small' : 'muted small'}>{s.status === 'live' ? 'Live' : 'Ended'}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-    </main>
+      </main>
+    </>
   );
 }

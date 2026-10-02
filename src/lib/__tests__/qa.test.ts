@@ -1,131 +1,129 @@
 import { describe, expect, it } from 'vitest';
-import { memoryStore } from '../store/memory';
-import { control, screenView, sessionResults, startSession } from '../live';
+import { control, editSession, endSession, hostView, wallView } from '../live';
 import { ask, audienceQuestions, moderate, upvote } from '../qa';
-import { cleanSlides } from '../engine/slides';
 import { sortQuestions } from '../engine/questions';
 import { LIMITS } from '../limits';
-import type { Presentation } from '../types';
+import { running, TOKEN } from './helpers';
 
-const TOKEN = (n: number) => `tok-${String(n).padStart(16, '0')}`;
-
-function deck(qa: { moderation?: boolean; anonymous?: boolean } = {}): Presentation {
-  const slides = cleanSlides([
-    { id: 'qqqq1', type: 'qa', title: 'Questions', moderation: qa.moderation ?? false, anonymous: qa.anonymous ?? true },
-    { id: 'aaaa2', type: 'choice', title: 'Pick', maxPicks: 1, options: [{ id: 'opta', label: 'A' }, { id: 'optb', label: 'B' }] },
-  ]);
-  const now = new Date().toISOString();
-  return { id: 'p1', ownerSub: 'u1', title: 'Deck', slides, createdAt: now, updatedAt: now };
-}
-
-async function running(qa: Parameters<typeof deck>[0] = {}, people = 3) {
-  const db = memoryStore();
-  const s = await startSession(db, 'u1', deck(qa), 'presenter');
-  for (let i = 1; i <= people; i++) await db.join(s.id, TOKEN(i), `Person ${i}`, 1000);
-  return { db, s };
-}
+const moderated = async (people = 3) => {
+  const r = await running(people);
+  return { db: r.db, s: await editSession(r.db, r.s, { qa: { moderation: true, anonymous: true } }) };
+};
 
 describe('asking', () => {
-  it('a question goes live at once when moderation is off, and shows the asker’s name', async () => {
+  it('Q&A is open for the whole session, beside whatever poll is running', async () => {
     const { db, s } = await running();
-    const q = await ask(db, s, TOKEN(1), 'qqqq1', { text: '  When is  the launch? ' });
-    expect(q).toMatchObject({ text: 'When is the launch?', name: 'Person 1', status: 'live', votes: 0 });
-    const seen = await audienceQuestions(db, s, 'qqqq1', TOKEN(2));
-    expect(seen).toMatchObject([{ id: q.id, name: 'Person 1', mine: false, voted: false }]);
+    const q1 = await ask(db, s, TOKEN(1), { text: '  When is  the launch? ' });
+    expect(q1).toMatchObject({ text: 'When is the launch?', name: 'Person 1', status: 'live', votes: 0 });
+    const polling = await control(db, s, { action: 'activate', id: 'choice1' });
+    await expect(ask(db, polling, TOKEN(2), { text: 'And the price?' })).resolves.toMatchObject({ status: 'live' });
+    const seen = await audienceQuestions(db, polling, TOKEN(3));
+    expect(seen).toHaveLength(2);
     expect(seen[0]).not.toHaveProperty('token');
   });
 
-  it('anonymous: no name when the slide allows it; a name is required when it does not', async () => {
-    const open = await running({ anonymous: true });
-    expect((await ask(open.db, open.s, TOKEN(1), 'qqqq1', { text: 'Why?', anonymous: true })).name).toBe('');
+  it('anonymous: no name when the session allows it; a name is required when it does not', async () => {
+    const open = await running();
+    expect((await ask(open.db, open.s, TOKEN(1), { text: 'Why?', anonymous: true })).name).toBe('');
 
-    const named = await running({ anonymous: false }, 0);
-    await named.db.join(named.s.id, TOKEN(1), '', 1000);
-    await expect(ask(named.db, named.s, TOKEN(1), 'qqqq1', { text: 'Why?', anonymous: true })).rejects.toThrow(/name/);
-    const q = await ask(named.db, named.s, TOKEN(1), 'qqqq1', { text: 'Why?', anonymous: true, nickname: 'Asha' });
+    const r = await running(0);
+    const named = await editSession(r.db, r.s, { qa: { moderation: false, anonymous: false } });
+    await r.db.join(named.id, TOKEN(1), '', 1000);
+    await expect(ask(r.db, named, TOKEN(1), { text: 'Why?', anonymous: true })).rejects.toThrow(/name/);
+    const q = await ask(r.db, named, TOKEN(1), { text: 'Why?', anonymous: true, nickname: 'Asha' });
     expect(q.name).toBe('Asha');
-    expect((await named.db.getPerson(named.s.id, TOKEN(1)))?.nickname).toBe('Asha');
+    expect((await r.db.getPerson(named.id, TOKEN(1)))?.nickname).toBe('Asha');
   });
 
-  it('refuses blocked words, an empty question, an unjoined phone, another slide and closed questions', async () => {
+  it('refuses blocked words, an empty question, an unjoined phone, closed questions and an ended session', async () => {
     const { db, s } = await running();
-    await expect(ask(db, s, TOKEN(1), 'qqqq1', { text: 'what the fuck' })).rejects.toThrow(/blocked/);
-    await expect(ask(db, s, TOKEN(1), 'qqqq1', { text: '   ' })).rejects.toThrow(/Type/);
-    await expect(ask(db, s, TOKEN(9), 'qqqq1', { text: 'Hello?' })).rejects.toThrow(/Join/);
-    await expect(ask(db, s, TOKEN(1), 'aaaa2', { text: 'Hello?' })).rejects.toThrow(/no questions/);
-    const locked = await control(db, s, { action: 'lock', on: true });
-    await expect(ask(db, locked, TOKEN(1), 'qqqq1', { text: 'Hello?' })).rejects.toThrow(/closed/);
-    const moved = await control(db, locked, { action: 'next' });
-    await expect(ask(db, moved, TOKEN(1), 'qqqq1', { text: 'Hello?' })).rejects.toThrow(/moved on/);
+    await expect(ask(db, s, TOKEN(1), { text: 'what the fuck' })).rejects.toThrow(/blocked/);
+    await expect(ask(db, s, TOKEN(1), { text: '   ' })).rejects.toThrow(/Type/);
+    await expect(ask(db, s, TOKEN(9), { text: 'Hello?' })).rejects.toThrow(/Join/);
+    const closed = await control(db, s, { action: 'qa-open', on: false });
+    await expect(ask(db, closed, TOKEN(1), { text: 'Hello?' })).rejects.toThrow(/closed/);
+    await endSession(db, closed);
+    await expect(ask(db, (await db.getSession(s.id))!, TOKEN(1), { text: 'Hello?' })).rejects.toThrow(/ended/);
   });
 
   it('caps the questions one person may ask', async () => {
     const { db, s } = await running();
-    for (let i = 0; i < LIMITS.questionsPerPerson; i++) await ask(db, s, TOKEN(1), 'qqqq1', { text: `Question ${i}` });
-    await expect(ask(db, s, TOKEN(1), 'qqqq1', { text: 'One more' })).rejects.toThrow(/most allowed/);
-    await expect(ask(db, s, TOKEN(2), 'qqqq1', { text: 'Mine' })).resolves.toBeTruthy();
+    for (let i = 0; i < LIMITS.questionsPerPerson; i++) await ask(db, s, TOKEN(1), { text: `Question ${i}` });
+    await expect(ask(db, s, TOKEN(1), { text: 'One more' })).rejects.toThrow(/most allowed/);
+    await expect(ask(db, s, TOKEN(2), { text: 'Mine' })).resolves.toBeTruthy();
   });
 });
 
 describe('upvoting', () => {
-  it('one vote per person, even when sent many times at once', async () => {
+  it('one vote per person, even when sent many times at once; votes stay open while questions are closed', async () => {
     const { db, s } = await running();
-    const q = await ask(db, s, TOKEN(1), 'qqqq1', { text: 'When?' });
-    const sends = await Promise.allSettled(Array.from({ length: 10 }, () => upvote(db, s, TOKEN(2), 'qqqq1', q.id)));
+    const q = await ask(db, s, TOKEN(1), { text: 'When?' });
+    const sends = await Promise.allSettled(Array.from({ length: 10 }, () => upvote(db, s, TOKEN(2), q.id)));
     expect(sends.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    await upvote(db, s, TOKEN(3), 'qqqq1', q.id);
-    expect((await db.getQuestion(s.id, 'qqqq1', q.id))?.votes).toBe(2);
-    const mine = await audienceQuestions(db, s, 'qqqq1', TOKEN(2));
-    expect(mine[0]).toMatchObject({ votes: 2, voted: true });
+    const closed = await control(db, s, { action: 'qa-open', on: false });
+    await upvote(db, closed, TOKEN(3), q.id);
+    expect((await db.getQuestion(s.id, q.id))?.votes).toBe(2);
+    expect((await audienceQuestions(db, closed, TOKEN(2)))[0]).toMatchObject({ votes: 2, voted: true });
+    await expect(upvote(db, closed, TOKEN(9), q.id)).rejects.toThrow(/Join/);
   });
 
   it('only approved, unanswered questions take votes', async () => {
-    const { db, s } = await running({ moderation: true });
-    const q = await ask(db, s, TOKEN(1), 'qqqq1', { text: 'When?' });
-    await expect(upvote(db, s, TOKEN(2), 'qqqq1', q.id)).rejects.toThrow(/Not found/);
-    await moderate(db, s, 'qqqq1', q.id, 'approve');
-    await expect(upvote(db, s, TOKEN(2), 'qqqq1', q.id)).resolves.toMatchObject({ votes: 1 });
-    await moderate(db, s, 'qqqq1', q.id, 'answered');
-    await expect(upvote(db, s, TOKEN(3), 'qqqq1', q.id)).rejects.toThrow(/answered/);
+    const { db, s } = await moderated();
+    const q = await ask(db, s, TOKEN(1), { text: 'When?' });
+    await expect(upvote(db, s, TOKEN(2), q.id)).rejects.toThrow(/Not found/);
+    await moderate(db, s, q.id, 'approve');
+    await expect(upvote(db, s, TOKEN(2), q.id)).resolves.toMatchObject({ votes: 1 });
+    await moderate(db, s, q.id, 'answered');
+    await expect(upvote(db, s, TOKEN(3), q.id)).rejects.toThrow(/answered/);
+    await moderate(db, s, q.id, 'hide');
+    await expect(upvote(db, s, TOKEN(3), q.id)).rejects.toThrow(/Not found/);
   });
 });
 
 describe('moderation', () => {
   it('a waiting question is seen by its asker and the facilitator only', async () => {
-    const { db, s } = await running({ moderation: true });
-    const q = await ask(db, s, TOKEN(1), 'qqqq1', { text: 'When?' });
+    const { db, s } = await moderated();
+    const q = await ask(db, s, TOKEN(1), { text: 'When?' });
     expect(q.status).toBe('pending');
-    expect(await audienceQuestions(db, s, 'qqqq1', TOKEN(2))).toEqual([]);
-    expect(await audienceQuestions(db, s, 'qqqq1', TOKEN(1))).toMatchObject([{ id: q.id, status: 'pending', mine: true }]);
-    expect((await screenView(db, s)).questions).toEqual([]);
-    expect((await screenView(db, s, true)).questions).toMatchObject([{ id: q.id, status: 'pending' }]);
+    expect(await audienceQuestions(db, s, TOKEN(2))).toEqual([]);
+    expect(await audienceQuestions(db, s, TOKEN(1))).toMatchObject([{ id: q.id, status: 'pending', mine: true }]);
+    expect((await wallView(db, s)).questions).toEqual([]);
+    expect((await hostView(db, s)).questions).toMatchObject([{ id: q.id, status: 'pending' }]);
 
-    await moderate(db, s, 'qqqq1', q.id, 'approve');
-    expect(await audienceQuestions(db, s, 'qqqq1', TOKEN(2))).toMatchObject([{ id: q.id, status: 'live' }]);
-    await moderate(db, s, 'qqqq1', q.id, 'hide');
-    expect(await audienceQuestions(db, s, 'qqqq1', TOKEN(1))).toEqual([]);
-    expect((await screenView(db, s)).questions).toEqual([]);
+    await moderate(db, s, q.id, 'approve');
+    expect(await audienceQuestions(db, s, TOKEN(2))).toMatchObject([{ id: q.id, status: 'live' }]);
+    await moderate(db, s, q.id, 'hide');
+    expect(await audienceQuestions(db, s, TOKEN(1))).toEqual([]);
+    expect((await wallView(db, s)).questions).toEqual([]);
   });
 
-  it('the highlight travels in the session state and clears on hide, answered and a slide move', async () => {
-    const { db, s } = await running({ moderation: true });
-    const q = await ask(db, s, TOKEN(1), 'qqqq1', { text: 'When?' });
-    await expect(moderate(db, s, 'qqqq1', q.id, 'highlight')).rejects.toThrow(/Approve/);
-    await moderate(db, s, 'qqqq1', q.id, 'approve');
-    let cur = (await moderate(db, s, 'qqqq1', q.id, 'highlight')).session;
+  it('the highlight travels in the session state and clears when the question is hidden or answered', async () => {
+    const { db, s } = await moderated();
+    const q = await ask(db, s, TOKEN(1), { text: 'When?' });
+    await expect(moderate(db, s, q.id, 'highlight')).rejects.toThrow(/Approve/);
+    await moderate(db, s, q.id, 'approve');
+    let cur = (await moderate(db, s, q.id, 'highlight')).session;
     expect(cur.state.highlight).toBe(q.id);
-    cur = (await moderate(db, cur, 'qqqq1', q.id, 'answered')).session;
+    /* Starting a poll leaves the highlight where it is: Q&A carries on beside it. */
+    cur = await control(db, cur, { action: 'activate', id: 'choice1' });
+    expect(cur.state.highlight).toBe(q.id);
+    cur = (await moderate(db, cur, q.id, 'answered')).session;
     expect(cur.state.highlight).toBeNull();
+  });
 
-    const q2 = await ask(db, cur, TOKEN(2), 'qqqq1', { text: 'Where?' });
-    await moderate(db, cur, 'qqqq1', q2.id, 'approve');
-    cur = (await moderate(db, cur, 'qqqq1', q2.id, 'highlight')).session;
-    cur = await control(db, cur, { action: 'next' });
-    expect(cur.state.highlight).toBeNull();
+  it('the facilitator’s replies show under the question, cleaned and capped in number', async () => {
+    const { db, s } = await running();
+    const q = await ask(db, s, TOKEN(1), { text: 'When?' });
+    await expect(moderate(db, s, q.id, 'reply', '   ')).rejects.toThrow(/Type a reply/);
+    const { question } = await moderate(db, s, q.id, 'reply', '  In   March. ');
+    expect(question.replies).toMatchObject([{ text: 'In March.' }]);
+    expect((await audienceQuestions(db, s, TOKEN(2)))[0].replies).toMatchObject([{ text: 'In March.' }]);
+    for (let i = 1; i < LIMITS.repliesPerQuestion; i++) await moderate(db, s, q.id, 'reply', `More ${i}`);
+    await expect(moderate(db, s, q.id, 'reply', 'One too many')).rejects.toThrow(/replies per question/);
   });
 });
 
-describe('lists and results', () => {
+describe('lists', () => {
   it('top puts the most votes first; recent puts the newest first', () => {
     const list = [
       { id: 'a', votes: 1, at: '2026-01-01T10:00:00Z' },
@@ -134,16 +132,5 @@ describe('lists and results', () => {
     ];
     expect(sortQuestions(list, 'top').map((q) => q.id)).toEqual(['b', 'a', 'c']);
     expect(sortQuestions(list, 'recent').map((q) => q.id)).toEqual(['c', 'b', 'a']);
-  });
-
-  it('results list every question on a Q&A slide', async () => {
-    const { db, s } = await running();
-    await ask(db, s, TOKEN(1), 'qqqq1', { text: 'When?' });
-    await ask(db, s, TOKEN(2), 'qqqq1', { text: 'Where?', anonymous: true });
-    const r = await sessionResults(db, s);
-    expect(r.rows.map((x) => x.slide.id)).toEqual(['qqqq1', 'aaaa2']);
-    /* Two questions asked in the same millisecond have no fixed order, so compare them sorted. */
-    const asked = [...r.rows[0].questions].sort((a, b) => a.text.localeCompare(b.text));
-    expect(asked).toMatchObject([{ text: 'When?', name: 'Person 1' }, { text: 'Where?', name: '' }]);
   });
 });

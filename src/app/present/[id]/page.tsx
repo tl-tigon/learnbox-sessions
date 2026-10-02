@@ -1,13 +1,16 @@
 'use client';
-/** The big screen: the join code and QR, the current slide, and its results as they come in. */
-import { use, useEffect, useState } from 'react';
+/**
+ * The big screen. The join instructions stay on the left; the right shows the poll or quiz the
+ * facilitator has started, and otherwise the audience's questions.
+ */
+import { use, useEffect, useRef, useState } from 'react';
+import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
 import { Qr } from '@/components/qr';
-import { QaScreen } from '@/components/qa';
-import { LeaderboardScreen, QuizScreen, useServerClock } from '@/components/quiz';
-import { Results } from '@/components/results';
-import { isShown } from '@/lib/engine/questions';
-import { isInteractive, isPoll } from '@/lib/engine/slides';
-import { useScreen } from '@/lib/use-screen';
+import { QaWall } from '@/components/qa';
+import { QuizWall, useServerClock } from '@/components/quiz';
+import { PollResults } from '@/components/results';
+import { quizPhase } from '@/lib/engine/quiz';
+import { useWall } from '@/lib/use-host';
 
 export default function Present({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -17,57 +20,81 @@ export default function Present({ params }: { params: Promise<{ id: string }> })
     setKey(new URLSearchParams(window.location.hash.slice(1)).get('k'));
   }, []);
   if (key === undefined) return null;
-  return <Screen id={id} displayKey={key} />;
+  return <Wall id={id} displayKey={key} />;
 }
 
-function Screen({ id, displayKey }: { id: string; displayKey: string | null }) {
-  const { data: v, error } = useScreen(id, displayKey);
+function Wall({ id, displayKey }: { id: string; displayKey: string | null }) {
+  const { data: v, error, refresh } = useWall(id, displayKey);
   const [origin, setOrigin] = useState('');
   useEffect(() => setOrigin(window.location.origin), []);
   const now = useServerClock(v?.serverNow);
 
-  if (!v) return <main className="screen"><p className="muted">{error ?? 'Loading…'}</p></main>;
-  const host = origin.replace(/^https?:\/\//, '');
-  const joinUrl = `${origin}/s/${v.code}`;
-  const slide = v.mode === 'presenter' ? v.slide : null;
+  /* When a quiz question's time runs out, the screen fetches how people voted. */
+  const q = v?.active?.kind === 'quiz' ? v.state.quiz : null;
+  const phase = q ? quizPhase(q, now) : null;
+  const lastPhase = useRef(phase);
+  useEffect(() => {
+    if (lastPhase.current === 'open' && phase === 'closed') void refresh();
+    lastPhase.current = phase;
+  }, [phase, refresh]);
 
-  if (v.status === 'ended') {
-    return <main className="screen"><div /><h1>{v.title}</h1><p className="muted">Session ended</p></main>;
-  }
+  if (!v) return <main className="narrow"><p className="muted">{error ?? 'Loading…'}</p></main>;
+  const host = origin.replace(/^https?:\/\//, '');
+  const a = v.active;
+  const ended = v.status === 'ended';
+  const shownQuestions = v.questions.filter((x) => x.status === 'live').length;
 
   return (
-    <main className="screen">
-      <header className="joinbar">
-        <span>Join at <strong>{host}</strong></span>
-        <span>code <span className="num">{v.code.slice(0, 3)} {v.code.slice(3)}</span></span>
-        <span className="muted num" style={{ marginLeft: 'auto' }}>{v.people} joined</span>
-      </header>
-
-      {slide ? (
-        <section className="stack" style={{ alignContent: 'start' }}>
-          <h1>{slide.title}</h1>
-          {slide.type === 'content' && slide.body && <p style={{ fontSize: 28, whiteSpace: 'pre-wrap' }}>{slide.body}</p>}
-          {slide.type === 'qa' && <QaScreen questions={v.questions} state={v.state} />}
-          {slide.type === 'quiz' && <QuizScreen slide={slide} state={v.state} now={now} tally={v.tally} people={v.people} />}
-          {slide.type === 'leaderboard' && v.board && <LeaderboardScreen board={v.board} />}
-          {isPoll(slide) && (v.state.showResults ? <Results slide={slide} tally={v.tally} texts={v.texts} /> : null)}
-        </section>
-      ) : (
-        <section className="row" style={{ gap: 48, alignItems: 'center', justifyContent: 'center' }}>
-          <Qr url={joinUrl} size={320} />
-          <div className="stack">
-            <h1>{v.title}</h1>
-            <div className="num" style={{ fontSize: 64, fontWeight: 700, letterSpacing: '0.1em' }}>{v.code.slice(0, 3)} {v.code.slice(3)}</div>
+    <div className="wall">
+      <aside>
+        <span className="wordmark">LearnBox Sessions</span>
+        {!ended && (
+          <div className="joinbox">
+            <span>Join at</span>
+            <b>{host}</b>
+            <span className="code num"># {v.code.slice(0, 3)} {v.code.slice(3)}</span>
+            {origin && <div style={{ marginTop: 16 }}><Qr url={`${origin}/s/${v.code}`} size={180} /></div>}
           </div>
-        </section>
-      )}
+        )}
+        <span className="muted num row"><Icon name="user" />{v.people}</span>
+      </aside>
 
-      <footer className="spread muted">
-        {slide && isInteractive(slide) ? <span className="num">{v.tally?.people ?? 0} answered{v.state.locked && isPoll(slide) ? ' · closed' : ''}</span>
-          : slide?.type === 'qa' ? <span className="num">{v.questions.filter((q) => isShown(q.status)).length} questions{v.state.locked ? ' · closed' : ''}</span>
-          : <span />}
-        {slide ? <Qr url={joinUrl} size={120} /> : <span />}
-      </footer>
-    </main>
+      <main>
+        {ended ? (
+          <>
+            <div className="bar-head"><span>{v.title}</span></div>
+            <div className="panel"><h1>Session ended</h1></div>
+          </>
+        ) : a?.kind === 'poll' ? (
+          <>
+            <div className="bar-head">
+              <span><Icon name={TYPE_ICON[a.poll.type]} size={22} />{TYPE_LABEL[a.poll.type]}{v.state.locked && ' · Voting closed'}</span>
+              <span className="num"><Icon name="user" size={22} />{v.tally?.people ?? 0}</span>
+            </div>
+            <div className="panel">
+              <h1>{a.poll.title}</h1>
+              {v.state.showResults
+                ? <PollResults poll={a.poll} tally={v.tally} texts={v.texts} />
+                : <span className="muted row" style={{ fontSize: 'clamp(16px, 1.4vw, 26px)' }}><Icon name="eyeoff" size={22} />Results are hidden</span>}
+            </div>
+          </>
+        ) : a?.kind === 'survey' ? (
+          <>
+            <div className="bar-head"><span><Icon name="survey" size={22} />Survey</span></div>
+            <div className="panel"><h1>{a.survey.title || 'Survey'}</h1><span className="muted num" style={{ fontSize: 'clamp(16px, 1.4vw, 26px)' }}>{a.survey.polls.length} questions</span></div>
+          </>
+        ) : a?.kind === 'quiz' && q ? (
+          <>
+            <div className="bar-head"><span><Icon name="quiz" size={22} />Quiz</span><span className="num"><Icon name="user" size={22} />{v.people}</span></div>
+            <QuizWall title={a.title} count={a.count} question={a.question} q={q} now={now} tally={v.tally} board={v.board} people={v.people} />
+          </>
+        ) : (
+          <>
+            <div className="bar-head"><span><Icon name="chat" size={22} />Q&A</span><span className="num"><Icon name="chat" size={22} />{shownQuestions}</span></div>
+            <QaWall questions={v.questions} state={v.state} />
+          </>
+        )}
+      </main>
+    </div>
   );
 }

@@ -1,55 +1,60 @@
-import { timingSafeEqual } from 'node:crypto';
 import { store } from '@/lib/store';
-import { getUser } from '@/lib/auth/server';
 import { fail, json, readJson } from '@/lib/http';
-import { control, endSession, LiveError, screenView, type ControlAction } from '@/lib/live';
-import type { Session } from '@/lib/types';
+import { control, CONTROL_ACTIONS, editSession, endSession, hostView, LiveError, wallView, type ControlAction } from '@/lib/live';
+import { ownedSession } from '@/lib/owner';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-const sameKey = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const failed = (e: unknown) => {
+  if (e instanceof LiveError) return fail(e.status, e.message);
+  throw e;
+};
 
-/** The owner, or (for reading only) a screen holding the session's display key. */
-async function load(req: Request, ctx: Ctx, allowKey: boolean): Promise<Session | Response> {
-  const s = await store().getSession((await ctx.params).id);
-  if (!s) return fail(404, 'Not found');
-  const u = await getUser(req);
-  if (u?.sub === s.ownerSub) return s;
-  const key = req.headers.get('x-display-key') ?? '';
-  if (allowKey && key && sameKey(key, s.displayKey)) return s;
-  return fail(u ? 404 : 401, u ? 'Not found' : 'Sign in');
-}
-
-/** The presenter screen and the control view. */
+/**
+ * The facilitator's screen, or with `?view=wall` the big screen. The wall carries only what the
+ * audience may see, so a projector holding the display key can read it without being signed in.
+ */
 export async function GET(req: Request, ctx: Ctx) {
-  const s = await load(req, ctx, true);
+  const wall = new URL(req.url).searchParams.get('view') === 'wall';
+  const s = await ownedSession(req, (await ctx.params).id, wall);
   if (s instanceof Response) return s;
-  const owner = !req.headers.get('x-display-key');
-  const view = await screenView(store(), s, owner);
-  return json({ ...view, ...(owner ? { displayKey: s.displayKey } : {}) });
+  return json(wall ? await wallView(store(), s) : await hostView(store(), s));
 }
 
-const ACTIONS = new Set(['go', 'next', 'prev', 'results', 'lock', 'quiz-start', 'quiz-reveal']);
-
-/** A presenter control: move, show results, lock answers, start or reveal a quiz question. */
-export async function PATCH(req: Request, ctx: Ctx) {
-  const s = await load(req, ctx, false);
+/** The facilitator's edits: title, interactions, Q&A settings. */
+export async function PUT(req: Request, ctx: Ctx) {
+  const s = await ownedSession(req, (await ctx.params).id);
   if (s instanceof Response) return s;
-  const body = await readJson(req);
-  if (!ACTIONS.has(String(body.action))) return fail(400, 'Unknown action');
   try {
-    const next = await control(store(), s, body as unknown as ControlAction);
-    return json({ state: next.state });
+    const saved = await editSession(store(), s, await readJson(req));
+    return json({ title: saved.title, interactions: saved.interactions, qa: saved.qa, state: saved.state });
   } catch (e) {
-    if (e instanceof LiveError) return fail(e.status, e.message);
-    throw e;
+    return failed(e);
   }
 }
 
-/** End the session. Its results stay. */
-export async function DELETE(req: Request, ctx: Ctx) {
-  const s = await load(req, ctx, false);
+/** A control: start or stop an interaction, show results, lock voting, open Q&A, announce, quiz steps, end. */
+export async function PATCH(req: Request, ctx: Ctx) {
+  const s = await ownedSession(req, (await ctx.params).id);
   if (s instanceof Response) return s;
-  if (s.status === 'live') await endSession(store(), s);
+  const body = await readJson(req);
+  try {
+    if (body.action === 'end') {
+      if (s.status === 'live') await endSession(store(), s);
+      return json({ ok: true });
+    }
+    if (!CONTROL_ACTIONS.includes(String(body.action))) return fail(400, 'Unknown action');
+    const next = await control(store(), s, body as unknown as ControlAction);
+    return json({ state: next.state });
+  } catch (e) {
+    return failed(e);
+  }
+}
+
+/** Deletes the session and everything recorded in it. */
+export async function DELETE(req: Request, ctx: Ctx) {
+  const s = await ownedSession(req, (await ctx.params).id);
+  if (s instanceof Response) return s;
+  await store().deleteSession(s);
   return json({ ok: true });
 }

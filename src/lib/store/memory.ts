@@ -2,16 +2,15 @@
  * The in-memory store, for local development and tests. Same guarantees as DynamoDB, kept on
  * `globalThis` so Next's dev reloads do not wipe it.
  */
-import type { Presentation, Question, Score, Session, SessionState, Tally } from '../types';
+import type { Question, Score, Session, SessionState, Tally } from '../types';
 import type { Person, Store, StoredAnswer } from './types';
 
 interface Db {
-  presentations: Map<string, Presentation>;
   sessions: Map<string, Session>;
   codes: Map<string, string>;
   people: Map<string, Map<string, Person>>;
   answers: Map<string, Map<string, StoredAnswer>>;
-  tallies: Map<string, Tally>;
+  tallies: Map<string, Map<string, Tally>>;
   questions: Map<string, Map<string, Question>>;
   upvotes: Map<string, Set<string>>;
   scores: Map<string, Map<string, Score>>;
@@ -19,33 +18,23 @@ interface Db {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
+/** The map kept for one session inside a per-session collection, made on first use. */
+function of<V>(all: Map<string, V>, sessionId: string, make: () => V): V {
+  let v = all.get(sessionId);
+  if (!v) all.set(sessionId, (v = make()));
+  return v;
+}
+
 export function memoryStore(db: Db = freshDb()): Store {
-  const peopleOf = (sid: string) => db.people.get(sid) ?? db.people.set(sid, new Map()).get(sid)!;
-  const answersOf = (sid: string) => db.answers.get(sid) ?? db.answers.set(sid, new Map()).get(sid)!;
-  /* `??=` because a dev server keeps its database across reloads, including one made before these existed. */
-  const scoresOf = (sid: string) => (db.scores ??= new Map()).get(sid) ?? db.scores.set(sid, new Map()).get(sid)!;
-  const questionsOf = (sid: string) => (db.questions ??= new Map()).get(sid) ?? db.questions.set(sid, new Map()).get(sid)!;
-  const upvotesOf = (sid: string) => (db.upvotes ??= new Map()).get(sid) ?? db.upvotes.set(sid, new Set()).get(sid)!;
-  const akey = (a: Pick<StoredAnswer, 'slideId' | 'token' | 'entry'>) => `${a.slideId}#${a.token}#${a.entry}`;
+  const peopleOf = (sid: string) => of(db.people, sid, () => new Map<string, Person>());
+  const answersOf = (sid: string) => of(db.answers, sid, () => new Map<string, StoredAnswer>());
+  const talliesOf = (sid: string) => of(db.tallies, sid, () => new Map<string, Tally>());
+  const questionsOf = (sid: string) => of(db.questions, sid, () => new Map<string, Question>());
+  const upvotesOf = (sid: string) => of(db.upvotes, sid, () => new Set<string>());
+  const scoresOf = (sid: string) => of(db.scores, sid, () => new Map<string, Score>());
+  const akey = (a: Pick<StoredAnswer, 'pollId' | 'token' | 'entry'>) => `${a.pollId}#${a.token}#${a.entry}`;
 
   return {
-    async listPresentations(ownerSub) {
-      return [...db.presentations.values()]
-        .filter((p) => p.ownerSub === ownerSub)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-        .map((p) => ({ id: p.id, title: p.title, slideCount: p.slides.length, updatedAt: p.updatedAt }));
-    },
-    async getPresentation(id) {
-      const p = db.presentations.get(id);
-      return p ? clone(p) : null;
-    },
-    async putPresentation(p) {
-      db.presentations.set(p.id, clone(p));
-    },
-    async deletePresentation(p) {
-      db.presentations.delete(p.id);
-    },
-
     async createSession(s) {
       const holder = db.codes.get(s.code);
       if (holder && db.sessions.get(holder)?.status === 'live') return false;
@@ -64,7 +53,15 @@ export function memoryStore(db: Db = freshDb()): Store {
       return [...db.sessions.values()]
         .filter((s) => s.ownerSub === ownerSub)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((s) => ({ id: s.id, code: s.code, title: s.title, status: s.status, mode: s.mode, createdAt: s.createdAt, closesAt: s.closesAt }));
+        .map((s) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: s.interactions.length }));
+    },
+    async updateSession(id, edit) {
+      const s = db.sessions.get(id);
+      if (!s) return null;
+      if (edit.title !== undefined) s.title = edit.title;
+      if (edit.interactions !== undefined) s.interactions = clone(edit.interactions);
+      if (edit.qa !== undefined) s.qa = clone(edit.qa);
+      return clone(s);
     },
     async setState(id, next: SessionState, fromSeq) {
       const s = db.sessions.get(id);
@@ -82,13 +79,7 @@ export function memoryStore(db: Db = freshDb()): Store {
     },
     async deleteSession(s) {
       if (db.codes.get(s.code) === s.id) db.codes.delete(s.code);
-      db.sessions.delete(s.id);
-      db.people.delete(s.id);
-      db.answers.delete(s.id);
-      for (const k of [...db.tallies.keys()]) if (k.startsWith(`${s.id}#`)) db.tallies.delete(k);
-      db.questions?.delete(s.id);
-      db.upvotes?.delete(s.id);
-      db.scores?.delete(s.id);
+      for (const all of [db.sessions, db.people, db.answers, db.tallies, db.questions, db.upvotes, db.scores]) all.delete(s.id);
     },
 
     async join(sessionId, token, nickname, cap) {
@@ -118,43 +109,59 @@ export function memoryStore(db: Db = freshDb()): Store {
       all.set(k, clone(a));
       return true;
     },
-    async myAnswers(sessionId, slideId, token) {
-      return [...answersOf(sessionId).values()].filter((a) => a.slideId === slideId && a.token === token).sort((a, b) => a.entry - b.entry).map(clone);
+    async replaceAnswer(sessionId, a, prevAt) {
+      const all = answersOf(sessionId);
+      const k = akey(a);
+      if (all.get(k)?.at !== prevAt) return false;
+      all.set(k, clone(a));
+      return true;
     },
-    async slideAnswers(sessionId, slideId, limit = 500) {
-      return [...answersOf(sessionId).values()].filter((a) => a.slideId === slideId).sort((a, b) => a.at.localeCompare(b.at)).slice(0, limit).map(clone);
+    async myAnswers(sessionId, pollId, token) {
+      return [...answersOf(sessionId).values()].filter((a) => a.pollId === pollId && a.token === token).sort((a, b) => a.entry - b.entry).map(clone);
+    },
+    async pollAnswers(sessionId, pollId, limit = 500) {
+      return [...answersOf(sessionId).values()].filter((a) => a.pollId === pollId).sort((a, b) => a.at.localeCompare(b.at)).slice(0, limit).map(clone);
     },
 
-    async bumpTally(sessionId, slideId, delta, newPerson) {
-      const k = `${sessionId}#${slideId}`;
-      const t = db.tallies.get(k) ?? { people: 0, counts: {} };
-      if (newPerson) t.people += 1;
+    async bumpTally(sessionId, pollId, delta, people) {
+      const all = talliesOf(sessionId);
+      const t = all.get(pollId) ?? { people: 0, counts: {} };
+      t.people += people;
       for (const [key, n] of Object.entries(delta)) t.counts[key] = (t.counts[key] ?? 0) + n;
-      db.tallies.set(k, t);
+      all.set(pollId, t);
       return clone(t);
     },
-    async getTally(sessionId, slideId) {
-      return clone(db.tallies.get(`${sessionId}#${slideId}`) ?? { people: 0, counts: {} });
+    async getTally(sessionId, pollId) {
+      return clone(talliesOf(sessionId).get(pollId) ?? { people: 0, counts: {} });
+    },
+    async listTallies(sessionId) {
+      return Object.fromEntries([...talliesOf(sessionId)].map(([id, t]) => [id, clone(t)]));
     },
 
     async addQuestion(sessionId, q) {
-      questionsOf(sessionId).set(`${q.slideId}#${q.id}`, clone(q));
+      questionsOf(sessionId).set(q.id, clone(q));
     },
-    async getQuestion(sessionId, slideId, id) {
-      const q = questionsOf(sessionId).get(`${slideId}#${id}`);
+    async getQuestion(sessionId, id) {
+      const q = questionsOf(sessionId).get(id);
       return q ? clone(q) : null;
     },
-    async listQuestions(sessionId, slideId) {
-      return [...questionsOf(sessionId).values()].filter((q) => q.slideId === slideId).sort((a, b) => a.id.localeCompare(b.id)).map(clone);
+    async listQuestions(sessionId) {
+      return [...questionsOf(sessionId).values()].sort((a, b) => a.id.localeCompare(b.id)).map(clone);
     },
-    async setQuestionStatus(sessionId, slideId, id, status) {
-      const q = questionsOf(sessionId).get(`${slideId}#${id}`);
+    async setQuestionStatus(sessionId, id, status) {
+      const q = questionsOf(sessionId).get(id);
       if (!q) return null;
       q.status = status;
       return clone(q);
     },
-    async upvote(sessionId, slideId, id, token) {
-      const q = questionsOf(sessionId).get(`${slideId}#${id}`);
+    async addReply(sessionId, id, reply, max) {
+      const q = questionsOf(sessionId).get(id);
+      if (!q || q.replies.length >= max) return null;
+      q.replies.push(clone(reply));
+      return clone(q);
+    },
+    async upvote(sessionId, id, token) {
+      const q = questionsOf(sessionId).get(id);
       const votes = upvotesOf(sessionId);
       const k = `${token}#${id}`;
       if (!q || votes.has(k)) return null;
@@ -167,19 +174,21 @@ export function memoryStore(db: Db = freshDb()): Store {
       return [...upvotesOf(sessionId)].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
     },
 
-    async addScore(sessionId, token, nickname, slideId, points) {
+    async addScore(sessionId, quizId, token, nickname, questionId, points) {
       const all = scoresOf(sessionId);
-      const s = all.get(token) ?? { token, nickname, total: 0, last: 0, lastSlideId: '' };
-      const next = { ...s, nickname, total: s.total + points, last: points, lastSlideId: slideId };
-      all.set(token, next);
+      const k = `${quizId}#${token}`;
+      const s = all.get(k) ?? { token, nickname, total: 0, last: 0, lastId: '' };
+      const next = { ...s, nickname, total: s.total + points, last: points, lastId: questionId };
+      all.set(k, next);
       return clone(next);
     },
-    async listScores(sessionId) {
-      return [...scoresOf(sessionId).values()].map(clone);
+    async listScores(sessionId, quizId) {
+      const prefix = `${quizId}#`;
+      return [...scoresOf(sessionId)].filter(([k]) => k.startsWith(prefix)).map(([, s]) => clone(s));
     },
   };
 }
 
 export function freshDb(): Db {
-  return { presentations: new Map(), sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map() };
+  return { sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map() };
 }

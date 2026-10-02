@@ -1,319 +1,409 @@
-﻿/* Walk on the in-memory dev server: a facilitator builds a deck in the editor, presents it, five
-   phones join by code and answer every slide type, the big screen and control view show live
-   counts, a moderated Q&A runs (ask, approve, upvote, highlight, answered, hide), a quiz question
-   is played (start, answer, reveal, podium), the session ends and the CSV and Excel files
-   download. Then a survey run. Last, the account is deleted, which also leaves the dev server
-   clean for the next walk. */
+/* Walk on the in-memory dev server, end to end as people would use it:
+   a facilitator makes a session and builds polls and a quiz in the editor; a projector opens the
+   big screen with the display key; five phones join by code. Then Q&A (ask, upvote, review, reply,
+   highlight, announcement, closing), each poll type (with a changed vote, locked voting and hidden
+   results), a survey, a quiz to its final leaderboard, the results downloads, the ways around the
+   rules that must be refused, a duplicate, ending, and deleting the account.
+   Run with the dev server up: node scripts/walk.js */
 const fs = require('fs'), path = require('path');
 const { chromium } = require('C:/Users/tejas/OneDrive/Documents/Workspace/LMS/Trust Sim/capture-tool/node_modules/playwright-core');
 const BASE = 'http://localhost:3200';
 const OUT = path.join(__dirname, 'live-walk'); fs.mkdirSync(OUT, { recursive: true });
+const AUTH = { authorization: 'Bearer dev:walk@example.com', 'content-type': 'application/json' };
 const results = [];
-const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  Â· ' + detail : ''}`); };
+const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  · ' + detail : ''}`); };
+const WAIT = { timeout: 10000 };
+/* The dev server compiles each page the first time it is opened. */
+const FIRST = { timeout: 120000 };
 
 (async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
-    const fac = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+    const fac = await browser.newContext({ viewport: { width: 1366, height: 800 } });
     const p = await fac.newPage(); p.setDefaultTimeout(20000);
-    const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
+    const errs = []; p.on('pageerror', (e) => errs.push('host: ' + e));
+    p.on('dialog', (d) => d.accept());
+    const api = (method, url, body, headers = AUTH) => p.evaluate(async ({ method, url, body, headers }) => {
+      const r = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: r.status, body: await r.json().catch(() => null) };
+    }, { method, url, body, headers });
 
-    // Sign up (dev) and make a deck in the editor
-    await p.goto(`${BASE}/sign-in`);
+    // ---- Sign in and make a session
+    await p.goto(`${BASE}/sign-in`, FIRST);
     await p.fill('input[type="email"]', 'walk@example.com');
     await p.click('button:has-text("Continue")');
-    await p.waitForURL(/\/app$/);
-    await p.click('button:has-text("New presentation")');
-    await p.waitForURL(/\/app\/p\//);
-    await p.fill('input[aria-label="Presentation title"]', 'Team offsite');
+    await p.waitForURL(/\/app$/, FIRST);
+    /* Anything an earlier walk left behind goes first, so each run starts from an empty account. */
+    await api('DELETE', '/api/account');
+    await p.click('button:has-text("New session")', FIRST);
+    await p.waitForURL(/\/app\/sessions\/[^/]+$/, FIRST);
+    const sessionId = p.url().split('/').pop();
+    await p.waitForSelector('input[aria-label="Session name"]', FIRST);
+    await p.fill('input[aria-label="Session name"]', 'Team offsite');
+
+    // ---- Build a multiple choice poll and a quiz in the editor
+    const add = async (type) => { await p.click('section[aria-label="Polls"] button:has-text("Add")'); await p.click(`.menu .items button:has-text("${type}")`); };
+    await add('Multiple choice');
     await p.fill('label:has-text("Question") input', 'Where should we go?');
     await p.fill('input[aria-label="Option 1"]', 'Goa');
     await p.fill('input[aria-label="Option 2"]', 'Coorg');
     await p.click('button:has-text("Add option")');
     await p.fill('input[aria-label="Option 3"]', 'Lonavala');
-    for (const [type, title] of [['wordcloud', 'One word for this year'], ['rating', 'How was the quarter?'], ['open', 'What should we change?'], ['qa', 'Questions for the team'], ['quiz', 'Which planet is the largest?'], ['leaderboard', 'Leaderboard'], ['content', 'Thank you']]) {
-      await p.selectOption('label:has-text("Add slide") select', type);
-      await p.fill(type === 'content' ? 'label:has-text("Heading") input' : type === 'qa' || type === 'leaderboard' ? 'label:has-text("Title") input' : 'label:has-text("Question") input', title);
-      if (type === 'qa') await p.check('label:has-text("Approve questions") input');
-      if (type === 'quiz') {
-        await p.fill('input[aria-label="Option 1"]', 'Earth');
-        await p.fill('input[aria-label="Option 2"]', 'Jupiter');
-        await p.click('button:has-text("Add option")');
-        await p.fill('input[aria-label="Option 3"]', 'Saturn');
-        await p.click('button:has-text("Add option")');
-        await p.fill('input[aria-label="Option 4"]', 'Mars');
-        await p.check('input[aria-label="Option 2 is correct"]');
-        await p.selectOption('label:has-text("Time limit") select', '10');
-      }
-    }
-    await p.waitForSelector('text=Saved');
-    await p.waitForTimeout(900);
-    await p.waitForSelector('text=Saved');
-    await p.screenshot({ path: path.join(OUT, '01-editor.png') });
-    const presId = p.url().split('/').pop();
-    const saved = await p.evaluate(async (id) => (await (await fetch(`/api/presentations/${id}`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).json()).presentation, presId);
-    check('editor saved 8 slides in order', saved.slides.map((s) => s.type).join(',') === 'choice,wordcloud,rating,open,qa,quiz,leaderboard,content', saved.slides.map((s) => s.type).join(','));
-    check('editor saved the Q&A settings', saved.slides[4].moderation === true && saved.slides[4].anonymous === true);
-    const quiz = saved.slides[5];
-    check('editor saved the quiz question', quiz.options.length === 4 && quiz.seconds === 10 && quiz.options.find((o) => o.id === quiz.correctId)?.label === 'Jupiter');
+    await add('Quiz');
+    await p.fill('label:has-text("Quiz name") input', 'Planets');
+    await p.fill('input[aria-label="Question 1"]', 'Which planet is the largest?');
+    await p.fill('input[aria-label="Option 1"]', 'Earth');
+    await p.fill('input[aria-label="Option 2"]', 'Jupiter');
+    await p.click('button:has-text("Add option")');
+    await p.fill('input[aria-label="Option 3"]', 'Mars');
+    await p.check('input[aria-label="Option 2 is correct"]');
+    await p.selectOption('label:has-text("Time limit") select', '10');
+    await p.click('button:has-text("Add question")');
+    await p.fill('input[aria-label="Question 2"]', 'Which planet is closest to the sun?');
+    const q2 = p.locator('.sub').nth(1);
+    await q2.locator('input[aria-label="Option 1"]').fill('Mercury');
+    await q2.locator('input[aria-label="Option 2"]').fill('Venus');
+    await q2.locator('select').selectOption('10');
+    await p.waitForSelector('[role="status"]:has-text("Saved")', WAIT);
+    await p.screenshot({ path: path.join(OUT, '01-host-editor.png') });
 
-    // Present
-    await p.click('button:has-text("Present")');
-    await p.waitForURL(/\/control\//);
-    await p.waitForSelector('text=/Code \\d{6}/');
-    const code = (await p.textContent('text=/Code \\d{6}/')).match(/\d{6}/)[0];
-    const sessionId = p.url().split('/').pop();
-    /* The big screen is a projector that is not signed in: its own browser, opened with the
-       display key. Its own context also keeps it in the foreground, so it never stops polling. */
-    const displayKey = await p.evaluate(async (id) => (await (await fetch(`/api/sessions/${id}`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).json()).displayKey, sessionId);
+    let host = (await api('GET', `/api/sessions/${sessionId}`)).body;
+    const [choice, quiz] = host.interactions;
+    check('editor saved the session name, the poll and the quiz',
+      host.title === 'Team offsite' && choice.type === 'choice' && choice.options.map((o) => o.label).join() === 'Goa,Coorg,Lonavala'
+      && quiz.type === 'quiz' && quiz.questions.length === 2 && quiz.questions[0].seconds === 10
+      && quiz.questions[0].options.find((o) => o.id === quiz.questions[0].correctId)?.label === 'Jupiter',
+      host.interactions.map((i) => i.type).join());
+
+    // The other kinds go in through the API, then the screen is reloaded to pick them up.
+    const more = [
+      { id: 'cloud001', type: 'wordcloud', title: 'One word for this year', maxEntries: 3 },
+      { id: 'rate0001', type: 'rating', title: 'How was the quarter?', max: 5, lowLabel: 'Poor', highLabel: 'Excellent' },
+      { id: 'open0001', type: 'open', title: 'What should we change?', maxEntries: 1 },
+      { id: 'rank0001', type: 'ranking', title: 'Order these priorities', options: [{ id: 'rnka', label: 'Speed' }, { id: 'rnkb', label: 'Quality' }, { id: 'rnkc', label: 'Cost' }] },
+      { id: 'surv0001', type: 'survey', title: 'Session feedback', polls: [
+        { id: 'srat0001', type: 'rating', title: 'Overall', max: 5 },
+        { id: 'sopn0001', type: 'open', title: 'One thing to improve', maxEntries: 1 },
+      ] },
+    ];
+    const put = await api('PUT', `/api/sessions/${sessionId}`, { interactions: [choice, ...more, quiz] });
+    check('the API takes the remaining polls', put.status === 200 && put.body.interactions.length === 7, String(put.status));
+    await p.reload();
+    await p.waitForSelector('button.item:has-text("Session feedback")', WAIT);
+    host = (await api('GET', `/api/sessions/${sessionId}`)).body;
+    const code = host.code;
+
+    // ---- The big screen: a projector that is not signed in, opened with the display key
     const projector = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
-    const screen = await projector.newPage(); screen.setDefaultTimeout(20000);
-    screen.on('pageerror', (e) => errs.push('screen: ' + e));
-    await screen.goto(`${BASE}/present/${sessionId}#k=${displayKey}`);
-    await screen.waitForSelector('text=Where should we go?', { timeout: 90000 }); // the dev server compiles this page on first load
+    const wall = await projector.newPage(); wall.setDefaultTimeout(20000);
+    wall.on('pageerror', (e) => errs.push('wall: ' + e));
+    await wall.goto(`${BASE}/present/${sessionId}#k=${host.displayKey}`, FIRST);
+    await wall.waitForSelector(`text=# ${code.slice(0, 3)} ${code.slice(3)}`, FIRST);
+    check('the big screen opens with the display key and shows the code', true);
 
-    // Five phones. The session has a quiz, so each gives a name to join.
-    const NAMES = ['Asha', 'Rohan', 'Meera', 'Kabir', 'Dev'];
+    // ---- Five phones join with the code on the front page
     const phones = [];
     for (let i = 0; i < 5; i++) {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
       const ph = await ctx.newPage(); ph.setDefaultTimeout(20000);
-      ph.on('pageerror', (e) => errs.push('phone: ' + e));
-      await ph.goto(`${BASE}/`);
+      ph.on('pageerror', (e) => errs.push(`phone ${i}: ` + e));
+      await ph.goto(`${BASE}/`, FIRST);
       await ph.fill('#code', code);
-      await ph.click('button:has-text("Join")');
-      await ph.fill('label:has-text("Name") input', NAMES[i]);
-      if (i === 0) {
-        const noName = await ph.evaluate(async (sid) => (await fetch(`/api/live/${sid}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token') }) })).status, sessionId);
-        check('quiz session: joining without a name is refused', noName === 400, String(noName));
-      }
-      await ph.click('button:has-text("Join")');
-      await ph.waitForSelector('text=Where should we go?');
+      await ph.click('button[aria-label="Join"]');
+      await ph.waitForSelector('button[role="tab"]:has-text("Q&A")', FIRST);
       phones.push(ph);
     }
-    await phones[0].screenshot({ path: path.join(OUT, '02-phone-choice.png') });
+    const phoneApi = (ph, method, url, body) => ph.evaluate(async ({ method, url, body }) => {
+      const token = localStorage.getItem('la-token');
+      const r = await fetch(url.replace('{t}', token), { method, headers: { 'content-type': 'application/json' }, body: method === 'GET' ? undefined : JSON.stringify({ token, ...body }) });
+      return { status: r.status, body: await r.json().catch(() => null) };
+    }, { method, url, body });
+    await wall.waitForFunction(() => document.querySelector('.wall aside > .num')?.textContent.trim() === '5', null, WAIT);
+    check('five phones joined without an account', true);
+    await phones[0].screenshot({ path: path.join(OUT, '02-phone-qa-empty.png') });
 
-    // Slide 1: choice
-    const picks = ['Goa', 'Goa', 'Coorg', 'Goa', 'Lonavala'];
-    for (let i = 0; i < 5; i++) { await phones[i].click(`button:has-text("${picks[i]}")`); await phones[i].click('button:has-text("Submit")'); await phones[i].waitForSelector('text=Sent'); }
-    await screen.waitForSelector('text=5 answered', { timeout: 8000 });
-    const scr1 = await screen.textContent('main');
-    check('big screen: choice counts live', /Goa\s*3\D+60%/.test(scr1) && /Coorg\s*1\D+20%/.test(scr1), scr1.slice(0, 200));
-    check('big screen: 5 joined', /5 joined/.test(scr1));
-    await screen.screenshot({ path: path.join(OUT, '03-screen-choice.png') });
-    // A second submit from the same phone is refused by the server
-    const dup = await phones[0].evaluate(async ({ sid, slideId }) => {
-      const r = await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token'), slideId, answer: { optionIds: [] } }) });
-      return r.status;
-    }, { sid: sessionId, slideId: saved.slides[0].id });
-    check('duplicate or empty answer refused', dup === 400 || dup === 409, String(dup));
-
-    // Slide 2: word cloud (via the control view's Next)
-    await p.click('button:has-text("Next")');
-    for (const ph of phones) await ph.waitForSelector('text=One word for this year');
-    const words = [['Growth', 'trust'], ['growth'], ['Trust.'], ['speed'], ['growth']];
-    for (let i = 0; i < 5; i++) for (const w of words[i]) { await phones[i].fill('input[aria-label="Your word"]', w); await phones[i].click('button:has-text("Submit")'); await phones[i].waitForTimeout(250); }
-    await screen.waitForSelector('.cloud span:has-text("speed")');
-    const cloud = await screen.$$eval('.cloud span', (s) => s.map((x) => x.textContent));
-    check('word cloud merges case and punctuation', cloud[0] === 'growth' && cloud.includes('trust') && cloud.length === 3, cloud.join(','));
-    await screen.screenshot({ path: path.join(OUT, '04-screen-cloud.png') });
-
-    // Slide 3: rating, with results hidden then shown
-    await p.click('button:has-text("Next")');
-    await p.click('button:has-text("Results shown")');
-    for (const ph of phones) await ph.waitForSelector('text=How was the quarter?');
-    const ratings = [5, 4, 4, 3, 5];
-    for (let i = 0; i < 5; i++) { await phones[i].click(`form button.num:text-is("${ratings[i]}")`); await phones[i].click('button:has-text("Submit")'); }
-    await phones[0].waitForSelector('text=Sent');
-    const hiddenOnPhone = await phones[0].$('.bars');
-    check('results hidden: phones see no results', !hiddenOnPhone);
-    await p.click('button:has-text("Results hidden")');
-    await screen.waitForSelector('text=4.2');
-    check('rating average on the big screen', true);
-    await phones[1].waitForSelector('.bars', { timeout: 8000 }).catch(() => {});
-    check('results shown again: phones see them', !!(await phones[1].$('.bars')));
-    await screen.screenshot({ path: path.join(OUT, '05-screen-rating.png') });
-
-    // Slide 4: open text, then lock
-    await p.click('button:has-text("Next")');
-    for (const ph of phones) await ph.waitForSelector('text=What should we change?');
-    for (let i = 0; i < 3; i++) { await phones[i].fill('textarea', `Idea number ${i + 1}`); await phones[i].click('button:has-text("Submit")'); }
-    await p.click('button:has-text("Close answers")');
-    await phones[4].waitForSelector('text=Answers closed', { timeout: 8000 });
-    check('locking closes answers on phones', true);
-    await screen.waitForSelector('.texts > div >> nth=2');
-    check('open answers on the big screen', (await screen.$$('.texts > div')).length === 3);
-    await screen.screenshot({ path: path.join(OUT, '06-screen-open.png') });
-    await phones[4].screenshot({ path: path.join(OUT, '07-phone-locked.png') });
-
-    // Slide 5: Q&A with moderation
-    await p.click('button:has-text("Next")');
-    for (const ph of phones) await ph.waitForSelector('text=Questions for the team');
+    // ---- Q&A: open for the whole session
     const Q1 = 'Will targets change mid-year?', Q2 = 'When is the new CRM live?';
     await phones[0].fill('textarea[aria-label="Your question"]', Q1);
-    await phones[0].fill('label:has-text("Name") input', 'Asha');
-    await phones[0].click('button:text-is("Ask")');
-    await phones[0].waitForSelector('text=Waiting for approval');
+    await phones[0].uncheck('label:has-text("Ask anonymously") input');
+    await phones[0].fill('input[aria-label="Your name"]', 'Asha');
+    await phones[0].click('form button:has-text("Send")');
+    for (const ph of phones) await ph.waitForSelector(`.question:has-text("${Q1}")`, WAIT);
+    check('Q&A: a question reaches every phone, with the name given', (await phones[3].textContent('.question .name')) === 'Asha');
+    for (const i of [1, 2, 3]) await phones[i].click(`.question:has-text("${Q1}") button.votes`);
+    await wall.waitForFunction((t) => [...document.querySelectorAll('.wq')].some((e) => e.textContent.includes(t) && e.querySelector('.head .num').textContent.trim() === '3'), Q1, WAIT);
+    check('Q&A: upvotes are counted on the big screen', true);
+    const list = (await phoneApi(phones[1], 'GET', `/api/live/${sessionId}/qa?t={t}`)).body.questions;
+    const dup = await phoneApi(phones[1], 'POST', `/api/live/${sessionId}/qa/${list[0].id}/vote`, {});
+    check('Q&A: a second upvote from the same phone is refused', dup.status === 409 && list[0].votes === 3, `${dup.status}:${list[0].votes}`);
+    check('Q&A: no phone is sent another person\'s token', !JSON.stringify(list).includes('token'));
+
+    // Review before showing
+    await p.check('label.switch:has-text("Review questions") input');
+    await p.waitForSelector('[role="status"]:has-text("Saved")', WAIT);
     await phones[1].fill('textarea[aria-label="Your question"]', Q2);
-    await phones[1].check('label:has-text("Ask anonymously") input');
-    await phones[1].click('button:text-is("Ask")');
-    await phones[1].waitForSelector('text=Waiting for approval');
-    await p.waitForSelector(`section[aria-label="Waiting"] .question:has-text("${Q2}")`, { timeout: 8000 });
-    check('Q&A: waiting questions reach the control view only', (await p.$$('section[aria-label="Waiting"] .question')).length === 2 && (await phones[2].$$('.question')).length === 0 && (await screen.$$('.question')).length === 0);
-    await p.screenshot({ path: path.join(OUT, '10-control-qa-waiting.png') });
-    await p.click(`section[aria-label="Waiting"] .question:has-text("${Q1}") button:has-text("Approve")`);
-    await p.click(`section[aria-label="Waiting"] .question:has-text("${Q2}") button:has-text("Approve")`);
-    for (const ph of phones) await ph.waitForSelector(`.question:has-text("${Q2}")`, { timeout: 8000 });
-    const names = await phones[3].$$eval('.question .muted', (els) => els.map((e) => e.textContent.trim()).sort().join('|'));
-    check('Q&A: approved questions show the name or Anonymous', names === 'Anonymous|Asha', names);
-    for (const i of [2, 3, 4]) await phones[i].click(`.question:has-text("${Q1}") button`);
-    await phones[2].click(`.question:has-text("${Q2}") button`);
-    await screen.waitForSelector(`.question:has-text("${Q1}") >> text=▲ 3`, { timeout: 8000 });
-    check('Q&A: upvotes counted on the big screen', true);
-    const dupVote = await phones[2].evaluate(async ({ sid, slideId }) => {
-      const token = localStorage.getItem('la-token');
-      const list = (await (await fetch(`/api/live/${sid}/qa/${slideId}?t=${token}`)).json()).questions;
-      const top = list.sort((a, b) => b.votes - a.votes)[0];
-      const r = await fetch(`/api/live/${sid}/qa/${slideId}/${top.id}/vote`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
-      return `${r.status}:${top.votes}`;
-    }, { sid: sessionId, slideId: saved.slides[4].id });
-    check('Q&A: a second upvote from the same phone is refused', dupVote === '409:3', dupVote);
-    await p.click(`section[aria-label="Approved"] .question:has-text("${Q1}") button:has-text("Highlight")`);
-    await screen.waitForSelector(`.qa-now:has-text("${Q1}")`, { timeout: 8000 });
-    await phones[4].waitForSelector('text=Answering now', { timeout: 8000 });
-    check('Q&A: the highlighted question is large on the screen and marked on phones', true);
-    await screen.screenshot({ path: path.join(OUT, '11-screen-qa.png') });
-    await phones[4].screenshot({ path: path.join(OUT, '12-phone-qa.png') });
-    await p.click(`section[aria-label="Approved"] .question:has-text("${Q1}") button:has-text("Mark answered")`);
-    await phones[4].waitForSelector('text=Answered', { timeout: 8000 });
-    await screen.waitForSelector('.qa-now', { state: 'detached', timeout: 8000 });
-    check('Q&A: marking answered clears the highlight', true);
-    await p.click(`section[aria-label="Approved"] .question:has-text("${Q2}") button:has-text("Hide")`);
-    await phones[3].waitForSelector(`.question:has-text("${Q2}")`, { state: 'detached', timeout: 8000 });
-    check('Q&A: a hidden question leaves the phones', (await phones[3].$$('.question')).length === 1);
-    const asOther = await p.evaluate(async ({ sid, slideId }) => (await fetch(`/api/sessions/${sid}/qa/${slideId}/x`, { method: 'PATCH', headers: { authorization: 'Bearer dev:someone@else.com', 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve' }) })).status, { sid: sessionId, slideId: saved.slides[4].id });
-    check('Q&A: another account cannot moderate', asOther === 404, String(asOther));
+    await phones[1].click('form button:has-text("Send")');
+    await phones[1].waitForSelector('text=Waiting for review', WAIT);
+    await p.waitForSelector(`.question:has-text("${Q2}") button:has-text("Approve")`, WAIT);
+    check('Q&A: a question waiting for review shows only to its asker and the facilitator',
+      (await phones[2].$$(`.question:has-text("${Q2}")`)).length === 0 && (await wall.$$(`.wq:has-text("${Q2}")`)).length === 0);
+    await p.screenshot({ path: path.join(OUT, '03-host-qa-review.png') });
+    await p.click(`.question:has-text("${Q2}") button:has-text("Approve")`);
+    for (const ph of phones) await ph.waitForSelector(`.question:has-text("${Q2}")`, WAIT);
+    const names = await phones[3].$$eval('.question .name', (els) => els.map((e) => e.textContent).sort().join('|'));
+    check('Q&A: an approved question shows to everyone, as Anonymous when asked that way', names === 'Anonymous|Asha', names);
 
-    // Slide 6: quiz question, timed on the server
-    await p.click('button:has-text("Next")');
-    for (const ph of phones) await ph.waitForSelector('text=Which planet is the largest?');
-    await phones[0].waitForSelector('text=5 players', { timeout: 8000 });
-    await screen.waitForSelector('text=5 players', { timeout: 8000 });
-    const before = await phones[0].evaluate(async (sid) => await (await fetch(`/api/live/${sid}?t=${localStorage.getItem('la-token')}`)).json(), sessionId);
-    check('quiz: the phone is not sent the correct answer', before.slide.correctId === '' && !before.state.quiz);
-    const early = await phones[4].evaluate(async ({ sid, slideId, optionId }) => (await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token'), slideId, answer: { optionId } }) })).status, { sid: sessionId, slideId: quiz.id, optionId: quiz.correctId });
-    check('quiz: an answer before the start is refused', early === 409, String(early));
-    await p.click('button:has-text("Start question")');
-    for (const ph of phones) await ph.waitForSelector('.opt:has-text("Jupiter"):not([disabled])', { timeout: 8000 });
-    await phones[0].screenshot({ path: path.join(OUT, '13-phone-quiz.png') });
-    await phones[0].click('.opt:has-text("Jupiter")');
+    // Reply, highlight, announcement
+    await p.click('.subtabs button:has-text("Live")');
+    await p.click(`.question:has-text("${Q1}") button:has-text("Reply")`);
+    await p.fill('textarea[aria-label="Your reply"]', 'Targets stay as set in April.');
+    await p.click('button:has-text("Send reply")');
+    await phones[4].waitForSelector('.reply:has-text("Targets stay as set in April.")', WAIT);
+    check('Q&A: the facilitator\'s reply shows under the question on phones', true);
+    await p.click(`.question:has-text("${Q1}") button:has-text("Highlight")`);
+    await wall.waitForSelector(`.wq.highlighted:has-text("${Q1}")`, WAIT);
+    await phones[4].waitForSelector(`.question.highlighted:has-text("${Q1}")`, WAIT);
+    check('Q&A: the highlighted question stands out on the big screen and on phones', true);
+    await p.fill('input[aria-label="Announcement"]', 'Slides will be shared after the session.');
+    await p.click('button:has-text("Post")');
+    await phones[2].waitForSelector('.announce:has-text("Slides will be shared after the session.")', WAIT);
+    check('Q&A: the announcement shows at the top of the Q&A tab', true);
+    await wall.screenshot({ path: path.join(OUT, '04-wall-qa.png') });
+    await phones[4].screenshot({ path: path.join(OUT, '05-phone-qa.png') });
+    await p.click(`.question:has-text("${Q1}") button:has-text("Mark answered")`);
+    await wall.waitForSelector('.wq.highlighted', { state: 'detached', timeout: 10000 });
+    check('Q&A: marking a question answered clears the highlight', true);
+
+    // Closing questions
+    await p.uncheck('label.switch:has-text("Questions open") input');
+    await phones[3].waitForSelector('text=Questions closed', WAIT);
+    const lateAsk = await phoneApi(phones[3], 'POST', `/api/live/${sessionId}/qa`, { text: 'Too late?', anonymous: true });
+    await phones[3].click(`.question:has-text("${Q2}") button.votes`);
+    await phones[0].waitForFunction((t) => [...document.querySelectorAll('.question')].some((e) => e.textContent.includes(t) && e.querySelector('.votes').textContent.trim() === '1'), Q2, WAIT);
+    check('Q&A: closed questions refuse a new one and still take upvotes', lateAsk.status === 409, String(lateAsk.status));
+    await p.check('label.switch:has-text("Questions open") input');
+
+    // ---- Multiple choice: start, vote, change a vote, lock, hide results
+    const early = await phoneApi(phones[0], 'POST', `/api/live/${sessionId}/answer`, { pollId: choice.id, answer: { optionIds: [choice.options[0].id] } });
+    check('polls: an answer before the poll is started is refused', early.status === 409, String(early.status));
+    await p.click('button[aria-label="Start Where should we go?"]');
+    for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("Where should we go?")', WAIT);
+    check('polls: starting a poll brings it up on every phone', true);
+    await phones[0].screenshot({ path: path.join(OUT, '06-phone-poll.png') });
+    const picks = ['Goa', 'Goa', 'Coorg', 'Goa', 'Lonavala'];
+    for (let i = 0; i < 5; i++) { await phones[i].click(`label.option:has-text("${picks[i]}")`); await phones[i].click('button:has-text("Send")'); await phones[i].waitForSelector('text=Sent', WAIT); }
+    const bars = () => wall.$$eval('.bar', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
+    await wall.waitForFunction(() => /Goa\s*60%/.test(document.querySelector('.panel')?.textContent ?? ''), null, WAIT);
+    check('polls: the big screen shows the shares as votes arrive', /Goa\s?60%.*Coorg\s?20%.*Lonavala\s?20%/.test(await bars()), await bars());
+    await wall.screenshot({ path: path.join(OUT, '07-wall-poll.png') });
+    await phones[0].click('button:has-text("Edit response")');
+    await phones[0].click('label.option:has-text("Coorg")');
+    await phones[0].click('button:has-text("Send")');
+    await wall.waitForFunction(() => /Goa\s*40%/.test(document.querySelector('.panel')?.textContent ?? ''), null, WAIT);
+    host = (await api('GET', `/api/sessions/${sessionId}`)).body;
+    check('polls: a changed vote moves to the new option and the person is still counted once',
+      /Goa\s?40%.*Coorg\s?40%.*Lonavala\s?20%/.test(await bars()) && host.tally.people === 5 && Object.values(host.tally.counts).reduce((a, n) => a + n, 0) === 5, `${await bars()} · ${host.tally.people} people`);
+    await p.click('button:has-text("Lock voting")');
+    await phones[1].waitForSelector('text=Voting closed', WAIT);
+    const locked = await phoneApi(phones[1], 'POST', `/api/live/${sessionId}/answer`, { pollId: choice.id, answer: { optionIds: [choice.options[2].id] } });
+    check('polls: locked voting refuses a change', locked.status === 409, String(locked.status));
+    await p.click('button:has-text("Results shown")');
+    await wall.waitForSelector('text=Results are hidden', WAIT);
+    const hidden = (await phoneApi(phones[2], 'GET', `/api/live/${sessionId}?t={t}`)).body;
+    check('polls: hidden results are kept from phones and the big screen', hidden.active.tally === null && (await wall.$$('.bar')).length === 0);
+    await p.click('button:has-text("Results hidden")');
+
+    // ---- Word cloud, rating, open text, ranking
+    await p.click('button[aria-label="Start One word for this year"]');
+    for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("One word for this year")', WAIT);
+    const words = [['Growth', 'trust'], ['growth'], ['Trust.'], ['speed'], ['growth']];
+    for (let i = 0; i < 5; i++) for (const w of words[i]) { await phones[i].fill('input[aria-label="Your word"]', w); await phones[i].click('button:has-text("Send")'); await phones[i].waitForFunction(() => document.querySelector('input[aria-label="Your word"]')?.value === '', null, WAIT); }
+    await wall.waitForSelector('.cloud span:has-text("speed")', WAIT);
+    const cloud = await wall.$$eval('.cloud span', (s) => s.map((x) => x.textContent));
+    check('word cloud: words are merged whatever their case and punctuation', cloud[0] === 'growth' && cloud.includes('trust') && cloud.length === 3, cloud.join(','));
+
+    await p.click('button[aria-label="Start How was the quarter?"]');
+    for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("How was the quarter?")', WAIT);
+    const ratings = [5, 4, 4, 3, 5];
+    for (let i = 0; i < 5; i++) { await phones[i].click(`.scale button:text-is("${ratings[i]}")`); await phones[i].click('button:has-text("Send")'); }
+    await wall.waitForSelector('.average:has-text("4.2")', WAIT);
+    check('rating: the average shows on the big screen', true);
+
+    await p.click('button[aria-label="Start What should we change?"]');
+    for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("What should we change?")', WAIT);
+    for (let i = 0; i < 3; i++) { await phones[i].fill('textarea[aria-label="Your answer"]', `Idea number ${i + 1}`); await phones[i].click('button:has-text("Send")'); }
+    await wall.waitForSelector('.texts > div >> nth=2', WAIT);
+    const blocked = await phoneApi(phones[4], 'POST', `/api/live/${sessionId}/answer`, { pollId: 'open0001', answer: { text: 'this is shit' } });
+    check('open text: answers show on the big screen, and a blocked word is refused', (await wall.$$('.texts > div')).length === 3 && blocked.status === 400, String(blocked.status));
+
+    await p.click('button[aria-label="Start Order these priorities"]');
+    for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("Order these priorities")', WAIT);
+    // Phones 0-2 move Quality to the top; phones 3-4 send the order as listed (Speed, Quality, Cost).
+    for (let i = 0; i < 5; i++) {
+      if (i < 3) await phones[i].click('.rank-row:has-text("Quality") button[aria-label="Move up"]');
+      await phones[i].click('button:has-text("Send")');
+      await phones[i].waitForSelector('text=Sent', WAIT);
+    }
+    await wall.waitForFunction(() => document.querySelectorAll('.bar').length === 3 && /^1\.\s*Quality/.test(document.querySelector('.bar')?.textContent ?? ''), null, WAIT);
+    const order = await wall.$$eval('.bar', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
+    check('ranking: the big screen shows the combined order with points', /1\. Quality\s?13.*2\. Speed\s?12.*3\. Cost\s?5/.test(order), order);
+    await wall.screenshot({ path: path.join(OUT, '08-wall-ranking.png') });
+
+    // ---- Survey: every question on one page, one Send
+    await p.click('button[aria-label="Start Session feedback"]');
+    for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("Session feedback")', WAIT);
+    for (let i = 0; i < 2; i++) {
+      await phones[i].click('.scale button:text-is("4")');
+      await phones[i].fill('textarea[aria-label="Your answer"]', `Shorter breaks ${i + 1}`);
+      await phones[i].click('button:has-text("Send")');
+      await phones[i].waitForSelector('text=Sent', WAIT);
+    }
+    await phones[0].screenshot({ path: path.join(OUT, '09-phone-survey.png') });
+    await p.waitForFunction(() => (document.body.textContent.match(/2 answered/g) ?? []).length >= 2, null, WAIT);
+    check('survey: sent in one go and counted for the facilitator', true);
+
+    // ---- Quiz: names, timed questions, reveal, leaderboard
+    const [qq1] = quiz.questions;
+    await p.click('button[aria-label="Start Planets"]');
+    const NAMES = ['Asha', 'Rohan', 'Meera', 'Kabir', 'Dev'];
+    for (let i = 0; i < 5; i++) {
+      await phones[i].waitForSelector('.poll-label:has-text("Planets")', WAIT);
+      if (i === 0) continue; // Asha gave her name with her question
+      await phones[i].fill('label:has-text("Your name") input', NAMES[i]);
+      await phones[i].click('button:has-text("Join quiz")');
+      await phones[i].waitForSelector(`.notice:has-text("${NAMES[i]}")`, WAIT);
+    }
+    await wall.waitForSelector('.panel:has-text("Planets")', WAIT);
+    const beforeStart = await phoneApi(phones[4], 'POST', `/api/live/${sessionId}/answer`, { pollId: qq1.id, answer: { optionId: qq1.correctId } });
+    check('quiz: an answer before the first question is refused', beforeStart.status === 409, String(beforeStart.status));
+    await p.click('button:has-text("Start quiz")');
+    for (const ph of phones) await ph.waitForSelector('.option:has-text("Jupiter"):not([disabled])', WAIT);
+    const sent = (await phoneApi(phones[0], 'GET', `/api/live/${sessionId}?t={t}`)).body;
+    check('quiz: the phone is not sent the correct answer', sent.active.question.correctId === '' && !sent.state.quiz.correct && !sent.active.tally);
+    await phones[0].screenshot({ path: path.join(OUT, '10-phone-quiz.png') });
+    await phones[0].click('.option:has-text("Jupiter")');
     await phones[1].waitForTimeout(1500);
-    await phones[1].click('.opt:has-text("Jupiter")');
+    await phones[1].click('.option:has-text("Jupiter")');
     await phones[2].waitForTimeout(1500);
-    await phones[2].click('.opt:has-text("Jupiter")');
-    await phones[3].click('.opt:has-text("Mars")');
-    await screen.waitForSelector('text=4 answered', { timeout: 8000 });
-    check('quiz: the big screen shows the countdown and no counts before the reveal', !!(await screen.$('.timer')) && (await screen.$$('.bar-track')).length === 0);
-    await screen.screenshot({ path: path.join(OUT, '14-screen-quiz-open.png') });
-    await p.click('button:has-text("Reveal")');
-    await screen.waitForSelector('.bar.correct:has-text("Jupiter")', { timeout: 8000 });
-    const spread = await screen.textContent('.bars');
-    check('quiz: the reveal marks the correct answer and shows the spread', /Jupiter ✓\s*3/.test(spread) && /Mars\s*1/.test(spread), spread);
-    await screen.screenshot({ path: path.join(OUT, '15-screen-quiz-reveal.png') });
-    await phones[0].waitForSelector('text=Rank 1 / 4', { timeout: 8000 });
-    await phones[1].waitForSelector('text=Rank 2 / 4', { timeout: 8000 });
-    await phones[3].waitForSelector('text=Incorrect', { timeout: 8000 });
-    await phones[4].waitForSelector('text=No answer', { timeout: 8000 });
-    const p0 = await phones[0].textContent('main'), p1 = await phones[1].textContent('main');
-    const pts = (t) => Number((t.match(/\+([\d,]+)/) || [])[1]?.replace(/,/g, '') ?? -1);
-    check('quiz: correct answers earn 500 to 1,000 points, more for the faster one', /Correct/.test(p0) && pts(p0) > pts(p1) && pts(p1) >= 500 && pts(p0) <= 1000, `${pts(p0)} > ${pts(p1)}`);
-    await phones[0].screenshot({ path: path.join(OUT, '16-phone-quiz-result.png') });
-    const late = await phones[4].evaluate(async ({ sid, slideId, optionId }) => (await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: localStorage.getItem('la-token'), slideId, answer: { optionId } }) })).status, { sid: sessionId, slideId: quiz.id, optionId: quiz.correctId });
-    check('quiz: an answer after the reveal is refused', late === 409, String(late));
+    await phones[2].click('.option:has-text("Jupiter")');
+    await phones[3].click('.option:has-text("Mars")');
+    await wall.waitForSelector('text=4 answered', WAIT);
+    check('quiz: the big screen shows the countdown and no votes while the question is open', !!(await wall.$('.timer')) && (await wall.$$('.bar-fill')).length === 0);
+    await wall.screenshot({ path: path.join(OUT, '11-wall-quiz-open.png') });
+    const twice = await phoneApi(phones[0], 'POST', `/api/live/${sessionId}/answer`, { pollId: qq1.id, answer: { optionId: qq1.options[0].id } });
+    check('quiz: a second answer from the same phone is refused', twice.status === 409, String(twice.status));
+    await p.click('button:has-text("Reveal answer")');
+    await wall.waitForSelector('.bar.correct:has-text("Jupiter")', WAIT);
+    const spread = (await wall.textContent('.bars')).replace(/\s+/g, ' ');
+    check('quiz: the reveal marks the correct answer and shows how people voted', /Jupiter ✓\s*3/.test(spread) && /Mars\s*1/.test(spread), spread);
+    await wall.screenshot({ path: path.join(OUT, '12-wall-quiz-reveal.png') });
+    await phones[0].waitForSelector('text=1 / 4', WAIT);
+    await phones[1].waitForSelector('text=2 / 4', WAIT);
+    await phones[3].waitForSelector('text=Incorrect', WAIT);
+    await phones[4].waitForSelector('text=No answer', WAIT);
+    const pts = async (ph) => Number(((await ph.textContent('.result-line')).match(/\+([\d,]+)/) || [])[1]?.replace(/,/g, '') ?? -1);
+    const [a0, a1] = [await pts(phones[0]), await pts(phones[1])];
+    check('quiz: a correct answer earns 500 to 1,000 points, more for the faster one', a0 > a1 && a1 >= 500 && a0 <= 1000, `${a0} > ${a1}`);
+    await phones[0].screenshot({ path: path.join(OUT, '13-phone-quiz-result.png') });
+    const late = await phoneApi(phones[4], 'POST', `/api/live/${sessionId}/answer`, { pollId: qq1.id, answer: { optionId: qq1.correctId } });
+    check('quiz: an answer after the reveal is refused', late.status === 409, String(late.status));
 
-    // Slide 7: the final leaderboard
-    await p.click('button:has-text("Next")');
-    await screen.waitForSelector('.podium .place-1:has-text("Asha")', { timeout: 8000 });
-    const places = await screen.$$eval('.podium .place strong', (els) => els.map((e) => e.textContent).join(','));
-    check('quiz: the podium is in points order', places === 'Asha,Rohan,Meera', places);
-    await phones[1].waitForSelector('text=Rank 2 / 4', { timeout: 8000 });
+    await p.click('button:has-text("Next question")');
+    for (const ph of phones) await ph.waitForSelector('.option:has-text("Mercury"):not([disabled])', WAIT);
+    await phones[1].click('.option:has-text("Mercury")');
+    await phones[4].click('.option:has-text("Mercury")');
+    await phones[0].click('.option:has-text("Venus")');
+    await wall.waitForSelector('text=3 answered', WAIT);
+    await p.click('button:has-text("Reveal answer")');
+    await wall.waitForSelector('.bar.correct:has-text("Mercury")', WAIT);
+    await p.click('button:has-text("Leaderboard")');
+    await wall.waitForSelector('.board-row.first:has-text("Rohan")', WAIT);
+    const board = await wall.$$eval('.board-row', (els) => els.map((e) => e.children[1].textContent).join(','));
+    check('quiz: the final leaderboard is in points order', board.startsWith('Rohan,') && board.split(',').length === 5, board);
+    await phones[1].waitForSelector('text=1 / 5', WAIT);
     check('quiz: a phone shows its own place', true);
-    await screen.screenshot({ path: path.join(OUT, '17-screen-podium.png') });
+    await wall.screenshot({ path: path.join(OUT, '14-wall-leaderboard.png') });
+    await phones[1].screenshot({ path: path.join(OUT, '15-phone-leaderboard.png') });
+    await p.screenshot({ path: path.join(OUT, '16-host-quiz.png') });
+    const again = await api('PATCH', `/api/sessions/${sessionId}`, { action: 'quiz-next' });
+    check('quiz: a finished quiz does not start again', again.status === 409, String(again.status));
 
-    // Slide 8 and end
-    await p.click('button:has-text("Next")');
-    await screen.waitForSelector('h1:has-text("Thank you")');
-    p.once('dialog', (d) => d.accept());
-    await p.click('button:has-text("End session")');
-    await p.waitForURL(/\/app\/sessions\//);
-    await phones[0].waitForSelector('text=Session ended', { timeout: 8000 });
-    check('phones see the session end', true);
-    await p.waitForSelector('text=Download CSV');
-    await p.bringToFront();
-    await p.screenshot({ path: path.join(OUT, '08-results.png'), timeout: 60000 });
+    // ---- The ways around the rules that must be refused
+    const other = { authorization: 'Bearer dev:someone@else.com', 'content-type': 'application/json' };
+    const key = { 'x-display-key': host.displayKey, 'content-type': 'application/json' };
+    const tries = [
+      (await api('GET', `/api/sessions/${sessionId}`, undefined, other)).status,
+      (await api('GET', `/api/sessions/${sessionId}/results`, undefined, other)).status,
+      (await api('PATCH', `/api/sessions/${sessionId}`, { action: 'activate', id: null }, other)).status,
+      (await api('PUT', `/api/sessions/${sessionId}`, { title: 'Taken' }, other)).status,
+      (await api('DELETE', `/api/sessions/${sessionId}`, undefined, other)).status,
+      (await api('PATCH', `/api/sessions/${sessionId}/qa/x`, { action: 'approve' }, other)).status,
+    ];
+    check('another account gets "not found" for this session, whatever it tries', tries.every((s) => s === 404), tries.join());
+    const withKey = [
+      (await api('GET', `/api/sessions/${sessionId}?view=wall`, undefined, key)).status,
+      (await api('GET', `/api/sessions/${sessionId}`, undefined, key)).status,
+      (await api('PATCH', `/api/sessions/${sessionId}`, { action: 'activate', id: null }, key)).status,
+      (await api('GET', `/api/sessions/${sessionId}/results`, undefined, key)).status,
+    ];
+    check('the display key opens the big screen and nothing else', withKey.join() === '200,401,401,401', withKey.join());
+    const wallData = JSON.stringify((await api('GET', `/api/sessions/${sessionId}?view=wall`, undefined, key)).body);
+    check('the big screen is sent no display key, token or waiting question', !wallData.includes(host.displayKey) && !wallData.includes('token') && !wallData.includes('"pending"'));
+    const forged = await phones[0].evaluate(async (sid) => (await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'x', pollId: 'y', answer: {} }) })).status, sessionId);
+    const stranger = await phones[0].evaluate(async (sid) => (await fetch(`/api/live/${sid}/qa`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'never-joined-0000000001', text: 'Hello?', anonymous: true }) })).status, sessionId);
+    check('a made-up or unjoined phone is refused', forged === 400 && stranger === 403, `${forged},${stranger}`);
+
+    // ---- Results and downloads
+    await p.click('a:has-text("Results")');
+    await p.waitForURL(/\/results$/, FIRST);
+    await p.waitForSelector('text=Download CSV', FIRST);
+    await p.waitForSelector('h2:has-text("Leaderboard")', WAIT);
+    await p.screenshot({ path: path.join(OUT, '17-results.png'), fullPage: true });
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Download CSV")')]);
     const csv = fs.readFileSync(await dl.path(), 'utf8');
-    check('CSV has every slide', /"Goa","3"/.test(csv) && /"growth","3"/.test(csv) && /"Idea number 2"/.test(csv) && /"5","2"/.test(csv), csv.split('\r\n').slice(0, 4).join(' | '));
-    check('CSV has the questions', csv.includes('"Will targets change mid-year?","Asha","3","Answered"') && csv.includes('"When is the new CRM live?","Anonymous","1","Hidden"'));
-    check('CSV has the quiz and the leaderboard', csv.includes('"Jupiter","3","Yes"') && /"Leaderboard"\r\n"Rank","Name","Points"\r\n"1","Asha","\d+"/.test(csv));
+    check('CSV has every poll', /"Goa","2"/.test(csv) && /"Coorg","2"/.test(csv) && /"growth","3"/.test(csv) && /"Idea number 2"/.test(csv) && /"5","2"/.test(csv) && /"Quality","13"/.test(csv) && /"Survey","Session feedback"/.test(csv), csv.split('\r\n').slice(0, 4).join(' | '));
+    check('CSV has the quiz, the leaderboard and the questions with their replies',
+      csv.includes('"Jupiter","3","Yes"') && /"Leaderboard","Planets"\r\n"Rank","Name","Points"\r\n"1","Rohan","\d+"/.test(csv)
+      && csv.includes(`"${Q1}","Asha","3","Answered","Targets stay as set in April."`) && csv.includes(`"${Q2}","Anonymous","1","Approved"`));
     const [xl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Download Excel")')]);
     const xlsx = fs.readFileSync(await xl.path());
     check('Excel file downloads', xl.suggestedFilename().endsWith('.xlsx') && xlsx.length > 4000 && xlsx.subarray(0, 2).toString() === 'PK', `${xl.suggestedFilename()} ${xlsx.length} bytes`);
-    const full = await p.evaluate(async (id) => await (await fetch(`/api/sessions/${id}/results`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).text(), sessionId);
-    check('results carry no phone tokens', !/"token"/.test(full) && full.includes('"points"'));
-    const codeAfter = await phones[0].evaluate(async (c) => (await fetch(`/api/join/${c}`)).status, code);
-    check('code freed after the end', codeAfter === 404, String(codeAfter));
+    const full = JSON.stringify((await api('GET', `/api/sessions/${sessionId}/results`)).body);
+    check('results carry no phone tokens', !/"token"/.test(full));
 
-    // Survey run. A survey has no presenter, so the quiz slides come out first.
-    await p.goto(`${BASE}/app/p/${presId}`);
-    await p.click('button:has-text("Run as survey")');
-    await p.waitForSelector('text=Quiz slides need a presenter');
-    check('survey: a deck with quiz slides is refused', true);
-    for (const title of ['Which planet is the largest?', 'Leaderboard']) {
-      await p.click(`button.thumb:has-text("${title}")`);
-      await p.click('button:has-text("Delete slide")');
-    }
-    await p.waitForTimeout(900);
-    await p.waitForSelector('text=Saved');
-    await p.click('button:has-text("Run as survey")');
-    await p.waitForURL(/\/control\//);
-    const code2 = (await p.textContent('text=/Code \\d{6}/')).match(/\d{6}/)[0];
-    const sp = phones[2];
-    await sp.goto(`${BASE}/s/${code2}`);
-    await sp.waitForSelector('text=Where should we go?');
-    await sp.click('button:has-text("Coorg")'); await sp.click('button:has-text("Submit")'); await sp.waitForSelector('text=Sent');
-    await sp.click('button:has-text("Next")');
-    await sp.click('button:has-text("Next")');
-    await sp.click('form button.num:text-is("2")'); await sp.click('button:has-text("Submit")'); await sp.waitForSelector('text=Sent');
-    await sp.click('button:has-text("Back")'); await sp.click('button:has-text("Back")');
-    check('survey: answered slide shows as sent when going back', !!(await sp.$('text=Sent')));
-    await sp.screenshot({ path: path.join(OUT, '09-phone-survey.png') });
-    const res = await p.evaluate(async (id) => (await (await fetch(`/api/sessions/${id}/results`, { headers: { authorization: 'Bearer dev:walk@example.com' } })).json()), p.url().split('/').pop());
-    check('survey results recorded', res.rows[0].tally.counts[saved.slides[0].options[1].id] === 1 && res.rows[2].tally.counts['2'] === 1);
+    // ---- Duplicate, end, delete
+    const copy = await api('POST', '/api/sessions', { from: sessionId });
+    const copied = (await api('GET', `/api/sessions/${copy.body.session.id}`)).body;
+    check('a duplicate has the same polls, a new code and no answers', copy.status === 201 && copied.interactions.length === 7 && copied.code !== code && Object.keys(copied.answered).length === 0 && copied.questions.length === 0);
+    await p.goto(`${BASE}/app/sessions/${sessionId}`);
+    await p.waitForSelector('input[aria-label="Session name"]', WAIT);
+    await p.click('button[aria-label="More"]');
+    await p.click('button:has-text("End session")');
+    await phones[0].click('button[role="tab"]:has-text("Q&A")');
+    await phones[0].waitForSelector('text=Session ended', WAIT);
+    await wall.waitForSelector('text=Session ended', WAIT);
+    const afterEnd = [
+      (await phoneApi(phones[0], 'POST', `/api/live/${sessionId}/qa`, { text: 'After the end?', anonymous: true })).status,
+      (await phoneApi(phones[0], 'POST', `/api/live/${sessionId}/answer`, { pollId: choice.id, answer: { optionIds: [choice.options[0].id] } })).status,
+      (await api('GET', `/api/join/${code}`)).status,
+    ];
+    check('an ended session takes no questions or answers, and its code is freed', afterEnd.join() === '409,409,404', afterEnd.join());
 
-    // Someone else's session is hidden
-    const other = await p.evaluate(async (id) => (await fetch(`/api/sessions/${id}/results`, { headers: { authorization: 'Bearer dev:someone@else.com' } })).status, sessionId);
-    check("another account cannot read this session's results", other === 404, String(other));
-    // Delete the account: everything it owns goes
-    await p.goto(`${BASE}/app/account`);
+    await p.goto(`${BASE}/app`);
+    await p.waitForSelector('h1:has-text("Sessions")', FIRST);
+    await p.screenshot({ path: path.join(OUT, '18-dashboard.png') });
+    await p.goto(`${BASE}/app/account`, FIRST);
     await p.click('button:has-text("Delete account")');
-    await p.waitForSelector('text=Its presentations, sessions and all answers are removed.');
-    await p.screenshot({ path: path.join(OUT, '18-account-delete.png') });
+    await p.waitForSelector('text=Its sessions and all their answers are removed.');
     await p.click('section:has-text("Delete this account?") button.danger');
-    await p.waitForURL(`${BASE}/`);
-    const left = await p.evaluate(async (id) => {
-      const h = { authorization: 'Bearer dev:walk@example.com' };
-      const pres = (await (await fetch('/api/presentations', { headers: h })).json()).presentations.length;
-      const sess = (await (await fetch('/api/sessions', { headers: h })).json()).sessions.length;
-      const results = (await fetch(`/api/sessions/${id}/results`, { headers: h })).status;
-      return `${pres},${sess},${results}`;
-    }, sessionId);
-    check('deleting the account removes its presentations, sessions and results', left === '0,0,404', left);
+    await p.waitForURL(`${BASE}/`, FIRST);
+    const left = `${(await api('GET', '/api/sessions')).body.sessions.length},${(await api('GET', `/api/sessions/${sessionId}/results`)).status}`;
+    check('deleting the account removes its sessions and their results', left === '0,404', left);
+    await p.screenshot({ path: path.join(OUT, '19-front-page.png') });
     check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
-  } catch (e) { check('walk ran to the end', false, String(e).slice(0, 500)); }
+  } catch (e) { check('walk ran to the end', false, String(e).slice(0, 600)); }
   await browser.close();
   const failed = results.filter((x) => !x).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();
-

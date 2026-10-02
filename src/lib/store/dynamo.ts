@@ -2,24 +2,22 @@
 /**
  * The DynamoDB store. One table, no indexes.
  *
- *   PRES#<id>       META                    a presentation
- *   USER#<sub>      PRES#<id>               the owner's list entry for it
  *   USER#<sub>      SESS#<id>               the owner's list entry for a session
- *   SESS#<id>       META                    the session (slides snapshot, state, seq)
+ *   SESS#<id>       META                    the session (interactions, Q&A settings, state, seq)
  *   SESS#<id>       PEOPLE                  the headcount
  *   SESS#<id>       PART#<token>            one person
- *   SESS#<id>       ANS#<slide>#<token>#<n> one answer entry
- *   SESS#<id>       TALLY#<slide>           live counts; each count is a top-level "c:<key>" number
- *   SESS#<id>       QA#<slide>#<qid>        one question; qids sort by time
+ *   SESS#<id>       ANS#<poll>#<token>#<n>  one answer entry
+ *   SESS#<id>       TALLY#<poll>            live counts; each count is a top-level "c:<key>" number
+ *   SESS#<id>       QA#<qid>                one question, with its replies; qids sort by time
  *   SESS#<id>       UPVOTE#<token>#<qid>    one person's upvote on one question
- *   SESS#<id>       SCORE#<token>           one player's quiz points
+ *   SESS#<id>       SCORE#<quiz>#<token>    one player's points in one quiz
  *   CODE#<code>     META                    which live session a code belongs to
  *
  * Counts are top-level attributes rather than a map so `ADD` works on a word nobody has sent yet;
  * a nested map path has to exist before it can be added to.
  *
- * Every SESS# row and the owner's SESS# list entry carry `expiresAt` (epoch seconds), the table's
- * TTL attribute, set LIMITS.keepDays after the row is written. Presentations are kept until deleted.
+ * Every SESS# row and the owner's list entry carry `expiresAt` (epoch seconds), the table's TTL
+ * attribute, set LIMITS.keepDays after the row is written.
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
@@ -68,35 +66,12 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     return { people: Number(i?.people ?? 0), counts };
   };
   const questionFrom = (i): Question | null =>
-    i ? { id: i.id, slideId: i.slideId, token: i.token, text: i.text, name: i.name ?? '', status: i.status, votes: Number(i.votes ?? 0), at: i.at } : null;
-  const scoreFrom = (i): Score => ({ token: i.token, nickname: i.nickname ?? '', total: Number(i.total ?? 0), last: Number(i.last ?? 0), lastSlideId: i.lastSlideId ?? '' });
-  const answerFrom = (i): StoredAnswer => ({ slideId: i.slideId, token: i.token, entry: i.entry, answer: i.answer, at: i.at, ...(i.points === undefined ? {} : { points: Number(i.points) }) });
+    i ? { id: i.id, token: i.token, text: i.text, name: i.name ?? '', status: i.status, votes: Number(i.votes ?? 0), at: i.at, replies: i.replies ?? [] } : null;
+  const scoreFrom = (i): Score => ({ token: i.token, nickname: i.nickname ?? '', total: Number(i.total ?? 0), last: Number(i.last ?? 0), lastId: i.lastId ?? '' });
+  const answerFrom = (i): StoredAnswer => ({ pollId: i.pollId, token: i.token, entry: i.entry, answer: i.answer, at: i.at, ...(i.points === undefined ? {} : { points: Number(i.points) }) });
+  const listEntry = (s: Session) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: s.interactions.length });
 
   return {
-    async listPresentations(ownerSub) {
-      const rows = await queryAll(`USER#${ownerSub}`, 'PRES#');
-      return rows
-        .map((r) => ({ id: r.id, title: r.title, slideCount: r.slideCount, updatedAt: r.updatedAt }))
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    },
-    async getPresentation(id) {
-      const i = await get(`PRES#${id}`, 'META');
-      if (!i) return null;
-      const { PK, SK, ...p } = i;
-      return p;
-    },
-    async putPresentation(p) {
-      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `PRES#${p.id}`, SK: 'META', ...p } }));
-      await ddb.send(new PutCommand({
-        TableName: table,
-        Item: { PK: `USER#${p.ownerSub}`, SK: `PRES#${p.id}`, id: p.id, title: p.title, slideCount: p.slides.length, updatedAt: p.updatedAt },
-      }));
-    },
-    async deletePresentation(p) {
-      await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: `PRES#${p.id}`, SK: 'META' } }));
-      await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${p.ownerSub}`, SK: `PRES#${p.id}` } }));
-    },
-
     async createSession(s) {
       /* Claim the code first. A code row whose session has ended or passed its close time is free. */
       try {
@@ -111,10 +86,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         throw e;
       }
       await ddb.send(new PutCommand({ TableName: table, Item: { PK: `SESS#${s.id}`, SK: 'META', ...s, expiresAt: expiry() } }));
-      await ddb.send(new PutCommand({
-        TableName: table,
-        Item: { PK: `USER#${s.ownerSub}`, SK: `SESS#${s.id}`, id: s.id, code: s.code, title: s.title, status: s.status, mode: s.mode, createdAt: s.createdAt, closesAt: s.closesAt, expiresAt: expiry() },
-      }));
+      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `USER#${s.ownerSub}`, SK: `SESS#${s.id}`, ...listEntry(s), expiresAt: expiry() } }));
       return true;
     },
     async getSession(id) {
@@ -127,7 +99,43 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     },
     async listSessions(ownerSub) {
       const rows = await queryAll(`USER#${ownerSub}`, 'SESS#', { forward: false });
-      return rows.map((r) => ({ id: r.id, code: r.code, title: r.title, status: r.status, mode: r.mode, createdAt: r.createdAt, closesAt: r.closesAt }));
+      return rows.map((r) => ({ id: r.id, code: r.code, title: r.title, status: r.status, createdAt: r.createdAt, closesAt: r.closesAt, interactions: Number(r.interactions ?? 0) }));
+    },
+    async updateSession(id, edit) {
+      const sets: string[] = [];
+      const names: Record<string, string> = {};
+      const values: Record<string, unknown> = {};
+      for (const key of ['title', 'interactions', 'qa'] as const) {
+        if (edit[key] === undefined) continue;
+        sets.push(`#${key} = :${key}`);
+        names[`#${key}`] = key;
+        values[`:${key}`] = edit[key];
+      }
+      if (!sets.length) return this.getSession(id);
+      let saved: Session | null;
+      try {
+        const r = await ddb.send(new UpdateCommand({
+          TableName: table,
+          Key: { PK: `SESS#${id}`, SK: 'META' },
+          UpdateExpression: `SET ${sets.join(', ')}`,
+          ConditionExpression: 'attribute_exists(PK)',
+          ExpressionAttributeNames: names,
+          ExpressionAttributeValues: values,
+          ReturnValues: 'ALL_NEW',
+        }));
+        saved = sessionFrom(r.Attributes);
+      } catch (e) {
+        if (isClash(e)) return null;
+        throw e;
+      }
+      /* The owner's list shows the title and how many interactions there are. */
+      await ddb.send(new UpdateCommand({
+        TableName: table,
+        Key: { PK: `USER#${saved.ownerSub}`, SK: `SESS#${id}` },
+        UpdateExpression: 'SET title = :t, interactions = :n',
+        ExpressionAttributeValues: { ':t': saved.title, ':n': saved.interactions.length },
+      }));
+      return saved;
     },
     async setState(id, next: SessionState, fromSeq) {
       try {
@@ -214,7 +222,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     },
 
     async join(sessionId, token, nickname, cap) {
-      const had = await get(`SESS#${sessionId}`, `PART#${token}`);
+      const had = await get(`SESS#${sessionId}`, `PART#${token}`, true);
       if (had) {
         if (nickname && nickname !== had.nickname) {
           await ddb.send(new UpdateCommand({
@@ -257,7 +265,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
       return { person, full: false, people };
     },
     async getPerson(sessionId, token) {
-      const i = await get(`SESS#${sessionId}`, `PART#${token}`);
+      const i = await get(`SESS#${sessionId}`, `PART#${token}`, true);
       return i ? { token: i.token, nickname: i.nickname ?? '', joinedAt: i.joinedAt } : null;
     },
     async countPeople(sessionId) {
@@ -268,7 +276,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
       try {
         await ddb.send(new PutCommand({
           TableName: table,
-          Item: { PK: `SESS#${sessionId}`, SK: `ANS#${a.slideId}#${a.token}#${a.entry}`, ...a, expiresAt: expiry() },
+          Item: { PK: `SESS#${sessionId}`, SK: `ANS#${a.pollId}#${a.token}#${a.entry}`, ...a, expiresAt: expiry() },
           ConditionExpression: 'attribute_not_exists(SK)',
         }));
         return true;
@@ -277,17 +285,37 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         throw e;
       }
     },
-    async myAnswers(sessionId, slideId, token) {
-      const rows = await queryAll(`SESS#${sessionId}`, `ANS#${slideId}#${token}#`);
-      return rows.map(answerFrom).sort((a, b) => a.entry - b.entry);
+    async replaceAnswer(sessionId, a, prevAt) {
+      try {
+        await ddb.send(new PutCommand({
+          TableName: table,
+          Item: { PK: `SESS#${sessionId}`, SK: `ANS#${a.pollId}#${a.token}#${a.entry}`, ...a, expiresAt: expiry() },
+          ConditionExpression: '#at = :prev',
+          ExpressionAttributeNames: { '#at': 'at' },
+          ExpressionAttributeValues: { ':prev': prevAt },
+        }));
+        return true;
+      } catch (e) {
+        if (isClash(e)) return false;
+        throw e;
+      }
     },
-    async slideAnswers(sessionId, slideId, limit = 500) {
-      /* Keys sort by token, not time, so read the slide whole before taking the oldest. */
-      const rows = await queryAll(`SESS#${sessionId}`, `ANS#${slideId}#`);
+    async myAnswers(sessionId, pollId, token) {
+      const r = await ddb.send(new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: 'PK = :p AND begins_with(SK, :s)',
+        ExpressionAttributeValues: { ':p': `SESS#${sessionId}`, ':s': `ANS#${pollId}#${token}#` },
+        ConsistentRead: true,
+      }));
+      return (r.Items ?? []).map(answerFrom).sort((a, b) => a.entry - b.entry);
+    },
+    async pollAnswers(sessionId, pollId, limit = 500) {
+      /* Keys sort by token, not time, so read the poll whole before taking the oldest. */
+      const rows = await queryAll(`SESS#${sessionId}`, `ANS#${pollId}#`);
       return rows.map(answerFrom).sort((a, b) => a.at.localeCompare(b.at)).slice(0, limit);
     },
 
-    async bumpTally(sessionId, slideId, delta, newPerson) {
+    async bumpTally(sessionId, pollId, delta, people) {
       const names: Record<string, string> = {};
       const values: Record<string, number> = {};
       const parts: string[] = [];
@@ -296,15 +324,15 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         values[`:c${i}`] = n;
         parts.push(`#c${i} :c${i}`);
       });
-      if (newPerson) {
-        values[':one'] = 1;
-        parts.push('people :one');
+      if (people) {
+        values[':ppl'] = people;
+        parts.push('people :ppl');
       }
-      if (!parts.length) return this.getTally(sessionId, slideId);
+      if (!parts.length) return this.getTally(sessionId, pollId);
       values[':exp'] = expiry();
       const r = await ddb.send(new UpdateCommand({
         TableName: table,
-        Key: { PK: `SESS#${sessionId}`, SK: `TALLY#${slideId}` },
+        Key: { PK: `SESS#${sessionId}`, SK: `TALLY#${pollId}` },
         UpdateExpression: `ADD ${parts.join(', ')} SET expiresAt = if_not_exists(expiresAt, :exp)`,
         ...(Object.keys(names).length ? { ExpressionAttributeNames: names } : {}),
         ExpressionAttributeValues: values,
@@ -312,24 +340,28 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
       }));
       return tallyFrom(r.Attributes);
     },
-    async getTally(sessionId, slideId) {
-      return tallyFrom(await get(`SESS#${sessionId}`, `TALLY#${slideId}`, true));
+    async getTally(sessionId, pollId) {
+      return tallyFrom(await get(`SESS#${sessionId}`, `TALLY#${pollId}`, true));
+    },
+    async listTallies(sessionId) {
+      const rows = await queryAll(`SESS#${sessionId}`, 'TALLY#');
+      return Object.fromEntries(rows.map((r) => [String(r.SK).slice('TALLY#'.length), tallyFrom(r)]));
     },
 
     async addQuestion(sessionId, q) {
-      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `SESS#${sessionId}`, SK: `QA#${q.slideId}#${q.id}`, ...q, expiresAt: expiry() } }));
+      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `SESS#${sessionId}`, SK: `QA#${q.id}`, ...q, expiresAt: expiry() } }));
     },
-    async getQuestion(sessionId, slideId, id) {
-      return questionFrom(await get(`SESS#${sessionId}`, `QA#${slideId}#${id}`, true));
+    async getQuestion(sessionId, id) {
+      return questionFrom(await get(`SESS#${sessionId}`, `QA#${id}`, true));
     },
-    async listQuestions(sessionId, slideId) {
-      return (await queryAll(`SESS#${sessionId}`, `QA#${slideId}#`)).map(questionFrom);
+    async listQuestions(sessionId) {
+      return (await queryAll(`SESS#${sessionId}`, 'QA#')).map(questionFrom);
     },
-    async setQuestionStatus(sessionId, slideId, id, status) {
+    async setQuestionStatus(sessionId, id, status) {
       try {
         const r = await ddb.send(new UpdateCommand({
           TableName: table,
-          Key: { PK: `SESS#${sessionId}`, SK: `QA#${slideId}#${id}` },
+          Key: { PK: `SESS#${sessionId}`, SK: `QA#${id}` },
           UpdateExpression: 'SET #status = :s',
           ConditionExpression: 'attribute_exists(SK)',
           ExpressionAttributeNames: { '#status': 'status' },
@@ -342,7 +374,23 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         throw e;
       }
     },
-    async upvote(sessionId, slideId, id, token) {
+    async addReply(sessionId, id, reply, max) {
+      try {
+        const r = await ddb.send(new UpdateCommand({
+          TableName: table,
+          Key: { PK: `SESS#${sessionId}`, SK: `QA#${id}` },
+          UpdateExpression: 'SET replies = list_append(if_not_exists(replies, :none), :r)',
+          ConditionExpression: 'attribute_exists(SK) AND (attribute_not_exists(replies) OR size(replies) < :max)',
+          ExpressionAttributeValues: { ':r': [reply], ':none': [], ':max': max },
+          ReturnValues: 'ALL_NEW',
+        }));
+        return questionFrom(r.Attributes);
+      } catch (e) {
+        if (isClash(e)) return null;
+        throw e;
+      }
+    },
+    async upvote(sessionId, id, token) {
       /* The upvote row is the person's one vote; the count goes up only when that row is new. */
       try {
         await ddb.send(new PutCommand({
@@ -352,7 +400,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         }));
         const r = await ddb.send(new UpdateCommand({
           TableName: table,
-          Key: { PK: `SESS#${sessionId}`, SK: `QA#${slideId}#${id}` },
+          Key: { PK: `SESS#${sessionId}`, SK: `QA#${id}` },
           UpdateExpression: 'ADD votes :one',
           ConditionExpression: 'attribute_exists(SK)',
           ExpressionAttributeValues: { ':one': 1 },
@@ -369,19 +417,19 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
       return (await queryAll(`SESS#${sessionId}`, prefix)).map((r) => String(r.SK).slice(prefix.length));
     },
 
-    async addScore(sessionId, token, nickname, slideId, points) {
+    async addScore(sessionId, quizId, token, nickname, questionId, points) {
       const r = await ddb.send(new UpdateCommand({
         TableName: table,
-        Key: { PK: `SESS#${sessionId}`, SK: `SCORE#${token}` },
-        UpdateExpression: 'ADD #total :p SET #token = :t, nickname = :n, #last = :p, lastSlideId = :s, expiresAt = if_not_exists(expiresAt, :exp)',
+        Key: { PK: `SESS#${sessionId}`, SK: `SCORE#${quizId}#${token}` },
+        UpdateExpression: 'ADD #total :p SET #token = :t, nickname = :n, #last = :p, lastId = :q, expiresAt = if_not_exists(expiresAt, :exp)',
         ExpressionAttributeNames: { '#total': 'total', '#token': 'token', '#last': 'last' },
-        ExpressionAttributeValues: { ':p': points, ':t': token, ':n': nickname, ':s': slideId, ':exp': expiry() },
+        ExpressionAttributeValues: { ':p': points, ':t': token, ':n': nickname, ':q': questionId, ':exp': expiry() },
         ReturnValues: 'ALL_NEW',
       }));
       return scoreFrom(r.Attributes);
     },
-    async listScores(sessionId) {
-      return (await queryAll(`SESS#${sessionId}`, 'SCORE#')).map(scoreFrom);
+    async listScores(sessionId, quizId) {
+      return (await queryAll(`SESS#${sessionId}`, `SCORE#${quizId}#`)).map(scoreFrom);
     },
   };
 }
