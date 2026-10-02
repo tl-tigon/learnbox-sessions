@@ -62,6 +62,21 @@ export async function upvote(db: Store, s: Session, token: string, id: string): 
   return voted;
 }
 
+/**
+ * The asker takes their own question back, while it waits for review or is live. It leaves every
+ * screen, as a hidden one does. Anyone else's question is "not found" to this person.
+ */
+export async function withdraw(db: Store, s: Session, token: string, id: string): Promise<void> {
+  await joined(db, s, token);
+  const q = await db.getQuestion(s.id, id);
+  if (!q || q.token !== token || q.status === 'hidden') throw new LiveError(404, 'Not found');
+  if (q.status === 'answered') throw new LiveError(409, 'This question is answered');
+  const saved = await db.setQuestionStatus(s.id, id, 'hidden');
+  if (!saved) throw new LiveError(404, 'Not found');
+  await announce(s, saved);
+  if (s.state.highlight === id) await control(db, s, { action: 'highlight', id: null });
+}
+
 export type ModerateAction = 'approve' | 'hide' | 'answered' | 'highlight' | 'unhighlight' | 'reply';
 export const MODERATE_ACTIONS: ModerateAction[] = ['approve', 'hide', 'answered', 'highlight', 'unhighlight', 'reply'];
 

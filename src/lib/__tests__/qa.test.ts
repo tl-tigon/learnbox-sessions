@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { control, editSession, endSession, hostView, wallView } from '../live';
-import { ask, audienceQuestions, moderate, upvote } from '../qa';
+import { ask, audienceQuestions, moderate, upvote, withdraw } from '../qa';
 import { sortQuestions } from '../engine/questions';
 import { LIMITS } from '../limits';
 import { running, TOKEN } from './helpers';
@@ -132,5 +132,37 @@ describe('lists', () => {
     ];
     expect(sortQuestions(list, 'top').map((q) => q.id)).toEqual(['b', 'a', 'c']);
     expect(sortQuestions(list, 'recent').map((q) => q.id)).toEqual(['c', 'b', 'a']);
+  });
+});
+
+describe('taking a question back', () => {
+  it('the asker can withdraw their own question; it leaves every screen and the highlight clears', async () => {
+    const { db, s } = await running();
+    const q = await ask(db, s, TOKEN(1), { text: 'Mine to take back?', anonymous: true });
+    const lit = (await moderate(db, s, q.id, 'highlight')).session;
+    expect(lit.state.highlight).toBe(q.id);
+    await withdraw(db, lit, TOKEN(1), q.id);
+    expect((await audienceQuestions(db, lit, TOKEN(1))).map((x) => x.id)).not.toContain(q.id);
+    expect((await wallView(db, (await db.getSession(s.id))!)).questions).toHaveLength(0);
+    expect((await db.getSession(s.id))!.state.highlight).toBeNull();
+  });
+
+  it('nobody else can withdraw it, and an answered question stays', async () => {
+    const { db, s } = await running();
+    const q = await ask(db, s, TOKEN(1), { text: 'Whose is this?', anonymous: true });
+    await expect(withdraw(db, s, TOKEN(2), q.id)).rejects.toMatchObject({ status: 404 });
+    await expect(withdraw(db, s, 'tok-never-joined-000', q.id)).rejects.toMatchObject({ status: 403 });
+    expect((await db.getQuestion(s.id, q.id))?.status).toBe('live');
+    await moderate(db, s, q.id, 'answered');
+    await expect(withdraw(db, s, TOKEN(1), q.id)).rejects.toMatchObject({ status: 409 });
+    expect((await db.getQuestion(s.id, q.id))?.status).toBe('answered');
+  });
+
+  it('a question waiting for review can be withdrawn by its asker', async () => {
+    const { db, s } = await moderated();
+    const q = await ask(db, s, TOKEN(1), { text: 'Changed my mind', anonymous: true });
+    await withdraw(db, s, TOKEN(1), q.id);
+    expect((await hostView(db, s)).questions.find((x) => x.id === q.id)?.status ?? 'hidden').toBe('hidden');
+    await expect(withdraw(db, s, TOKEN(1), q.id)).rejects.toMatchObject({ status: 404 });
   });
 });

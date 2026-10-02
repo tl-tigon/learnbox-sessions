@@ -120,12 +120,16 @@ function PollHeader({ poll, people }: { poll: Poll; people?: number }) {
  * One poll on the phone. A choice, rating or ranking can be changed while voting is open; a word
  * cloud or open text takes more entries up to the poll's limit.
  */
-export function PollForm({ poll, mine, locked, name, people, onSend }: {
+export function PollForm({ poll, mine, locked, name, people, results, hidden, onSend }: {
   poll: Poll;
   mine: Answer[];
   locked: boolean;
   name: string;
   people?: number;
+  /** The results so far, shown once this person has answered. They take the place of the options. */
+  results?: React.ReactNode;
+  /** The facilitator is keeping the results back. */
+  hidden?: boolean;
   onSend: (answer: unknown) => Promise<string | null>;
 }) {
   const changeable = canChange(poll);
@@ -159,25 +163,30 @@ export function PollForm({ poll, mine, locked, name, people, onSend }: {
     <form className="stack" onSubmit={(e) => { e.preventDefault(); void send(); }}>
       <PollHeader poll={poll} people={people} />
       {changeable ? (
-        <PollField poll={poll} value={draft} onChange={setDraft} disabled={busy || locked || !editing} />
+        sent && results
+          ? <div className="card">{results}</div>
+          : <PollField poll={poll} value={draft} onChange={setDraft} disabled={busy || locked || !editing} />
       ) : sent ? null : (
         <>
           <PollField poll={poll} value={draft} onChange={setDraft} disabled={busy || locked} />
           {max > 1 && <span className="small muted num">{mine.length} / {max}</span>}
         </>
       )}
+      {!changeable && mine.length > 0 && results && <div className="card">{results}</div>}
       {err && <p className="error small" role="alert">{err}</p>}
+      {mine.length > 0 && hidden && <span className="row muted"><Icon name="eyeoff" />Results are hidden</span>}
       {locked ? (
         <div className="card notice"><span className="dot"><Icon name="lock" /></span>Voting closed</div>
       ) : sent ? (
-        <div className="spread">
-          <span className="row strong"><Icon name="check" />Sent</span>
-          {changeable && <button type="button" onClick={() => setEditing(true)}>Edit response</button>}
-        </div>
+        <>
+          <span className="row strong sent"><Icon name="check" />Sent</span>
+          {/* Its own key: without one this button and Send would share one element, and the click that opens editing would also submit. */}
+          {changeable && <button key="edit" type="button" className="wide" onClick={() => setEditing(true)}>Edit response</button>}
+        </>
       ) : (
         <>
           <div className="voting-as">Voting as <b>{name || 'Anonymous'}</b></div>
-          <button type="submit" className="primary wide" disabled={busy || !filled(poll, draft)}>Send</button>
+          <button key="send" type="submit" className="primary wide" disabled={busy || !filled(poll, draft)}>Send</button>
         </>
       )}
     </form>

@@ -1,10 +1,13 @@
 'use client';
 /**
- * Q&A on its three screens: the phone (ask, upvote, read replies), the big screen (the question
- * being answered and the top questions) and the facilitator's screen (review, reply, highlight).
+ * Q&A on its three screens: the phone (ask, upvote, read replies, take a question back), the big
+ * screen (the question being answered and the top questions) and the facilitator's screen
+ * (review, highlight, mark answered, reply).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Icon } from './icons';
+import { Confirm, Dialog, Panel, Toast, type Ask } from './dialog';
+import { Icon, type IconName } from './icons';
+import { Menu } from './menu';
 import { savedName, saveName } from '@/lib/audience';
 import { authed } from '@/lib/auth/client';
 import { sortQuestions, type PublicQuestion, type QuestionOrder } from '@/lib/engine/questions';
@@ -27,9 +30,11 @@ function ago(at: string): string {
   if (s < 86400) return `${Math.floor(s / 3600)} h`;
   return new Date(at).toLocaleDateString();
 }
+/** The time of day, as the facilitator's list shows it. */
+const clock = (at: string) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-function Avatar({ name }: { name: string }) {
-  return <span className="avatar" aria-hidden>{initial(name) ?? <Icon name="user" />}</span>;
+function Avatar({ name, small }: { name: string; small?: boolean }) {
+  return <span className={small ? 'avatar xs' : 'avatar'} aria-hidden>{initial(name) ?? <Icon name="user" size={small ? 10 : 16} />}</span>;
 }
 
 function Order({ order, onChange, count }: { order: QuestionOrder; onChange: (o: QuestionOrder) => void; count: number }) {
@@ -56,14 +61,18 @@ function Replies({ q }: { q: PublicQuestion }) {
   );
 }
 
-/** The phone: the facilitator's announcement, the ask box, and the questions with their upvotes and replies. */
-export function QaPhone({ sessionId, token, state, settings, nickname, ended }: {
+/**
+ * The phone: the facilitator's announcement, the row that opens the ask sheet, and the questions
+ * with their upvotes and replies. `onEngage` is told when this person has asked something.
+ */
+export function QaPhone({ sessionId, token, state, settings, nickname, ended, onEngage }: {
   sessionId: string;
   token: string;
   state: SessionState;
   settings: QaSettings;
   nickname: string;
   ended: boolean;
+  onEngage?: () => void;
 }) {
   const base = `/api/live/${sessionId}/qa`;
   const load = useCallback(async () => {
@@ -86,11 +95,14 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
 
   const { data, setData, refresh } = useLive<MyQuestion[]>(load, [qaChannel(sessionId)], apply);
   const [order, setOrder] = useState<QuestionOrder>('top');
+  /* The question being typed lives here, so it is still there after the sheet is closed or the phone shows a poll. */
   const [text, setText] = useState('');
   const [name, setName] = useState(nickname);
-  const [anonymous, setAnonymous] = useState(settings.anonymous);
+  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Ask | null>(null);
   /* The name follows the one this person has in the session, including a rename made from the top bar. */
   useEffect(() => {
     setName(nickname || savedName());
@@ -98,7 +110,8 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
 
   const post = (url: string, body: Record<string, unknown>) => postJson(url, { token, ...body });
 
-  const asAnonymous = settings.anonymous && anonymous;
+  /* Where anonymous questions are allowed, a question sent without a name is anonymous. */
+  const asAnonymous = settings.anonymous && !name.trim();
   const send = async () => {
     setBusy(true);
     setErr(null);
@@ -106,9 +119,23 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setErr(j.error ?? 'Not sent');
-    if (!asAnonymous) saveName(name);
+    if (!asAnonymous) saveName(name.trim());
     setText('');
+    setAsking(false);
+    setToast(j.question.status === 'pending' ? 'Question sent for review' : 'Question sent');
     setData((cur) => (cur && !cur.some((q) => q.id === j.question.id) ? [...cur, j.question] : cur));
+    onEngage?.();
+  };
+
+  const withdraw = async (q: MyQuestion) => {
+    const r = await post(`${base}/${q.id}/withdraw`, {});
+    if (r.ok || r.status === 404) {
+      setData((cur) => cur?.filter((x) => x.id !== q.id) ?? cur);
+      setToast('Question withdrawn');
+    } else {
+      setToast((await r.json().catch(() => ({}))).error ?? 'Not withdrawn');
+      void refresh();
+    }
   };
 
   /* Upvotes tapped on this phone and still on their way, each with the count it had when tapped.
@@ -133,6 +160,7 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
   const votesOf = (q: MyQuestion) => (q.voted || sent[q.id] === undefined ? q.votes : Math.max(q.votes, sent[q.id] + 1));
 
   const list = sortQuestions(data ?? [], order);
+  const canAsk = !ended && state.qaOpen;
   return (
     <div className="stack">
       {state.announcement && (
@@ -145,20 +173,14 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
       {ended ? null : !state.qaOpen ? (
         <div className="card notice"><span className="dot"><Icon name="lock" /></span>Questions closed</div>
       ) : (
-        <form className="card stack" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-          <textarea rows={3} value={text} maxLength={LIMITS.questionChars} disabled={busy} placeholder="Type your question" aria-label="Your question" onChange={(e) => setText(e.target.value)} />
-          {!asAnonymous && <input value={name} maxLength={LIMITS.nicknameChars} disabled={busy} placeholder="Your name" aria-label="Your name" onChange={(e) => setName(e.target.value)} />}
-          <div className="spread">
-            {settings.anonymous
-              ? <label className="check"><input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />Ask anonymously</label>
-              : <span />}
-            <button type="submit" className="primary" disabled={busy || !text.trim() || (!asAnonymous && !name.trim())}>Send</button>
-          </div>
-          {err && <p className="error small" role="alert">{err}</p>}
-        </form>
+        <button type="button" className="askrow" onClick={() => setAsking(true)}>
+          <Avatar name={name} />
+          <span className={`grow truncate ${text.trim() ? '' : 'faint'}`}>{text.trim() || 'Type your question'}</span>
+        </button>
       )}
 
-      {data && <Order order={order} onChange={setOrder} count={list.length} />}
+      {data && list.length > 0 && <Order order={order} onChange={setOrder} count={list.length} />}
+      {data && list.length === 0 && <div className="none"><Icon name="chat" size={40} />No questions yet</div>}
       <div className="list" aria-live="polite">
         {list.map((q) => (
           <article key={q.id} className={`question ${state.highlight === q.id ? 'highlighted' : ''}`}>
@@ -176,11 +198,38 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
               <button type="button" className="votes num" aria-pressed={votedOn(q)} aria-label={`Upvote, ${votesOf(q)}`}
                 disabled={ended || votedOn(q) || q.status !== 'live'} onClick={() => vote(q)}>{votesOf(q)}<Icon name="thumb" /></button>
             </div>
-            <div className="text">{q.text}</div>
+            <div className="spread" style={{ alignItems: 'flex-start' }}>
+              <div className="text grow">{q.text}</div>
+              {q.mine && !ended && q.status !== 'answered' && (
+                <Menu label="Your question" className="icon-btn ghost sm" trigger={<Icon name="more" />}>
+                  <button className="danger" onClick={() => setConfirm({ title: 'Withdraw question', text: 'It is removed for everyone.', action: 'Withdraw', danger: true, run: () => void withdraw(q) })}><Icon name="trash" />Withdraw</button>
+                </Menu>
+              )}
+            </div>
             <Replies q={q} />
           </article>
         ))}
       </div>
+
+      {canAsk && <button type="button" className="fab primary" onClick={() => setAsking(true)}>Ask</button>}
+
+      {asking && (
+        <Dialog label="Ask" onClose={() => setAsking(false)}>
+          <form className="stack" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+            <textarea rows={4} value={text} maxLength={LIMITS.questionChars} disabled={busy} autoFocus placeholder="Type your question" aria-label="Your question" onChange={(e) => setText(e.target.value)} />
+            <span className="small faint num" style={{ justifySelf: 'end' }}>{LIMITS.questionChars - text.length}</span>
+            <div className="field-row">
+              <Avatar name={name} />
+              <input value={name} maxLength={LIMITS.nicknameChars} disabled={busy} placeholder={settings.anonymous ? 'Your name (optional)' : 'Your name'} aria-label="Your name" onChange={(e) => setName(e.target.value)} />
+              <button type="submit" className="primary pill tall" disabled={busy || !canAsk || !text.trim() || (!settings.anonymous && !name.trim())}>Send</button>
+            </div>
+            {!canAsk && <p className="small muted">Questions closed</p>}
+            {err && <p className="error small" role="alert">{err}</p>}
+          </form>
+        </Dialog>
+      )}
+      {confirm && <Confirm ask={confirm} onClose={() => setConfirm(null)} />}
+      {toast && <Toast text={toast} onDone={() => setToast(null)} />}
     </div>
   );
 }
@@ -199,7 +248,13 @@ export function QaWall({ questions, state }: { questions: PublicQuestion[]; stat
   return <div className="list" style={{ gap: 14 }}>{now && card(now, true)}{rest.map((q) => card(q, false))}</div>;
 }
 
-/** The facilitator's screen: questions to review, the live ones, and the answered ones, each with its actions. */
+type Tab = 'review' | 'live' | 'answered';
+const NOTHING: Record<Tab, string> = { review: 'Nothing to review', live: 'No questions yet', answered: 'No answered questions' };
+
+/**
+ * The facilitator's screen: questions to review, the live ones and the answered ones, as a plain
+ * list. A question's actions sit in a small bar on its row; its replies open in a panel at the side.
+ */
 export function QaHost({ sessionId, questions, state, moderation, ended, onChange }: {
   sessionId: string;
   questions: PublicQuestion[];
@@ -208,13 +263,13 @@ export function QaHost({ sessionId, questions, state, moderation, ended, onChang
   ended: boolean;
   onChange: (q: PublicQuestion, state: SessionState) => void;
 }) {
-  type Tab = 'review' | 'live' | 'answered';
   const pending = questions.filter((q) => q.status === 'pending');
   const [tab, setTab] = useState<Tab>('live');
   const [order, setOrder] = useState<QuestionOrder>('top');
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [replying, setReplying] = useState<string | null>(null);
+  /* The question whose replies are open at the side, and the reply being typed for it. */
+  const [thread, setThread] = useState<string | null>(null);
   const [reply, setReply] = useState('');
   /* The first question ever to arrive for review brings its tab forward, once; after that the tabs stay where the facilitator put them. */
   const jumped = useRef(false);
@@ -233,10 +288,11 @@ export function QaHost({ sessionId, questions, state, moderation, ended, onChang
     setBusy(null);
     if (!r.ok) return setErr(j.error ?? 'Not applied');
     onChange(j.question, j.state);
-    if (action === 'reply') {
-      setReplying(null);
-      setReply('');
-    }
+    if (action === 'reply') setReply('');
+  };
+  const openThread = (q: PublicQuestion) => {
+    if (thread !== q.id) setReply('');
+    setThread(q.id);
   };
 
   const lists: Record<Tab, PublicQuestion[]> = {
@@ -244,53 +300,77 @@ export function QaHost({ sessionId, questions, state, moderation, ended, onChang
     live: sortQuestions(questions.filter((q) => q.status === 'live'), order),
     answered: sortQuestions(questions.filter((q) => q.status === 'answered'), 'recent'),
   };
-  const actions: Record<Tab, (q: PublicQuestion) => [string, string][]> = {
-    review: () => [['approve', 'Approve'], ['hide', 'Hide']],
-    live: (q) => [state.highlight === q.id ? ['unhighlight', 'Remove highlight'] : ['highlight', 'Highlight'], ['answered', 'Mark answered'], ['hide', 'Hide']],
-    answered: () => [['approve', 'Restore'], ['hide', 'Hide']],
-  };
   const tabs: [Tab, string][] = [...(moderation || pending.length ? [['review', 'In review'] as [Tab, string]] : []), ['live', 'Live'], ['answered', 'Answered']];
   const shown = tabs.some(([t]) => t === tab) ? tab : 'live';
+  const open = questions.find((q) => q.id === thread) ?? null;
+
+  const tool = (q: PublicQuestion, action: string, label: string, icon: IconName, filled = false) => (
+    <button key={action} type="button" className={`icon-btn ghost sm ${filled ? 'fill' : ''}`} aria-label={label} title={label} disabled={busy === q.id} onClick={() => act(q, action)}><Icon name={icon} /></button>
+  );
+  const replyTool = (q: PublicQuestion) => (
+    <button type="button" className="icon-btn ghost sm" aria-label="Reply" title="Reply" onClick={() => openThread(q)}><Icon name="chat" /></button>
+  );
+  const more = (q: PublicQuestion) => (
+    <Menu label="More" className="icon-btn ghost sm" trigger={<Icon name="morev" />}>
+      <button className="danger" disabled={busy === q.id} onClick={() => act(q, 'hide')}><Icon name="eyeoff" />Hide</button>
+    </Menu>
+  );
+  /* The filled button is the usual next step: highlight a question, then mark it answered. */
+  const tools = (q: PublicQuestion) => {
+    const lit = state.highlight === q.id;
+    if (shown === 'review') return <>{tool(q, 'approve', 'Approve', 'check', true)}{tool(q, 'hide', 'Hide', 'x')}</>;
+    if (shown === 'answered') return <>{tool(q, 'approve', 'Restore', 'restore')}{replyTool(q)}{more(q)}</>;
+    return <>{lit ? tool(q, 'unhighlight', 'Remove highlight', 'unpin') : tool(q, 'highlight', 'Highlight', 'pin', true)}{tool(q, 'answered', 'Mark answered', 'check', lit)}{replyTool(q)}{more(q)}</>;
+  };
+  const replies = (n: number) => (n === 1 ? '1 reply' : `${n} replies`);
 
   return (
     <div className="stack">
-      <div className="subtabs" role="tablist">
-        {tabs.map(([t, label]) => (
-          <button key={t} role="tab" aria-selected={shown === t} onClick={() => setTab(t)}>{label} <span className="count num">{lists[t].length}</span></button>
-        ))}
+      <div className="spread">
+        <div className="qtabs" role="tablist">
+          {tabs.map(([t, label]) => (
+            <button key={t} role="tab" aria-selected={shown === t} onClick={() => setTab(t)}>{label}<span className="badge num">{lists[t].length}</span></button>
+          ))}
+        </div>
+        {shown === 'live' && lists.live.length > 1 && (
+          <button type="button" className="ghost small" aria-label="Change question order" onClick={() => setOrder(order === 'top' ? 'recent' : 'top')}><Icon name="sort" />{order === 'top' ? 'Popular' : 'Recent'}</button>
+        )}
       </div>
       {err && <p className="error" role="alert">{err}</p>}
-      {shown === 'live' && lists.live.length > 0 && <Order order={order} onChange={setOrder} count={lists.live.length} />}
-      <div className="list">
+      {lists[shown].length === 0 && <div className="none"><Icon name="chat" size={40} />{NOTHING[shown]}</div>}
+      <div className="qlist">
         {lists[shown].map((q) => (
-          <article key={q.id} className={`question ${state.highlight === q.id ? 'highlighted' : ''}`}>
-            <div className="head">
-              <Avatar name={q.name} />
-              <div className="who grow"><span className="name">{who(q)}</span><span className="tag">{ago(q.at)}</span></div>
-              <span className="votes num row" style={{ display: 'inline-flex', alignItems: 'center' }}>{q.votes}<Icon name="thumb" /></span>
-            </div>
+          <article key={q.id} className={`qrow ${state.highlight === q.id ? 'highlighted' : ''}`}>
+            <div className="meta"><Avatar name={q.name} small /><span>{who(q)}</span><span className="num">{clock(q.at)}</span></div>
             <div className="text">{q.text}</div>
-            <Replies q={q} />
-            {replying === q.id && (
-              <form className="stack" onSubmit={(e) => { e.preventDefault(); void act(q, 'reply', reply); }}>
-                <textarea rows={2} value={reply} maxLength={LIMITS.replyChars} autoFocus aria-label="Your reply" onChange={(e) => setReply(e.target.value)} />
-                <div className="row">
-                  <button type="submit" className="primary" disabled={busy === q.id || !reply.trim()}>Send reply</button>
-                  <button type="button" onClick={() => setReplying(null)}>Cancel</button>
-                </div>
-              </form>
-            )}
-            {!ended && replying !== q.id && (
-              <div className="row">
-                {actions[shown](q).map(([action, label]) => (
-                  <button key={action} type="button" className={action === 'hide' ? 'danger' : ''} disabled={busy === q.id} onClick={() => act(q, action)}>{label}</button>
-                ))}
-                <button type="button" disabled={busy === q.id} onClick={() => { setReplying(q.id); setReply(''); }}><Icon name="reply" />Reply</button>
-              </div>
-            )}
+            <span className="qvotes num">{q.votes}<Icon name="thumb" /></span>
+            {q.replies.length > 0 && <button type="button" className="ghost link" onClick={() => openThread(q)}><Icon name="chat" />{replies(q.replies.length)}</button>}
+            {!ended && <div className="qtools">{tools(q)}</div>}
           </article>
         ))}
       </div>
+
+      {open && (
+        <Panel label="Reply" onClose={() => setThread(null)} foot={!ended && (
+          <form className="stack" onSubmit={(e) => { e.preventDefault(); void act(open, 'reply', reply); }}>
+            <textarea rows={3} value={reply} maxLength={LIMITS.replyChars} autoFocus placeholder="Write your reply" aria-label="Your reply" onChange={(e) => setReply(e.target.value)} />
+            <button type="submit" className="primary tall" disabled={busy === open.id || !reply.trim() || open.replies.length >= LIMITS.repliesPerQuestion}><Icon name="send" />Send</button>
+          </form>
+        )}>
+          <article className="qrow plain">
+            <div className="meta"><Avatar name={open.name} small /><span>{who(open)}</span><span className="num">{clock(open.at)}</span></div>
+            <div className="text">{open.text}</div>
+            <span className="qvotes num">{open.votes}<Icon name="thumb" /></span>
+          </article>
+          {open.replies.length > 0 && <div className="divider small muted num">{replies(open.replies.length)}</div>}
+          {open.replies.map((r) => (
+            <article key={r.id} className="qrow plain">
+              <div className="meta"><Avatar name="Host" small /><span>Host</span><span className="num">{clock(r.at)}</span></div>
+              <div className="text">{r.text}</div>
+            </article>
+          ))}
+        </Panel>
+      )}
     </div>
   );
 }

@@ -94,6 +94,37 @@ function Options({ options, max, onChange, disabled, correctId, onCorrect, name,
   );
 }
 
+/** A poll's settings beyond its question and options: how many picks or entries, or the scale and its end labels. */
+export function PollSettings({ poll, onChange, disabled }: { poll: Poll; onChange: (p: Poll) => void; disabled?: boolean }) {
+  return (
+    <>
+      {poll.type === 'choice' && (
+        <label>Picks per person
+          <NumberField min={1} max={poll.options.length} value={poll.maxPicks} disabled={disabled} onChange={(maxPicks) => onChange({ ...poll, maxPicks })} />
+        </label>
+      )}
+      {(poll.type === 'wordcloud' || poll.type === 'open') && (
+        <label>{poll.type === 'wordcloud' ? 'Words per person' : 'Answers per person'}
+          <NumberField min={1} max={LIMITS.entriesPerPerson} value={poll.maxEntries} disabled={disabled} onChange={(maxEntries) => onChange({ ...poll, maxEntries })} />
+        </label>
+      )}
+      {poll.type === 'rating' && (
+        <>
+          <label>Scale
+            <select value={poll.max} disabled={disabled} onChange={(e) => onChange({ ...poll, max: Number(e.target.value) })}>
+              {[3, 4, 5, 7, 10].map((n) => <option key={n} value={n}>1 to {n}</option>)}
+            </select>
+          </label>
+          <div className="field-row">
+            <label className="grow">Label for 1<input value={poll.lowLabel} maxLength={LIMITS.optionChars} disabled={disabled} onChange={(e) => onChange({ ...poll, lowLabel: e.target.value })} /></label>
+            <label className="grow">Label for {poll.max}<input value={poll.highLabel} maxLength={LIMITS.optionChars} disabled={disabled} onChange={(e) => onChange({ ...poll, highLabel: e.target.value })} /></label>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 /** Whether a poll has settings beyond its question and options. */
 export const hasSettings = (poll: Poll) => poll.type !== 'ranking';
 
@@ -115,29 +146,7 @@ export function PollEditor({ poll, onChange, disabled, tally, texts, settings = 
       )}
       {poll.type === 'ranking' && <Options options={poll.options} max={LIMITS.optionsPerChoice} disabled={disabled} tally={tally} onChange={(options) => onChange({ ...poll, options })} />}
       {poll.type !== 'choice' && poll.type !== 'ranking' && !!tally?.people && <PollResults poll={poll} tally={tally} texts={texts} />}
-      {settings && poll.type === 'choice' && (
-        <label>Picks per person
-          <NumberField min={1} max={poll.options.length} value={poll.maxPicks} disabled={disabled} onChange={(maxPicks) => onChange({ ...poll, maxPicks })} />
-        </label>
-      )}
-      {settings && (poll.type === 'wordcloud' || poll.type === 'open') && (
-        <label>{poll.type === 'wordcloud' ? 'Words per person' : 'Answers per person'}
-          <NumberField min={1} max={LIMITS.entriesPerPerson} value={poll.maxEntries} disabled={disabled} onChange={(maxEntries) => onChange({ ...poll, maxEntries })} />
-        </label>
-      )}
-      {settings && poll.type === 'rating' && (
-        <>
-          <label>Scale
-            <select value={poll.max} disabled={disabled} onChange={(e) => onChange({ ...poll, max: Number(e.target.value) })}>
-              {[3, 4, 5, 7, 10].map((n) => <option key={n} value={n}>1 to {n}</option>)}
-            </select>
-          </label>
-          <div className="field-row">
-            <label className="grow">Label for 1<input value={poll.lowLabel} maxLength={LIMITS.optionChars} disabled={disabled} onChange={(e) => onChange({ ...poll, lowLabel: e.target.value })} /></label>
-            <label className="grow">Label for {poll.max}<input value={poll.highLabel} maxLength={LIMITS.optionChars} disabled={disabled} onChange={(e) => onChange({ ...poll, highLabel: e.target.value })} /></label>
-          </div>
-        </>
-      )}
+      {settings && <PollSettings poll={poll} onChange={onChange} disabled={disabled} />}
     </div>
   );
 }
@@ -146,18 +155,23 @@ function QuestionEditor({ question, index, onChange, onRemove, disabled, tally }
   return (
     <div className="sub">
       <div className="spread">
-        <span className="strong">Question <span className="num">{index + 1}</span>{tally && <span className="count num"> · {tally.people} answered</span>}</span>
+        <span className="row" style={{ flexWrap: 'nowrap' }}>
+          <span className="qnum num">{index + 1}</span>
+          <span className="stack" style={{ gap: 0 }}>
+            <span className="strong">Question</span>
+            <span className="row small muted">{tally && <span className="num">{tally.people} answered ·</span>}
+              <select className="inline" aria-label="Time limit" value={question.seconds} disabled={disabled} onChange={(e) => onChange({ ...question, seconds: Number(e.target.value) })}>
+                {QUIZ_SECONDS.map((n) => <option key={n} value={n}>{n} sec</option>)}
+              </select>
+            </span>
+          </span>
+        </span>
         {onRemove && <button type="button" className="icon-btn ghost" aria-label={`Remove question ${index + 1}`} disabled={disabled} onClick={onRemove}><Icon name="trash" /></button>}
       </div>
       <input aria-label={`Question ${index + 1}`} placeholder="Question" value={question.title} maxLength={LIMITS.titleChars} disabled={disabled} onChange={(e) => onChange({ ...question, title: e.target.value })} />
       <Options options={question.options} max={LIMITS.quizOptions} disabled={disabled} name={`correct-${question.id}`} correctId={question.correctId} tally={tally}
         onCorrect={(correctId) => onChange({ ...question, correctId })}
         onChange={(options) => onChange({ ...question, options, correctId: options.some((o) => o.id === question.correctId) ? question.correctId : options[0].id })} />
-      <label>Time limit
-        <select value={question.seconds} disabled={disabled} onChange={(e) => onChange({ ...question, seconds: Number(e.target.value) })}>
-          {QUIZ_SECONDS.map((n) => <option key={n} value={n}>{n} seconds</option>)}
-        </select>
-      </label>
     </div>
   );
 }

@@ -3,7 +3,8 @@
 The owner chose Slido's event model and wants LearnBox Sessions to match the quality of Slido's interface. This is what Slido's screens do, measured from its public pages and from the demo event Slido embeds on its own feature pages. The screenshots in this folder are reference only and never ship.
 
 **Seen:** the join page, the participant app (Q&A and Polls), the presenter wall ("Present mode"), and the marketing site. On 2026-10-02 the owner signed in to their own Slido account and the host's screens were studied there, view only: the list of events, one event's screen, the picker for a new interaction, a poll's menu, analytics and settings; and the participant's side of one event, with its menu.
-**Not seen:** Q&A moderation on the host's screen. None of the events opened used Q&A, and adding it would have changed the owner's event.
+Later that day, with the owner's go-ahead, a test event was made in that account ("Claude test - safe to delete") and run from both sides: Q&A (ask, upvote, highlight, reply, mark answered, close and open), a multiple choice poll (start, vote, stop), a quiz (lobby, question, reveal, leaderboard) and Present mode. The owner's own events were not changed.
+**Not seen:** moderation ("review incoming questions"), replies from participants, labels and surveys. They are on Slido's paid plans.
 
 Screenshots of the owner's account hold their clients' names. They stay in `.playwright-mcp/`, which git ignores, and are never added to this folder.
 
@@ -104,6 +105,41 @@ One field in the middle of an almost empty page: `#`, "enter code here", a round
 **Analytics**
 - Three figures across the top, then the polls in a list on the left with the selected poll's results on the right.
 
+### Q&A on the host's screen
+
+- The Q&A card in the list shows the number of questions and "Open" or "Closed" with a dot, green or red.
+- The header has the name, then search, Archive and "Q&A settings" at the right.
+- Two chips, Live and Answered, 32px tall with a count badge; the selected chip is ringed in the accent and its badge is filled. The sort ("Popular", "Recent") sits at the right.
+- Questions are plain rows with no border: a 16px avatar, the name and the time at 12px grey, then the question at 14px/500 in `#525252`, with the votes at the right.
+- Hovering a row gives it a hairline box, darkens its text and shows a small pill of round icon buttons at its top right: Highlight (filled accent), Mark as answered, Reply, More (Select, Edit, Archive, Delete).
+- A highlighted row is tinted and ringed in the accent. Its pill then holds "Remove highlight", and "Mark as answered" becomes the filled button: the filled button is always the usual next step.
+- In Answered, the pill holds Restore, Reply and More.
+- Reply opens a panel down the right side, under the header, about 432px wide: the question, a "1 replies" divider, the replies, and the reply field with Send at the bottom. The row in the list then shows "View 1 reply".
+- "Q&A settings" and "Poll settings" open in the same side panel: a switch per setting with one line under it.
+- The bar under the card holds "Close Q&A" (red tint, lock icon). It asks first, in a small dialog with Cancel and a solid red "Close Q&A". Once closed: the card says "Closed", the header shows a red outlined "Q&A is closed" pill, and the bar holds "Open Q&A" (green tint).
+- An edit shows a dark "Saved" toast at the bottom for a moment.
+
+### A running poll on the host's screen
+
+- The card's title turns green, its count gets a green dot, and its round button becomes a solid red stop.
+- The bar holds Stop (red tint), Prev, hide results, close voting, Next. Prev and Next start the neighbouring poll.
+
+### A quiz on the host's screen
+
+- The quiz card opens to list its questions and a "Final leaderboard" row.
+- Each question is its own card: a numbered badge, the vote count and the time limit ("20 sec") as a small dropdown beside it, the question, and options with a round check to mark the correct one. A red notice asks for the correct answer until one is marked.
+- While it runs, the editor gives way to a stage: "Participants are joining", then the question with grey bars, then the correct option in green after the reveal, then the leaderboard. The bar's one button is the next step, with an arrow: "First question", "Reveal answer", "Reveal leaderboard".
+
+## The participant's screens, run from both sides
+
+- **Asking.** The ask box is a single row, "Type your question", with the person's avatar. It opens a full-screen sheet: the question with a count of characters left, "Your name (optional)", and a pill "Send". A round "Ask" button floats at the bottom right. After sending, a toast says "Question sent".
+- **Own questions** have a menu: Edit, Withdraw.
+- **An upvote given** shows as a tinted pill ringed in the accent.
+- **After voting**, the options give way to the results (each option with its bar and share, the person's own pick marked) and a full-width "Edit response".
+- **When a poll stops**, the phone goes back to the Q&A tab.
+- **Quiz.** A "Join" row with the person's name; "Get ready"; the question with a clock, the seconds and a line that shortens; "Vote sent!"; then the result with the correct option marked; at the end a medal, the place, and the person's own row.
+- **The invitation.** After a vote, a strip at the bottom asks "Want to use Slido at your meeting?" with a "Try Slido for free" button and a close button. The final quiz screen has a second button, "Make your own Slido in minutes". This is how Slido turns participants into hosts.
+
 ## The participant's menu
 
 - The header has a menu button on the left and the profile button on the right. With only one feature in use, the event's name takes the place of the tabs.
@@ -115,11 +151,16 @@ One field in the middle of an almost empty page: `#`, "enter code here", a round
 
 **Taken:** the event model, the layouts, the spacing and sizes above, the component shapes, and the restraint (one accent, one typeface, hairline cards, plain labels).
 
-**How LearnBox Sessions differs on the facilitator's screen:**
-- The Q&A is always part of a session, so its card is always in the list, and its bar holds the "Questions open" switch.
+**How LearnBox Sessions differs:**
+- The Q&A is always part of a session, so its card is always in the list. Opening it again needs no confirmation.
+- The Q&A has a third chip, "In review", when questions are reviewed first; its pill holds Approve and Hide.
+- A question's More menu holds Hide. Replies are the facilitator's only, shown as "Host".
+- An announcement field sits above the questions.
 - The rail's second button opens the results page, and its third the settings (the links, and the two Q&A settings).
 - A poll's menu holds move up, move down, duplicate and delete.
-- The facilitator's screen has two filled buttons, Add and Start, as Slido's does.
-- The phone's menu has the code, "Enter another code", the dark mode switch and "Create a session".
+- The quiz's editor stays under the stage while it runs, read-only; a quiz answer is sent by tapping the option; places are by points.
+- A person can withdraw their own question; editing it is left out.
+- The phone's menu has the code, "Enter another code", the dark mode switch and "Create a session". After a person answers or asks, a strip offers "Create a session".
+- Edits show "Saving…" and "Saved" beside the session's name; toasts are for copying a link and for a question sent or withdrawn.
 
 **Stays Slido's:** its name, wordmark, exact green, illustrations, photographs and wording. LearnBox Sessions uses LearnBox's wordmark, LearnBox's forest accent `#1f7a52` and its own labels.

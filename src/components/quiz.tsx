@@ -125,11 +125,13 @@ export function QuizPhone({ title, count, question, q, now, mine, me, top, peopl
       <div className="stack">
         {header}
         {me && (
-          <div className="result-line">
-            <div><span className="small muted">Rank</span><b className="num">{me.rank ?? '–'} / {me.players}</b></div>
-            <div><span className="small muted">Points</span><b className="num">{num(me.total)}</b></div>
-            <div><span className="small muted">Last</span><b className="num">+{num(me.last)}</b></div>
-          </div>
+          <>
+            <div className="none slim"><Icon name="medal" size={40} /><span className="average num">{me.rank ?? '–'} / {me.players}</span></div>
+            <div className="result-line">
+              <div><span className="small muted">Points</span><b className="num">{num(me.total)}</b></div>
+              <div><span className="small muted">Last</span><b className="num">+{num(me.last)}</b></div>
+            </div>
+          </>
         )}
         {top && <Leaderboard entries={top} />}
       </div>
@@ -151,10 +153,13 @@ export function QuizPhone({ title, count, question, q, now, mine, me, top, peopl
   return (
     <div className="stack">
       {header}
-      <div className="spread">
-        <div className="poll-title grow">{question.title}</div>
-        {phase === 'open' && <div className="timer num" aria-label="Seconds left">{secondsLeft(q, now)}</div>}
-      </div>
+      <div className="poll-title">{question.title}</div>
+      {phase === 'open' && (
+        <div className="timerline" aria-label="Seconds left">
+          <Icon name="clock" size={20} /><span className="num">{secondsLeft(q, now)}</span>
+          <span className="track"><i style={{ width: `${Math.max(0, Math.min(1, (q.closesAt - now) / (question.seconds * 1000))) * 100}%` }} /></span>
+        </div>
+      )}
       <div className="list">
         {question.options.map((o, i) => (
           <button type="button" key={o.id} aria-pressed={picked === o.id}

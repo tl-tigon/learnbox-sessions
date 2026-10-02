@@ -14,13 +14,16 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
     - Header: back, the session's name, people joined, the code (a click copies it), Share (join link, projector link), Present, and a menu (Duplicate session, End session, Delete session).
     - Rail: the session, its results page, its settings (the two links and the Q&A settings).
     - Left: an Add button, the Q&A card, then a card for each poll, quiz and survey. Each card has a round Start button and a menu (Move up, Move down, Duplicate, Delete). The running card also has Hide results and Close voting.
-    - Right: the open card. Add shows the seven types to pick from. The Q&A shows the announcement field and the questions. A poll shows its question and options, with each option's result under it: live for the running poll, stored for any other.
-    - Under it, a bar: Start, or Stop with Lock voting and Results shown; the quiz's steps; for the Q&A, the "Questions open" switch. "Participant view" opens the phone's screen.
+    - Right: the open card. Add shows the seven types to pick from. A poll shows its question and options, with each option's result under it: live for the running poll, stored for any other.
+    - The Q&A shows the announcement field, chips for In review, Live and Answered, and the questions as plain rows. A row's actions are round buttons that show on it: Highlight, Mark answered, Reply, and Hide under More. Reply opens the question and its replies in a panel at the side.
+    - Under it, a bar: Start; or Stop with Prev, hide results, close voting and Next (Prev and Next start the neighbouring poll); the quiz's next step; for the Q&A, "Close Q&A" (asks first) or "Open Q&A". "Participant view" opens the phone's screen.
+    - Settings open in a panel down the right side: the session's links, the Q&A's two settings, a poll's settings. Ending or deleting a session, deleting a poll and closing the Q&A ask first in a dialog.
     - Edits save as they are typed.
   - Results page with CSV and Excel downloads.
   - Account page: delete the account, which removes its sessions and all their answers.
 - **Q&A, open for the whole session**
-  - The audience asks (with a name, or anonymously if allowed) and upvotes, one vote per person.
+  - The audience asks from a sheet (with a name; left empty, the question is anonymous if that is allowed) and upvotes, one vote per person.
+  - A person can withdraw their own question while it is live or waiting for review.
   - With review on, a question waits for approval and only its asker sees it meanwhile.
   - The facilitator approves, hides, highlights, marks answered, restores and replies in writing.
   - The facilitator can close questions (upvotes stay open) and post an announcement.
@@ -33,13 +36,13 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Steps: Start quiz, Reveal answer, Leaderboard, Next question. When time is up the screen shows how people voted; Reveal marks the correct answer.
   - A correct answer earns 500 points plus up to 500 more for speed, timed on the server.
   - The phone shows correct or incorrect, points and rank; the last leaderboard ends the quiz, which is played once.
-- **Audience**: joins at `/` or `/s/<code>` with no account. The phone has two tabs, Q&A and Polls; starting a poll brings the Polls tab forward. A menu holds the session's name and code, "Enter another code", a dark mode switch and "Create a session"; the profile button sets the person's name.
+- **Audience**: joins at `/` or `/s/<code>` with no account. The phone has two tabs, Q&A and Polls; starting a poll brings the Polls tab forward, and stopping it brings the Q&A back. After a vote the options give way to the results, with "Edit response" under them. A menu holds the session's name and code, "Enter another code", a dark mode switch and "Create a session"; the profile button sets the person's name. Once a person has answered or asked, a strip at the foot of the page offers "Create a session".
 - **Big screen** `/present/<id>`: join instructions with code and QR on the left; the questions or the running poll on the right. Opens on a projector that isn't signed in with `#k=<displayKey>`.
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 61 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
-- A browser walk passes 59 of 59 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 64 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- A browser walk passes 62 of 62 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
   - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.
@@ -95,8 +98,8 @@ These are in `src/lib/limits.ts`.
 4. **The front page copy**: the draft is in `src/app/page.tsx`.
 5. **The simulations to show**, a name and one line each, for the LearnBox places (front page section, sessions list, results page).
 6. **Company name and contact** for the Terms and Privacy pages.
-7. **Slido's Q&A moderation screen.** The facilitator's screen, the sessions list and the phone's menu now follow Slido's host and participant screens, studied in the owner's Slido account on 2026-10-02. No event there used Q&A, so the moderation view is still our own design. To study it, the owner adds Q&A to a test event in Slido.
-8. **"Create a session" in the phone's menu** is new copy and a new way in for audience members; the owner confirms the label and where it leads (now `/sign-in`).
+7. **The test event in the owner's Slido account**, "Claude test - safe to delete" (#2650635), can be deleted.
+8. **Copy for the owner to confirm**: "Create a session" in the phone's menu; the strip "LearnBox Sessions is free to use at your own meetings." with its "Create a session" button (it leads to `/sign-in?mode=up`); the two lines under the Q&A settings.
 
 ## Next steps
 1. **Provisioning**, on the owner's OK. Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then run the store tests against the dev table, and a load test of about 500 simulated phones.
@@ -112,7 +115,7 @@ These are in `src/lib/limits.ts`.
 - **An edit and the live state.** `updateSession` saves only on the `seq` the edit was worked out against; if a control landed in between, `editSession` works the edit out again. This is what keeps an autosave from changing a quiz that has just started.
 - **A change made on a screen is not undone by a reload.** `setData` from `useLive` drops any load in flight, so a reload that began before a vote, a save or a control cannot put the old data back for a moment. An upvote and the "Questions open" switch also show what was asked for until the request has landed.
 - **The stored results of the open interaction.** The facilitator's screen loads with `?show=<id>`; `hostView` adds that interaction's stored counts and written answers as `shown`. The running interaction is left out: its counts come live, and an open quiz question's votes stay back.
-- **The browser walk on a busy machine.** The dev server compiles routes on first use; right after a build or an edit a wait can run out. The walk waits up to 30 s, and on a failure saves `scripts/live-walk/fail-<n>.png` for every screen and prints any error shown.
+- **The browser walk on a busy machine.** The dev server compiles routes on first use; right after a build or an edit a wait can run out. The build check (`NEXT_DIST_DIR=.next-check npx next build`) rewrites `tsconfig.json` for a moment, which makes the running dev server drop requests for a few minutes; run the walk before the build, or wait after it. The walk waits up to 30 s, and on a failure saves `scripts/live-walk/fail-<n>.png` for every screen and prints any error shown.
 - **Revisions.** `Session.rev` rises with each saved edit. The facilitator's screen sends the revision its draft was made from, and a save from an older one is refused with 409 ("changed in another window"). The screen then offers a reload.
 - **Counts are not written in a transaction with the answer.** A whole room writes to one counts row at once, and DynamoDB transactions on one row collide. The answer is stored first; the counts and the score follow as plain writes, tried three times (`surely` in `live.ts`). The results page and the downloads count again from the stored answers (`recount`), so they are right even if a running count drifted.
 - **Hidden results stay off the push channel.** While results are hidden, and for survey polls, a tally event carries only the number who answered and is marked `withheld`; the facilitator's screen reloads to get the counts.

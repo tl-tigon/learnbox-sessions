@@ -1,5 +1,6 @@
 'use client';
 /** Results of one poll or quiz question, as they build: bars, an average, a word cloud or a wall of answers. */
+import { Icon } from './icons';
 import type { Poll, QuizQuestion, Tally } from '@/lib/types';
 
 const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0);
@@ -18,8 +19,11 @@ function Bar({ label, value, share, lead, mark }: { label: React.ReactNode; valu
   );
 }
 
-/** `all` shows every word and every written answer (the results page); without it a screen shows the top 80 words and the newest 60 answers. */
-export function PollResults({ poll, tally, texts = [], all }: { poll: Poll; tally: Tally | null; texts?: { text: string }[]; all?: boolean }) {
+/**
+ * `all` shows every word and every written answer (the results page); without it a screen shows
+ * the top 80 words and the newest 60 answers. `mine` are the options this person picked, marked on a phone.
+ */
+export function PollResults({ poll, tally, texts = [], all, mine }: { poll: Poll; tally: Tally | null; texts?: { text: string }[]; all?: boolean; mine?: string[] }) {
   const t = tally ?? { people: 0, counts: {} };
   const count = (id: string) => Math.max(0, t.counts[id] ?? 0);
 
@@ -28,7 +32,10 @@ export function PollResults({ poll, tally, texts = [], all }: { poll: Poll; tall
     const top = Math.max(...poll.options.map((o) => count(o.id)));
     return (
       <div className="bars">
-        {poll.options.map((o) => <Bar key={o.id} label={o.label} value={`${pct(count(o.id), t.people)}%`} share={count(o.id) / max} lead={top > 0 && count(o.id) === top} />)}
+        {poll.options.map((o) => (
+          <Bar key={o.id} value={`${pct(count(o.id), t.people)}%`} share={count(o.id) / max} lead={top > 0 && count(o.id) === top}
+            label={mine?.includes(o.id) ? <span className="row">{o.label}<Icon name="user" label="Your answer" /></span> : o.label} />
+        ))}
       </div>
     );
   }

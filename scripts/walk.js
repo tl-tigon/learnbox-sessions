@@ -70,7 +70,7 @@ const FIRST = { timeout: 120000 };
     await p.click('button:has-text("Add option")');
     await p.fill('input[aria-label="Option 3"]', 'Mars');
     await p.check('input[aria-label="Option 2 is correct"]');
-    await p.selectOption('label:has-text("Time limit") select', '10');
+    await p.selectOption('select[aria-label="Time limit"]', '10');
     await p.click('button:has-text("Add question")');
     await p.fill('input[aria-label="Question 2"]', 'Which planet is closest to the sun?');
     const q2 = p.locator('.sub').nth(1);
@@ -137,10 +137,15 @@ const FIRST = { timeout: 120000 };
 
     // ---- Q&A: open for the whole session
     const Q1 = 'Will targets change mid-year?', Q2 = 'When is the new CRM live?';
-    await phones[0].fill('textarea[aria-label="Your question"]', Q1);
-    await phones[0].uncheck('label:has-text("Ask anonymously") input');
-    await phones[0].fill('input[aria-label="Your name"]', 'Asha');
-    await phones[0].click('form button:has-text("Send"):visible');
+    /* The ask row opens a sheet: the question, a name (left empty, the question is anonymous), Send. */
+    const askFrom = async (ph, text, name) => {
+      await ph.click('button.askrow');
+      await ph.fill('textarea[aria-label="Your question"]', text);
+      if (name !== undefined) await ph.fill('[role="dialog"] input[aria-label="Your name"]', name);
+      await ph.click('[role="dialog"] button:has-text("Send")');
+      await ph.waitForSelector('[role="dialog"]', { state: 'detached', timeout: 30000 });
+    };
+    await askFrom(phones[0], Q1, 'Asha');
     for (const ph of phones) await ph.waitForSelector(`.question:has-text("${Q1}")`, WAIT);
     check('Q&A: a question reaches every phone, with the name given', (await phones[3].textContent('.question .name')) === 'Asha');
     for (const i of [1, 2, 3]) await phones[i].click(`.question:has-text("${Q1}") button.votes`);
@@ -151,31 +156,44 @@ const FIRST = { timeout: 120000 };
     check('Q&A: a second upvote from the same phone is refused', dup.status === 409 && list[0].votes === 3, `${dup.status}:${list[0].votes}`);
     check('Q&A: no phone is sent another person\'s token', !JSON.stringify(list).includes('token'));
 
+    // Taking a question back: only its asker can
+    const notMine = await phoneApi(phones[2], 'POST', `/api/live/${sessionId}/qa/${list[0].id}/withdraw`, {});
+    await askFrom(phones[3], 'Asked by mistake');
+    await phones[4].waitForSelector('.question:has-text("Asked by mistake")', WAIT);
+    await phones[3].click('.question:has-text("Asked by mistake") button[aria-label="Your question"]');
+    await phones[3].click('button:has-text("Withdraw")');
+    await phones[3].click('[role="alertdialog"] button:has-text("Withdraw")');
+    await phones[4].waitForSelector('.question:has-text("Asked by mistake")', { state: 'detached', timeout: 30000 });
+    await p.waitForSelector('.qrow:has-text("Asked by mistake")', { state: 'detached', timeout: 30000 });
+    check('Q&A: a question is withdrawn by its asker, and by nobody else', notMine.status === 404 && (await p.$$('.qrow:has-text("Asked by mistake")')).length === 0, String(notMine.status));
+
     // Review before showing
     await p.click('button:has-text("Q&A settings")');
     await p.check('label.switch:has-text("Review questions") input');
     await p.waitForSelector('[role="status"]:has-text("Saved")', WAIT);
-    await p.click('button[aria-label="Close settings"]');
-    await phones[1].fill('textarea[aria-label="Your question"]', Q2);
-    await phones[1].click('form button:has-text("Send"):visible');
+    await p.click('button[aria-label="Close panel"]');
+    await askFrom(phones[1], Q2);
     await phones[1].waitForSelector('text=Waiting for review', WAIT);
-    await p.waitForSelector(`.question:has-text("${Q2}") button:has-text("Approve")`, WAIT);
+    await p.waitForSelector(`.qrow:has-text("${Q2}") button[aria-label="Approve"]`, WAIT);
     check('Q&A: a question waiting for review shows only to its asker and the facilitator',
       (await phones[2].$$(`.question:has-text("${Q2}")`)).length === 0 && (await wall.$$(`.wq:has-text("${Q2}")`)).length === 0);
     await p.screenshot({ path: path.join(OUT, '03-host-qa-review.png') });
-    await p.click(`.question:has-text("${Q2}") button:has-text("Approve")`);
+    await p.click(`.qrow:has-text("${Q2}") button[aria-label="Approve"]`);
     for (const ph of phones) await ph.waitForSelector(`.question:has-text("${Q2}")`, WAIT);
     const names = await phones[3].$$eval('.question .name', (els) => els.map((e) => e.textContent).sort().join('|'));
     check('Q&A: an approved question shows to everyone, as Anonymous when asked that way', names === 'Anonymous|Asha', names);
 
     // Reply, highlight, announcement
-    await p.click('.subtabs button:has-text("Live")');
-    await p.click(`.question:has-text("${Q1}") button:has-text("Reply")`);
+    await p.click('.qtabs button:has-text("Live")');
+    await p.click(`.qrow:has-text("${Q1}") button[aria-label="Reply"]`);
     await p.fill('textarea[aria-label="Your reply"]', 'Targets stay as set in April.');
-    await p.click('button:has-text("Send reply")');
+    await p.click('.sidepanel button:has-text("Send")');
     await phones[4].waitForSelector('.reply:has-text("Targets stay as set in April.")', WAIT);
     check('Q&A: the facilitator\'s reply shows under the question on phones', true);
-    await p.click(`.question:has-text("${Q1}") button:has-text("Highlight")`);
+    await p.waitForSelector('.sidepanel .qrow:has-text("Targets stay as set in April.")', WAIT);
+    await p.screenshot({ path: path.join(OUT, '03b-host-reply.png') });
+    await p.click('button[aria-label="Close panel"]');
+    await p.click(`.qrow:has-text("${Q1}") button[aria-label="Highlight"]`);
     await wall.waitForSelector(`.wq.highlighted:has-text("${Q1}")`, WAIT);
     await phones[4].waitForSelector(`.question.highlighted:has-text("${Q1}")`, WAIT);
     check('Q&A: the highlighted question stands out on the big screen and on phones', true);
@@ -185,21 +203,25 @@ const FIRST = { timeout: 120000 };
     check('Q&A: the announcement shows at the top of the Q&A tab', true);
     await wall.screenshot({ path: path.join(OUT, '04-wall-qa.png') });
     await phones[4].screenshot({ path: path.join(OUT, '05-phone-qa.png') });
-    await p.click(`.question:has-text("${Q1}") button:has-text("Mark answered")`);
+    await p.screenshot({ path: path.join(OUT, '05b-host-qa-highlight.png') });
+    await p.click(`.qrow:has-text("${Q1}") button[aria-label="Mark answered"]`);
     await wall.waitForSelector('.wq.highlighted', { state: 'detached', timeout: 10000 });
     check('Q&A: marking a question answered clears the highlight', true);
 
     // Closing questions
-    await p.uncheck('label.switch:has-text("Questions open") input');
+    await p.click('button:has-text("Close Q&A")');
+    await p.click('[role="alertdialog"] button:has-text("Close Q&A")');
     await phones[3].waitForSelector('text=Questions closed', WAIT);
     const lateAsk = await phoneApi(phones[3], 'POST', `/api/live/${sessionId}/qa`, { text: 'Too late?', anonymous: true });
     await phones[3].click(`.question:has-text("${Q2}") button.votes`);
     await phones[0].waitForFunction((t) => [...document.querySelectorAll('.question')].some((e) => e.textContent.includes(t) && e.querySelector('.votes').textContent.trim() === '1'), Q2, WAIT);
     check('Q&A: closed questions refuse a new one and still take upvotes', lateAsk.status === 409, String(lateAsk.status));
-    await p.check('label.switch:has-text("Questions open") input');
-    // A question half typed must survive the phone jumping to the Polls tab.
-    await phones[2].waitForSelector('textarea[aria-label="Your question"]', WAIT);
+    await p.click('button:has-text("Open Q&A")');
+    // A question half typed must survive the sheet closing and the phone jumping to the Polls tab.
+    await phones[2].waitForSelector('button.askrow', WAIT);
+    await phones[2].click('button.askrow');
     await phones[2].fill('textarea[aria-label="Your question"]', 'Half typed when the poll started');
+    await phones[2].click('[role="dialog"] button[aria-label="Close ask"]');
 
     // ---- Multiple choice: start, vote, change a vote, lock, hide results
     const early = await phoneApi(phones[0], 'POST', `/api/live/${sessionId}/answer`, { pollId: choice.id, answer: { optionIds: [choice.options[0].id] } });
@@ -208,9 +230,11 @@ const FIRST = { timeout: 120000 };
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("Where should we go?")', WAIT);
     check('polls: starting a poll brings it up on every phone', true);
     await phones[2].click('button[role="tab"]:has-text("Q&A")');
+    await phones[2].click('button.askrow');
     const kept = await phones[2].inputValue('textarea[aria-label="Your question"]');
     check('a question half typed is still there after the phone jumps to the poll', kept === 'Half typed when the poll started', kept);
     await phones[2].fill('textarea[aria-label="Your question"]', '');
+    await phones[2].click('[role="dialog"] button[aria-label="Close ask"]');
     await phones[2].click('button[role="tab"]:has-text("Polls")');
     await phones[0].screenshot({ path: path.join(OUT, '06-phone-poll.png') });
     const picks = ['Goa', 'Goa', 'Coorg', 'Goa', 'Lonavala'];
@@ -219,6 +243,8 @@ const FIRST = { timeout: 120000 };
     await wall.waitForFunction(() => /Goa\s*60%/.test(document.querySelector('.panel')?.textContent ?? ''), null, WAIT);
     check('polls: the big screen shows the shares as votes arrive', /Goa\s?60%.*Coorg\s?20%.*Lonavala\s?20%/.test(await bars()), await bars());
     await wall.screenshot({ path: path.join(OUT, '07-wall-poll.png') });
+    await phones[1].screenshot({ path: path.join(OUT, '06b-phone-voted.png') });
+    check('after answering, the phone shows the results and offers a session of one\'s own', (await phones[1].$$('.card .bar')).length === 3 && !!(await phones[1].$('.offer a:has-text("Create a session")')));
     await phones[0].click('button:has-text("Edit response")');
     await phones[0].click('label.option:has-text("Coorg")');
     await phones[0].click('button:has-text("Send"):visible');
@@ -226,15 +252,15 @@ const FIRST = { timeout: 120000 };
     host = (await api('GET', `/api/sessions/${sessionId}`)).body;
     check('polls: a changed vote moves to the new option and the person is still counted once',
       /Goa\s?40%.*Coorg\s?40%.*Lonavala\s?20%/.test(await bars()) && host.tally.people === 5 && Object.values(host.tally.counts).reduce((a, n) => a + n, 0) === 5, `${await bars()} · ${host.tally.people} people`);
-    await p.click('button:has-text("Lock voting")');
+    await p.click('.startbar button[aria-label="Close voting"]');
     await phones[1].waitForSelector('text=Voting closed', WAIT);
     const locked = await phoneApi(phones[1], 'POST', `/api/live/${sessionId}/answer`, { pollId: choice.id, answer: { optionIds: [choice.options[2].id] } });
     check('polls: locked voting refuses a change', locked.status === 409, String(locked.status));
-    await p.click('button:has-text("Results shown")');
+    await p.click('.startbar button[aria-label="Hide results"]');
     await wall.waitForSelector('text=Results are hidden', WAIT);
     const hidden = (await phoneApi(phones[2], 'GET', `/api/live/${sessionId}?t={t}`)).body;
     check('polls: hidden results are kept from phones and the big screen', hidden.active.tally === null && (await wall.$$('.bar')).length === 0);
-    await p.click('button:has-text("Results hidden")');
+    await p.click('.startbar button[aria-label="Show results"]');
     await p.waitForFunction(() => [...document.querySelectorAll('.dcard .opt .val')].map((e) => e.textContent).join() === '40%,40%,20%', null, WAIT);
     check('polls: the facilitator sees each option\'s share under it', true);
     await p.screenshot({ path: path.join(OUT, '07b-host-poll.png') });
@@ -308,7 +334,7 @@ const FIRST = { timeout: 120000 };
     await wall.waitForSelector('.panel:has-text("Planets")', WAIT);
     const beforeStart = await phoneApi(phones[4], 'POST', `/api/live/${sessionId}/answer`, { pollId: qq1.id, answer: { optionId: qq1.correctId } });
     check('quiz: an answer before the first question is refused', beforeStart.status === 409, String(beforeStart.status));
-    await p.click('button:has-text("Start quiz")');
+    await p.click('button:has-text("First question")');
     for (const ph of phones) await ph.waitForSelector('.option:has-text("Jupiter"):not([disabled])', WAIT);
     const sent = (await phoneApi(phones[0], 'GET', `/api/live/${sessionId}?t={t}`)).body;
     check('quiz: the phone is not sent the correct answer', sent.active.question.correctId === '' && !sent.state.quiz.correct && !sent.active.tally);
@@ -392,7 +418,9 @@ const FIRST = { timeout: 120000 };
     check('a made-up or unjoined phone is refused', forged === 400 && stranger === 403, `${forged},${stranger}`);
 
     // ---- Results and downloads
-    await p.click('button:has-text("Close quiz")');
+    await p.click('.startbar button:has-text("Stop")');
+    await phones[2].waitForSelector('button[role="tab"][aria-selected="true"]:has-text("Q&A")', WAIT);
+    check('when the quiz is stopped, a phone goes back to the Q&A', true);
     await p.waitForFunction(() => [...document.querySelectorAll('.dcard .sub .opt.correct .val')].map((e) => e.textContent).join() === '3,2', null, WAIT);
     check('quiz: once played, its questions show how people voted', true);
     await p.click('a[aria-label="Results"]');
@@ -420,6 +448,7 @@ const FIRST = { timeout: 120000 };
     await p.waitForSelector('input[aria-label="Session name"]', WAIT);
     await p.click('button[aria-label="More"]');
     await p.click('button:has-text("End session")');
+    await p.click('[role="alertdialog"] button:has-text("End session")');
     await phones[0].click('button[role="tab"]:has-text("Q&A")');
     await phones[0].waitForSelector('text=Session ended', WAIT);
     await wall.waitForSelector('text=Session ended', WAIT);

@@ -140,8 +140,13 @@ function Joined({ id }: { id: string }) {
   useEffect(() => {
     if (!v) return;
     if (current && current !== seen.current) setTab('polls');
+    /* When it stops with nothing started in its place, the phone goes back to the Q&A. */
+    if (!current && seen.current) setTab('qa');
     seen.current = current;
   }, [v, current]);
+  /* Once this person has answered or asked something, the page offers them a session of their own. */
+  const [offer, setOffer] = useState<'no' | 'show' | 'closed'>('no');
+  const engaged = useCallback(() => setOffer((cur) => (cur === 'no' ? 'show' : cur)), []);
 
   const [naming, setNaming] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -176,8 +181,9 @@ function Joined({ id }: { id: string }) {
     if (!r.ok) return j.error ?? 'Not sent';
     if (j.tally) setData((cur) => (cur?.active?.kind === 'poll' ? { ...cur, active: { ...cur.active, tally: j.tally } } : cur));
     await refresh();
+    engaged();
     return null;
-  }, [id, token, setData, refresh]);
+  }, [id, token, setData, refresh, engaged]);
 
   if (!v) return <main className="narrow"><p className="muted">{error ?? 'Joining…'}</p></main>;
   const ended = v.status === 'ended';
@@ -224,21 +230,20 @@ function Joined({ id }: { id: string }) {
         {ended && <div className="card notice"><span className="dot"><Icon name="lock" /></span>Session ended</div>}
 
         <div hidden={tab !== 'qa'}>
-          <QaPhone sessionId={id} token={token} state={v.state} settings={v.qa} nickname={v.nickname} ended={ended} />
+          <QaPhone sessionId={id} token={token} state={v.state} settings={v.qa} nickname={v.nickname} ended={ended} onEngage={engaged} />
         </div>
 
         {!ended && (
           <section className="stack" hidden={tab !== 'polls'}>
             {!a && <div className="none"><Icon name="bars" size={40} />No active poll</div>}
             {a?.kind === 'poll' && (
-              <>
-                <PollForm key={a.poll.id} poll={a.poll} mine={a.mine} locked={v.state.locked} name={v.nickname} people={a.tally?.people}
-                  onSend={(answer_) => answer({ pollId: a.poll.id, answer: answer_ })} />
-                {/* Written answers are for the big screen; a phone shows the counts of the other kinds. */}
-                {a.mine.length > 0 && a.poll.type !== 'open' && (v.state.showResults
-                  ? a.tally && <div className="card"><PollResults poll={a.poll} tally={a.tally} /></div>
-                  : <span className="row muted"><Icon name="eyeoff" />Results are hidden</span>)}
-              </>
+              /* Written answers are for the big screen; a phone shows the counts of the other kinds. */
+              <PollForm key={a.poll.id} poll={a.poll} mine={a.mine} locked={v.state.locked} name={v.nickname} people={a.tally?.people}
+                hidden={!v.state.showResults && a.poll.type !== 'open'}
+                results={v.state.showResults && a.tally && a.poll.type !== 'open'
+                  ? <PollResults poll={a.poll} tally={a.tally} mine={a.mine[0]?.type === 'choice' ? a.mine[0].optionIds : undefined} />
+                  : undefined}
+                onSend={(answer_) => answer({ pollId: a.poll.id, answer: answer_ })} />
             )}
             {a?.kind === 'survey' && (
               <SurveyForm key={a.survey.id} survey={a.survey} mine={a.mine} locked={v.state.locked} name={v.nickname}
@@ -251,7 +256,16 @@ function Joined({ id }: { id: string }) {
           </section>
         )}
       </main>
-      <footer className="footer"><span className="wordmark">LearnBox Sessions</span></footer>
+      <footer className="footer">
+        {offer === 'show' && (
+          <div className="offer">
+            <button type="button" className="icon-btn ghost sm" aria-label="Close" onClick={() => setOffer('closed')}><Icon name="x" /></button>
+            <span>LearnBox Sessions is free to use at your own meetings.</span>
+            <a className="btn primary pill tall" href="/sign-in?mode=up">Create a session</a>
+          </div>
+        )}
+        <span className="wordmark">LearnBox Sessions</span>
+      </footer>
     </>
   );
 }

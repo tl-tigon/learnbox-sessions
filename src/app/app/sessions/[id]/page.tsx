@@ -3,12 +3,12 @@
  * The facilitator's screen for one session, laid out as Slido's host screen is: a header with the
  * name, the code, Share and Present; a list of cards on the left (the Q&A, then each poll, quiz
  * and survey); the open card on the right, with a bar under it that starts and stops it.
- * Edits save as they are typed.
+ * Settings and replies open in a panel down the right side. Edits save as they are typed.
  */
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Dialog } from '@/components/dialog';
-import { hasSettings, PollEditor, QuizEditor, SurveyEditor } from '@/components/editor';
+import { Confirm, Panel, Toast, type Ask } from '@/components/dialog';
+import { hasSettings, PollEditor, PollSettings, QuizEditor, SurveyEditor } from '@/components/editor';
 import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
 import { Menu } from '@/components/menu';
 import { QaHost } from '@/components/qa';
@@ -34,8 +34,7 @@ export default function HostPage({ params }: { params: Promise<{ id: string }> }
 
 const nameOf = (i: Interaction) => i.title || 'Untitled';
 const EMPTY: Tally = { people: 0, counts: {} };
-const START: Record<InteractionType, string> = { choice: 'Start poll', wordcloud: 'Start poll', rating: 'Start poll', open: 'Start poll', ranking: 'Start poll', quiz: 'Open quiz', survey: 'Start survey' };
-const STOP: Record<InteractionType, string> = { choice: 'Stop poll', wordcloud: 'Stop poll', rating: 'Stop poll', open: 'Stop poll', ranking: 'Stop poll', quiz: 'Close quiz', survey: 'Stop survey' };
+const START: Record<InteractionType, string> = { choice: 'Start poll', wordcloud: 'Start poll', rating: 'Start poll', open: 'Start poll', ranking: 'Start poll', quiz: 'Start quiz', survey: 'Start survey' };
 
 function Host({ id }: { id: string }) {
   const router = useRouter();
@@ -183,17 +182,14 @@ function Host({ id }: { id: string }) {
     lastPhase.current = phaseNow;
   }, [phaseNow, refresh]);
 
-  const [settings, setSettings] = useState(false);
-  const [itemSettings, setItemSettings] = useState(false);
+  /* What is open at the side: the session's settings, the Q&A's, or the open poll's. */
+  const [panel, setPanel] = useState<'session' | 'qa' | 'poll' | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
-  /* The "Questions open" switch shows what was asked for until the control has landed, so a reload in between cannot flick it back. */
-  const [qaWanted, setQaWanted] = useState<boolean | null>(null);
-  /* What was last copied, named for a moment beside the code. */
-  const [copied, setCopied] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Ask | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const copy = (what: string, text: string) => {
     navigator.clipboard?.writeText(text).catch(() => {});
-    setCopied(what);
-    setTimeout(() => setCopied((cur) => (cur === what ? null : cur)), 1500);
+    setToast(`${what} copied`);
   };
 
   if (!v || !draft) return <main className="narrow"><p className={error ? 'error' : 'muted'}>{error ?? 'Loading…'}</p></main>;
@@ -220,11 +216,16 @@ function Host({ id }: { id: string }) {
     });
     select(made.id);
   };
-  const remove = (target: Interaction) => {
-    if (!confirm(`Delete "${nameOf(target)}"? Its answers are removed from the results.`)) return;
-    edit((d) => ({ ...d, interactions: d.interactions.filter((i) => i.id !== target.id) }));
-    if (selected === target.id) setView('qa');
-  };
+  const remove = (target: Interaction) => setConfirm({
+    title: `Delete "${nameOf(target)}"`,
+    text: 'Its answers are removed from the results.',
+    action: 'Delete',
+    danger: true,
+    run: () => {
+      edit((d) => ({ ...d, interactions: d.interactions.filter((i) => i.id !== target.id) }));
+      if (selected === target.id) setView('qa');
+    },
+  });
   const reorder = (index: number, by: number) => edit((d) => {
     const next = [...d.interactions];
     [next[index], next[index + by]] = [next[index + by], next[index]];
@@ -242,6 +243,22 @@ function Host({ id }: { id: string }) {
   const resultsHref = `/app/sessions/${id}/results`;
   const pendingCount = v.questions.filter((q) => q.status === 'pending').length;
   const itemActive = !!item && v.state.active === item.id;
+  const itemIndex = item ? draft.interactions.findIndex((i) => i.id === item.id) : -1;
+  /* The interaction before or after the open one; Prev and Next start it in place of the running one. */
+  const neighbour = (by: number) => draft.interactions[itemIndex + by] ?? null;
+  const settingsPoll = item && item.type !== 'quiz' && item.type !== 'survey' && hasSettings(item) ? item : null;
+  const qaSwitches = (
+    <>
+      <div className="setting">
+        <label className="switch strong">Review questions<input type="checkbox" checked={draft.qa.moderation} disabled={ended} onChange={(e) => edit((d) => ({ ...d, qa: { ...d.qa, moderation: e.target.checked } }))} /></label>
+        <p className="muted">A question shows to the audience once you approve it.</p>
+      </div>
+      <div className="setting">
+        <label className="switch strong">Anonymous questions<input type="checkbox" checked={draft.qa.anonymous} disabled={ended} onChange={(e) => edit((d) => ({ ...d, qa: { ...d.qa, anonymous: e.target.checked } }))} /></label>
+        <p className="muted">People can ask without giving a name.</p>
+      </div>
+    </>
+  );
 
   return (
     <div className="hostpage">
@@ -254,7 +271,6 @@ function Host({ id }: { id: string }) {
           : saved === 'conflict' ? <button className="danger" onClick={() => window.location.reload()}>Changed in another window · Reload</button>
           : <span className={saved === 'error' ? 'tag error' : 'tag'} role="status">{saved === 'saving' ? 'Saving…' : saved === 'error' ? 'Not saved' : 'Saved'}</span>}
         <span className="grow gap" />
-        {copied && <span className="tag" role="status">{copied} copied</span>}
         <span className="row muted num" title="People joined"><Icon name="user" />{v.people}</span>
         <button className="ghost code num" aria-label={`Copy join code ${v.code}`} title="Copy join code" onClick={() => copy('Code', v.code)}># {v.code.slice(0, 3)} {v.code.slice(3)}</button>
         {!ended && (
@@ -264,10 +280,10 @@ function Host({ id }: { id: string }) {
           </Menu>
         )}
         <div className={ended ? '' : 'split'}>
-          {!ended && <a className="btn outline" href={`/present/${id}`} target="_blank" rel="noreferrer" aria-label="Present"><Icon name="screen" /><span className="wide-only">Present</span></a>}
-          <Menu label="More" className="outline icon-btn" trigger={<Icon name="more" size={20} />}>
+          {!ended && <a className="btn primary tall" href={`/present/${id}`} target="_blank" rel="noreferrer" aria-label="Present"><Icon name="screen" /><span className="wide-only">Present</span></a>}
+          <Menu label="More" className={ended ? 'outline icon-btn' : 'primary tall icon-btn'} trigger={<Icon name="more" size={20} />}>
             <a className="btn only-narrow" href={resultsHref} onClick={leaveTo(resultsHref)}><Icon name="trend" />Results</a>
-            <button className="only-narrow" onClick={() => setSettings(true)}><Icon name="sliders" />Settings</button>
+            <button className="only-narrow" onClick={() => setPanel('session')}><Icon name="sliders" />Settings</button>
             <button onClick={async () => {
               await flush();
               const r = await authed('/api/sessions', { method: 'POST', body: JSON.stringify({ from: id }) });
@@ -276,16 +292,19 @@ function Host({ id }: { id: string }) {
               else setErr(j.error ?? 'Not copied');
             }}><Icon name="copy" />Duplicate session</button>
             {!ended && (
-              <button className="danger" onClick={async () => {
-                if (!confirm('End this session? People can no longer answer or ask.')) return;
-                await act({ action: 'end' });
-              }}><Icon name="stop" />End session</button>
+              <button className="danger" onClick={() => setConfirm({ title: 'End session', text: 'People can no longer answer or ask. The results stay.', action: 'End session', danger: true, run: () => void act({ action: 'end' }) })}><Icon name="stop" />End session</button>
             )}
-            <button className="danger" onClick={async () => {
-              if (!confirm(`Delete "${draft.title}"? Its results are deleted with it.`)) return;
-              const r = await authed(`/api/sessions/${id}`, { method: 'DELETE' });
-              if (r.ok) router.push('/app');
-            }}><Icon name="trash" />Delete session</button>
+            <button className="danger" onClick={() => setConfirm({
+              title: `Delete "${draft.title}"`,
+              text: 'Its results are deleted with it.',
+              action: 'Delete session',
+              danger: true,
+              run: async () => {
+                const r = await authed(`/api/sessions/${id}`, { method: 'DELETE' });
+                if (r.ok) router.push('/app');
+                else setErr('Not deleted');
+              },
+            })}><Icon name="trash" />Delete session</button>
           </Menu>
         </div>
       </header>
@@ -293,7 +312,7 @@ function Host({ id }: { id: string }) {
       <nav className="rail" aria-label="Session">
         <button className="on" aria-label="Interactions" aria-current="page" title="Interactions"><Icon name="list" size={18} /></button>
         <a className="btn" href={resultsHref} aria-label="Results" title="Results" onClick={leaveTo(resultsHref)}><Icon name="trend" size={18} /></a>
-        <button aria-label="Settings" title="Settings" onClick={() => setSettings(true)}><Icon name="sliders" size={18} /></button>
+        <button aria-label="Settings" title="Settings" onClick={() => setPanel('session')}><Icon name="sliders" size={18} /></button>
       </nav>
 
       <div className="hostmain">
@@ -302,12 +321,12 @@ function Host({ id }: { id: string }) {
           {!ended && room && <div><button className="primary tall" onClick={() => setView('add')}><Icon name="plus" />Add</button></div>}
 
           <h3>Q&A</h3>
-          <div className={`icard ${showing === 'qa' ? 'selected' : ''}`} onClick={() => setView('qa')}>
-            <button type="button" className="title"><span>Questions from the audience</span></button>
-            <div className="meta">
-              <span className="kind"><Icon name="chat" size={20} /></span>
-              <span className="small muted num grow">{v.questions.length} questions{pendingCount > 0 && <> · <span className="warn">{pendingCount} to review</span></>}{!v.state.qaOpen && !ended && ' · Closed'}</span>
-            </div>
+          <div className={`icard qa ${showing === 'qa' ? 'selected' : ''}`} onClick={() => setView('qa')}>
+            <span className="kind"><Icon name="chat" size={24} /></span>
+            <button type="button" className="title">
+              <span className="small muted num">{v.questions.length === 1 ? '1 question' : `${v.questions.length} questions`}{pendingCount > 0 && <> · <span className="warn">{pendingCount} to review</span></>}</span>
+              {!ended && <span className={`status ${v.state.qaOpen ? '' : 'closed'}`}>{v.state.qaOpen ? 'Open' : 'Closed'}</span>}
+            </button>
           </div>
 
           <h3>Polls <span className="count num">{draft.interactions.length}</span></h3>
@@ -319,7 +338,7 @@ function Host({ id }: { id: string }) {
                 <button type="button" className="title"><span>{name}</span></button>
                 <div className="meta">
                   <span className="kind" title={TYPE_LABEL[i.type]}><Icon name={TYPE_ICON[i.type]} size={20} /></span>
-                  <span className="small muted num grow">{active && <span className="live-dot">Live</span>}{active && ' · '}{answeredOf(i)} answered</span>
+                  <span className={`small num grow ${active ? 'live-dot' : 'muted'}`}>{answeredOf(i)} answered</span>
                   {!ended && (
                     <div className="acts" onClick={(e) => e.stopPropagation()}>
                       {active && i.type !== 'quiz' && i.type !== 'survey' && (
@@ -331,7 +350,7 @@ function Host({ id }: { id: string }) {
                           onClick={() => act({ action: 'lock', on: !v.state.locked })}><Icon name={v.state.locked ? 'lock' : 'unlock'} /></button>
                       )}
                       {active
-                        ? <button className="go" aria-label={`Stop ${name}`} title="Stop" disabled={busy} onClick={stop}><Icon name="stop" /></button>
+                        ? <button className="go stop" aria-label={`Stop ${name}`} title="Stop" disabled={busy} onClick={stop}><Icon name="stop" /></button>
                         : <button className="go" aria-label={`Start ${name}`} title="Start" disabled={busy} onClick={() => start(i)}><Icon name="play" /></button>}
                       <Menu label={`More for ${name}`} className="icon-btn ghost sm" trigger={<Icon name="morev" />}>
                         <button disabled={index === 0} onClick={() => reorder(index, -1)}><Icon name="up" />Move up</button>
@@ -369,10 +388,11 @@ function Host({ id }: { id: string }) {
             {/* The Q&A stays in the page while something else is open, so a reply half typed is still there on coming back. */}
             <div className="stack" hidden={showing !== 'qa'}>
               <div className="dhead">
-                <span className="ring"><Icon name="chat" size={20} /></span>
-                <div className="who"><span className="strong">Q&A</span><span className="small muted num">{v.questions.length} questions</span></div>
+                <span className="kind"><Icon name="chat" size={24} /></span>
+                <span className="dtitle">Q&A</span>
+                {!v.state.qaOpen && !ended && <span className="pill-danger"><Icon name="lock" />Q&A closed</span>}
                 <span className="grow" />
-                <button className="ghost" onClick={() => setSettings(true)}><Icon name="sliders" />Q&A settings</button>
+                <button className="ghost" onClick={() => setPanel('qa')}><Icon name="sliders" />Q&A settings</button>
               </div>
               {!ended && (
                 <form className="field-row" onSubmit={(e) => { e.preventDefault(); void act({ action: 'announce', text: announcement ?? v.state.announcement }).then((ok) => { if (ok) setAnnouncement(null); }); }}>
@@ -385,7 +405,7 @@ function Host({ id }: { id: string }) {
             </div>
 
             {showing === 'item' && item && (
-              <ItemPanel v={v} item={item} now={now} ended={ended} answered={answeredOf(item)} settings={itemSettings} onSettings={() => setItemSettings((x) => !x)}
+              <ItemPanel v={v} item={item} now={now} ended={ended} answered={answeredOf(item)} onSettings={settingsPoll ? () => setPanel(panel === 'poll' ? null : 'poll') : undefined}
                 onChange={editInteraction} onDelete={() => remove(item)} />
             )}
           </div>
@@ -393,32 +413,26 @@ function Host({ id }: { id: string }) {
           {showing !== 'add' && (
             <div className="startbar">
               {ended && <span className="tag">Ended</span>}
-              {!ended && showing === 'qa' && (
-                <label className="switch">Questions open
-                  {/* The switch moves at once; if the change is refused, it goes back to what the server holds. */}
-                  <input type="checkbox" checked={qaWanted ?? v.state.qaOpen} disabled={busy} onChange={(e) => {
-                    const on = e.target.checked;
-                    setQaWanted(on);
-                    void act({ action: 'qa-open', on }).finally(() => setQaWanted(null));
-                  }} />
-                </label>
-              )}
+              {!ended && showing === 'qa' && (v.state.qaOpen
+                ? <button className="tint-danger tall" disabled={busy} onClick={() => setConfirm({ title: 'Close Q&A', text: 'People can no longer send questions. Upvotes stay open.', action: 'Close Q&A', danger: true, run: () => void act({ action: 'qa-open', on: false }) })}><Icon name="lock" />Close Q&A</button>
+                : <button className="tint-accent tall" disabled={busy} onClick={() => act({ action: 'qa-open', on: true })}><Icon name="unlock" />Open Q&A</button>)}
               {!ended && showing === 'item' && item && !itemActive && (
                 <button className="primary tall" disabled={busy} onClick={() => act({ action: 'activate', id: item.id })}><Icon name="play" />{START[item.type]}</button>
               )}
               {!ended && showing === 'item' && item && itemActive && (
                 <>
-                  {item.type === 'quiz' && playing && <QuizBar quiz={item} v={v} now={now} busy={busy} act={act} />}
-                  <button disabled={busy} onClick={stop}><Icon name="stop" />{STOP[item.type]}</button>
-                  {item.type !== 'quiz' && (
-                    <button className={v.state.locked ? 'on' : ''} aria-pressed={v.state.locked} disabled={busy} onClick={() => act({ action: 'lock', on: !v.state.locked })}>
-                      <Icon name={v.state.locked ? 'lock' : 'unlock'} />{v.state.locked ? 'Voting locked' : 'Lock voting'}
-                    </button>
-                  )}
-                  {item.type !== 'quiz' && item.type !== 'survey' && (
-                    <button className={v.state.showResults ? '' : 'on'} aria-pressed={!v.state.showResults} disabled={busy} onClick={() => act({ action: 'results', on: !v.state.showResults })}>
-                      <Icon name={v.state.showResults ? 'eye' : 'eyeoff'} />{v.state.showResults ? 'Results shown' : 'Results hidden'}
-                    </button>
+                  <button className="tint-danger tall" disabled={busy} onClick={stop}><Icon name="stop" />Stop</button>
+                  {item.type === 'quiz' ? playing && <QuizBar quiz={item} v={v} now={now} busy={busy} act={act} /> : (
+                    <>
+                      <button className="ghost tall" disabled={busy || !neighbour(-1)} onClick={() => { const to = neighbour(-1); if (to) start(to); }}><Icon name="left" />Prev</button>
+                      {item.type !== 'survey' && (
+                        <button className={`icon-btn ghost tall ${v.state.showResults ? '' : 'on'}`} aria-label={v.state.showResults ? 'Hide results' : 'Show results'} title={v.state.showResults ? 'Hide results' : 'Show results'} aria-pressed={!v.state.showResults} disabled={busy}
+                          onClick={() => act({ action: 'results', on: !v.state.showResults })}><Icon name={v.state.showResults ? 'eye' : 'eyeoff'} /></button>
+                      )}
+                      <button className={`icon-btn ghost tall ${v.state.locked ? 'on' : ''}`} aria-label={v.state.locked ? 'Open voting' : 'Close voting'} title={v.state.locked ? 'Open voting' : 'Close voting'} aria-pressed={v.state.locked} disabled={busy}
+                        onClick={() => act({ action: 'lock', on: !v.state.locked })}><Icon name={v.state.locked ? 'lock' : 'unlock'} /></button>
+                      <button className="ghost tall" disabled={busy || !neighbour(1)} onClick={() => { const to = neighbour(1); if (to) start(to); }}>Next<Icon name="right" /></button>
+                    </>
                   )}
                 </>
               )}
@@ -432,24 +446,27 @@ function Host({ id }: { id: string }) {
         </section>
       </div>
 
-      {settings && (
-        <Dialog label="Settings" onClose={() => setSettings(false)}>
-          <section>
-            <h3>Links</h3>
-            <label>Join link
-              <span className="field-row"><input readOnly value={joinLink} onFocus={(e) => e.target.select()} /><button type="button" className="icon-btn" aria-label="Copy join link" onClick={() => copy('Join link', joinLink)}><Icon name="copy" /></button></span>
-            </label>
-            <label>Projector link
-              <span className="field-row"><input readOnly value={projector} onFocus={(e) => e.target.select()} /><button type="button" className="icon-btn" aria-label="Copy projector link" onClick={() => copy('Projector link', projector)}><Icon name="copy" /></button></span>
-            </label>
-          </section>
-          <section>
-            <h3>Q&A</h3>
-            <label className="switch">Review questions before they show<input type="checkbox" checked={draft.qa.moderation} disabled={ended} onChange={(e) => edit((d) => ({ ...d, qa: { ...d.qa, moderation: e.target.checked } }))} /></label>
-            <label className="switch">Anonymous questions<input type="checkbox" checked={draft.qa.anonymous} disabled={ended} onChange={(e) => edit((d) => ({ ...d, qa: { ...d.qa, anonymous: e.target.checked } }))} /></label>
-          </section>
-        </Dialog>
+      {panel === 'session' && (
+        <Panel label="Settings" onClose={() => setPanel(null)}>
+          <h3>Links</h3>
+          <label>Join link
+            <span className="field-row"><input readOnly value={joinLink} onFocus={(e) => e.target.select()} /><button type="button" className="icon-btn" aria-label="Copy join link" onClick={() => copy('Join link', joinLink)}><Icon name="copy" /></button></span>
+          </label>
+          <label>Projector link
+            <span className="field-row"><input readOnly value={projector} onFocus={(e) => e.target.select()} /><button type="button" className="icon-btn" aria-label="Copy projector link" onClick={() => copy('Projector link', projector)}><Icon name="copy" /></button></span>
+          </label>
+          <h3>Q&A</h3>
+          {qaSwitches}
+        </Panel>
       )}
+      {panel === 'qa' && <Panel label="Q&A settings" onClose={() => setPanel(null)}>{qaSwitches}</Panel>}
+      {panel === 'poll' && settingsPoll && showing === 'item' && (
+        <Panel label="Poll settings" onClose={() => setPanel(null)}>
+          <PollSettings poll={settingsPoll} onChange={editInteraction} disabled={ended} />
+        </Panel>
+      )}
+      {confirm && <Confirm ask={confirm} onClose={() => setConfirm(null)} />}
+      {toast && <Toast text={toast} onDone={() => setToast(null)} />}
     </div>
   );
 }
@@ -473,16 +490,15 @@ function Sketch({ type }: { type: InteractionType }) {
   );
 }
 
-
 /** The open interaction: what is running in it now, then its fields with the results under them. */
-function ItemPanel({ v, item, now, ended, answered, settings, onSettings, onChange, onDelete }: {
+function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDelete }: {
   v: HostView;
   item: Interaction;
   now: number;
   ended: boolean;
   answered: number;
-  settings: boolean;
-  onSettings: () => void;
+  /** Opens the poll's settings at the side; absent for a type with none. */
+  onSettings?: () => void;
   onChange: (i: Interaction) => void;
   onDelete: () => void;
 }) {
@@ -492,19 +508,18 @@ function ItemPanel({ v, item, now, ended, answered, settings, onSettings, onChan
   const started = item.type === 'quiz' && (!!v.state.played?.includes(item.id) || (!!q && q.index >= 0));
   /* The running interaction's counts arrive live. Any other's are the stored ones, loaded when it is opened. */
   const stored = !active && v.shown?.id === item.id ? v.shown : null;
-  const poll = item.type !== 'quiz' && item.type !== 'survey' ? item : null;
 
   return (
     <div className="stack">
       <div className="dhead">
-        <span className="ring"><Icon name={TYPE_ICON[item.type]} size={20} /></span>
+        <span className="kind"><Icon name={TYPE_ICON[item.type]} size={24} /></span>
         <div className="who">
-          <span className="strong">{TYPE_LABEL[item.type]}</span>
-          <span className="small muted num">{active && <span className="live-dot">Live</span>}{active && ' · '}{answered} answered</span>
+          <span className="dtitle">{TYPE_LABEL[item.type]}</span>
+          <span className={`small num ${active ? 'live-dot' : 'muted'}`}>{answered} answered</span>
         </div>
         <span className="grow" />
         {!ended && <button className="icon-btn ghost" aria-label="Delete" title="Delete" onClick={onDelete}><Icon name="trash" /></button>}
-        {poll && hasSettings(poll) && <button className={settings ? 'ghost on' : 'ghost'} aria-pressed={settings} onClick={onSettings}><Icon name="sliders" />Poll settings</button>}
+        {onSettings && <button className="ghost" onClick={onSettings}><Icon name="sliders" />Poll settings</button>}
       </div>
 
       {active && item.type === 'quiz' && q && <QuizStage quiz={item} v={v} now={now} />}
@@ -516,46 +531,48 @@ function ItemPanel({ v, item, now, ended, answered, settings, onSettings, onChan
 
       {item.type === 'quiz' ? <QuizEditor quiz={item} onChange={onChange} disabled={ended || started} tallies={stored?.tallies} />
         : item.type === 'survey' ? <SurveyEditor survey={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} />
-        : <PollEditor poll={item} onChange={onChange} disabled={ended} settings={settings}
+        : <PollEditor poll={item} onChange={onChange} disabled={ended} settings={false}
             tally={active ? v.tally ?? EMPTY : stored?.tallies[item.id] ?? EMPTY} texts={active ? v.texts : stored?.texts[item.id]} />}
     </div>
   );
 }
 
-/** The quiz's one next step, by where it is: start, reveal, leaderboard or the next question. */
+/** The quiz's one next step, by where it is: the first question, reveal, leaderboard or the next question. */
 function QuizBar({ quiz, v, now, busy, act }: { quiz: Quiz; v: HostView; now: number; busy: boolean; act: Act }) {
   const q = v.state.quiz!;
   const phase = quizPhase(q, now);
   const last = q.index >= quiz.questions.length - 1;
-  const next = <button className="primary tall" disabled={busy} onClick={() => act({ action: 'quiz-next' })}>Next question</button>;
+  const step = (label: string, body: Record<string, unknown>, main = true) => (
+    <button className={main ? 'primary tall' : 'tall'} disabled={busy} onClick={() => act(body)}>{label}<Icon name="right" /></button>
+  );
   return (
     <>
-      {phase === 'lobby' && <><button className="primary tall" disabled={busy} onClick={() => act({ action: 'quiz-next' })}>Start quiz</button><span className="muted num">{v.people} joined</span></>}
+      {phase === 'lobby' && step('First question', { action: 'quiz-next' })}
       {(phase === 'open' || phase === 'closed') && (
         <>
-          <button className="primary tall" disabled={busy} onClick={() => act({ action: 'quiz-reveal' })}>Reveal answer</button>
+          {step('Reveal answer', { action: 'quiz-reveal' })}
           <span className="num strong" aria-label="Seconds left">{secondsLeft(q, now)} s</span>
         </>
       )}
       {phase === 'revealed' && (
         <>
-          {!last && next}
-          <button className={last ? 'primary tall' : 'tall'} disabled={busy} onClick={() => act({ action: 'quiz-board', on: true })}>Leaderboard</button>
+          {!last && step('Next question', { action: 'quiz-next' })}
+          {step('Leaderboard', { action: 'quiz-board', on: true }, last)}
         </>
       )}
-      {phase === 'board' && !last && next}
-      {phase !== 'lobby' && <span className="muted num">{q.index + 1} / {quiz.questions.length} · {v.tally?.people ?? 0} answered</span>}
+      {phase === 'board' && !last && step('Next question', { action: 'quiz-next' })}
+      <span className="muted num">{phase === 'lobby' ? `${v.people} joined` : `${q.index + 1} / ${quiz.questions.length} · ${v.tally?.people ?? 0} answered`}</span>
     </>
   );
 }
 
-/** The quiz as it runs: the question in play with how people voted once time is up, or the leaderboard. */
+/** The quiz as it runs: who has joined, the question in play with how people voted once time is up, or the leaderboard. */
 function QuizStage({ quiz, v, now }: { quiz: Quiz; v: HostView; now: number }) {
   const q = v.state.quiz!;
   const phase = quizPhase(q, now);
   const question = quiz.questions[q.index];
   if (phase === 'board') return v.board ? <div className="sub"><Leaderboard entries={v.board.entries} /></div> : null;
-  if (!question || phase === 'lobby') return null;
+  if (!question || phase === 'lobby') return <div className="sub"><div className="none slim"><span className="average num">{v.people}</span>joined</div></div>;
   return (
     <div className="sub">
       <div className="poll-title">{question.title}</div>
