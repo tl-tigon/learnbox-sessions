@@ -36,8 +36,9 @@ export function memoryStore(db: Db = freshDb()): Store {
 
   return {
     async createSession(s) {
-      const holder = db.codes.get(s.code);
-      if (holder && db.sessions.get(holder)?.status === 'live') return false;
+      /* A code is free once its session has ended or passed its close time. */
+      const holder = db.sessions.get(db.codes.get(s.code) ?? '');
+      if (holder && holder.status === 'live' && holder.closesAt * 1000 > Date.now()) return false;
       db.codes.set(s.code, s.id);
       db.sessions.set(s.id, clone(s));
       return true;
@@ -47,7 +48,9 @@ export function memoryStore(db: Db = freshDb()): Store {
       return s ? clone(s) : null;
     },
     async sessionIdForCode(code) {
-      return db.codes.get(code) ?? null;
+      const id = db.codes.get(code);
+      const s = id ? db.sessions.get(id) : null;
+      return s && s.closesAt * 1000 > Date.now() ? s.id : null;
     },
     async listSessions(ownerSub) {
       return [...db.sessions.values()]
@@ -55,12 +58,13 @@ export function memoryStore(db: Db = freshDb()): Store {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .map((s) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: s.interactions.length }));
     },
-    async updateSession(id, edit) {
+    async updateSession(id, edit, fromSeq) {
       const s = db.sessions.get(id);
-      if (!s) return null;
+      if (!s || s.state.seq !== fromSeq) return null;
       if (edit.title !== undefined) s.title = edit.title;
       if (edit.interactions !== undefined) s.interactions = clone(edit.interactions);
       if (edit.qa !== undefined) s.qa = clone(edit.qa);
+      s.rev = (s.rev ?? 1) + 1;
       return clone(s);
     },
     async setState(id, next: SessionState, fromSeq) {
@@ -119,8 +123,9 @@ export function memoryStore(db: Db = freshDb()): Store {
     async myAnswers(sessionId, pollId, token) {
       return [...answersOf(sessionId).values()].filter((a) => a.pollId === pollId && a.token === token).sort((a, b) => a.entry - b.entry).map(clone);
     },
-    async pollAnswers(sessionId, pollId, limit = 500) {
-      return [...answersOf(sessionId).values()].filter((a) => a.pollId === pollId).sort((a, b) => a.at.localeCompare(b.at)).slice(0, limit).map(clone);
+    async pollAnswers(sessionId, pollId, limit) {
+      const all = [...answersOf(sessionId).values()].filter((a) => a.pollId === pollId).sort((a, b) => a.at.localeCompare(b.at));
+      return (limit ? all.slice(-limit) : all).map(clone);
     },
 
     async bumpTally(sessionId, pollId, delta, people) {

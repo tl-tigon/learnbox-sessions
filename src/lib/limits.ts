@@ -7,6 +7,8 @@ export const LIMITS = {
   liveSessionsPerAccount: 5,
   sessionsPerAccount: 100,
   interactionsPerSession: 50,
+  /** The most a session's polls, quizzes and surveys may take up when stored, in bytes. One database row holds them. */
+  sessionBytes: 300_000,
   /** Questions in one quiz, and polls in one survey. */
   itemsPerGroup: 20,
   optionsPerChoice: 10,

@@ -9,6 +9,7 @@ import { savedName, saveName } from '@/lib/audience';
 import { authed } from '@/lib/auth/client';
 import { sortQuestions, type PublicQuestion, type QuestionOrder } from '@/lib/engine/questions';
 import { LIMITS } from '@/lib/limits';
+import { post as postJson, request } from '@/lib/net';
 import { qaChannel, type PushEvent } from '@/lib/push/events';
 import { useLive } from '@/lib/use-live';
 import type { QaSettings, SessionState } from '@/lib/types';
@@ -66,7 +67,7 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
 }) {
   const base = `/api/live/${sessionId}/qa`;
   const load = useCallback(async () => {
-    const r = await fetch(`${base}?t=${token}`, { cache: 'no-store' });
+    const r = await request(`${base}?t=${token}`, { cache: 'no-store' });
     if (!r.ok) throw new Error('Connection lost');
     return ((await r.json()) as { questions: MyQuestion[] }).questions;
   }, [base, token]);
@@ -90,12 +91,12 @@ export function QaPhone({ sessionId, token, state, settings, nickname, ended }: 
   const [anonymous, setAnonymous] = useState(settings.anonymous);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /* The name follows the one this person has in the session, including a rename made from the top bar. */
   useEffect(() => {
-    if (!nickname) setName(savedName());
+    setName(nickname || savedName());
   }, [nickname]);
 
-  const post = (url: string, body: Record<string, unknown>) =>
-    fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, ...body }) });
+  const post = (url: string, body: Record<string, unknown>) => postJson(url, { token, ...body });
 
   const asAnonymous = settings.anonymous && anonymous;
   const send = async () => {
@@ -200,11 +201,13 @@ export function QaHost({ sessionId, questions, state, moderation, ended, onChang
   const [err, setErr] = useState<string | null>(null);
   const [replying, setReplying] = useState<string | null>(null);
   const [reply, setReply] = useState('');
-  /* The first question to arrive for review brings its tab forward. */
-  const seenPending = useRef(0);
+  /* The first question ever to arrive for review brings its tab forward, once; after that the tabs stay where the facilitator put them. */
+  const jumped = useRef(false);
   useEffect(() => {
-    if (pending.length > seenPending.current && seenPending.current === 0) setTab('review');
-    seenPending.current = pending.length;
+    if (pending.length > 0 && !jumped.current) {
+      jumped.current = true;
+      setTab('review');
+    }
   }, [pending.length]);
 
   const act = async (q: PublicQuestion, action: string, text?: string) => {

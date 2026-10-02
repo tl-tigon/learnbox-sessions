@@ -6,7 +6,7 @@
  */
 import { LIMITS } from '../limits';
 import { cleanText, isProfane, normaliseWord } from './words';
-import type { Answer, Poll, QuizQuestion } from '../types';
+import type { Answer, Poll, QuizQuestion, Tally } from '../types';
 
 export type Checked =
   | { ok: true; answer: Answer; delta: Record<string, number>; maxEntries: number }
@@ -64,10 +64,29 @@ export function checkQuizAnswer(question: QuizQuestion, raw: unknown): Checked {
 /** Polls where a person has one answer, which they may change while voting is open. */
 export const canChange = (poll: Poll) => poll.type === 'choice' || poll.type === 'rating' || poll.type === 'ranking';
 
+/**
+ * What a stored answer added to the counts. It is read from the answer itself, not checked
+ * against the poll, so it stays right after the facilitator edits the poll's options.
+ */
+export function added(answer: Answer): Record<string, number> {
+  switch (answer.type) {
+    case 'choice': return Object.fromEntries(answer.optionIds.map((id) => [id, 1]));
+    case 'rating': return { [String(answer.value)]: 1 };
+    case 'ranking': return Object.fromEntries(answer.order.map((id, i) => [id, answer.order.length - i]));
+    case 'wordcloud': return { [answer.text]: 1 };
+    case 'quiz': return { [answer.optionId]: 1 };
+    case 'open': return {};
+  }
+}
+
 /** What taking an answer back removes from the counts: the opposite of what it added. */
-export function undo(poll: Poll, answer: Answer): Record<string, number> {
-  const c = checkAnswer(poll, answer);
-  return c.ok ? Object.fromEntries(Object.entries(c.delta).map(([k, n]) => [k, -n])) : {};
+export const undo = (answer: Answer): Record<string, number> => Object.fromEntries(Object.entries(added(answer)).map(([k, n]) => [k, -n]));
+
+/** Counts worked out afresh from the stored answers, which are the truth; the running counts are only a fast copy. */
+export function recount(answers: { token: string; answer: Answer }[]): Tally {
+  const counts: Record<string, number> = {};
+  for (const a of answers) for (const [k, n] of Object.entries(added(a.answer))) counts[k] = (counts[k] ?? 0) + n;
+  return { people: new Set(answers.map((a) => a.token)).size, counts };
 }
 
 /** Two count changes as one. Keys that cancel out are dropped. */

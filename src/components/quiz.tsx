@@ -18,13 +18,15 @@ const num = (n: number) => n.toLocaleString('en-US');
  * the difference from this device's clock is kept, so a phone with a wrong clock still counts down right.
  */
 export function useServerClock(serverNow: number | undefined): number {
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = useState<number | null>(null);
   const [now, setNow] = useState(() => serverNow ?? Date.now());
+  /* A reply that took longer to arrive makes the server look further behind than it is. The
+     largest difference seen is the closest to the truth, and keeping it stops the countdown stepping back. */
   useEffect(() => {
-    if (serverNow !== undefined) setOffset(serverNow - Date.now());
+    if (serverNow !== undefined) setOffset((cur) => Math.max(cur ?? -Infinity, serverNow - Date.now()));
   }, [serverNow]);
   useEffect(() => {
-    const tick = () => setNow(Date.now() + offset);
+    const tick = () => setNow(Date.now() + (offset ?? 0));
     tick();
     const t = setInterval(tick, 200);
     return () => clearInterval(t);

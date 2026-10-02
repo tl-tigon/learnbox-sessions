@@ -33,12 +33,21 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 48 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers).
-- A browser walk passes 48 of 48 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 58 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- A browser walk passes 51 of 51 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
   - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.
   - It empties the walk account at the start and deletes it at the end.
+
+**Reviewed for bugs and ways around the rules (2026-10-02).** Two independent reviews, one of the server and one of the screens, read the code after the rebuild. The rules held: ownership, no tokens or display key in anything sent out, quiz secrecy and timing, one vote per person. Everything they found is fixed, each with a test or a walk check:
+- a changed vote after the facilitator edits the poll counted the person twice;
+- counts and written answers went out on the push channel while results were hidden, and for surveys;
+- an autosave could change a quiz that had just started; a quiz deleted and added again could point past its end;
+- the per-address limits blocked a room behind one address, and trusted an address the caller could set;
+- typed text was lost when the phone switched tabs; buttons stayed disabled after a network failure; saves could land out of order, and a second window could overwrite the first;
+- iPhones zoomed on focusing a field; number fields in the editor could not be retyped;
+- gaps in the DynamoDB code (rows brought back after a delete, a code claimed without its session, a leaked place in the headcount).
 
 **Written but not yet run:**
 - `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist. It was rewritten for the event model along with `memory.ts`.
@@ -88,7 +97,17 @@ These are in `src/lib/limits.ts`.
 2. **The rest of v1**, each waiting on the owner: front page copy, Terms and Privacy, the LearnBox places, cost alarms.
 3. **More of Slido**, if wanted: downvotes, labels, asker withdraws a question, audience replies, resetting a poll's results, a PowerPoint add-in.
 
+## To check at the first deploy
+- **The caller's address.** `clientIp` in `src/lib/http.ts` takes the last entry of `X-Forwarded-For`. Confirm on Amplify that this is the viewer's address and not an internal hop; if it is a hop, every caller shares one limit.
+- **Store tests against DynamoDB.** The store has never run against a real table. Run the unit tests with `STORE=dynamo` on the dev table before anything else.
+- **Rows written while a session is being deleted** stay until their 12-month expiry. They belong to no session and are not reachable.
+
 ## How it is built
+- **An edit and the live state.** `updateSession` saves only on the `seq` the edit was worked out against; if a control landed in between, `editSession` works the edit out again. This is what keeps an autosave from changing a quiz that has just started.
+- **Revisions.** `Session.rev` rises with each saved edit. The facilitator's screen sends the revision its draft was made from, and a save from an older one is refused with 409 ("changed in another window"). The screen then offers a reload.
+- **Counts are not written in a transaction with the answer.** A whole room writes to one counts row at once, and DynamoDB transactions on one row collide. The answer is stored first; the counts and the score follow as plain writes, tried three times (`surely` in `live.ts`). The results page and the downloads count again from the stored answers (`recount`), so they are right even if a running count drifted.
+- **Hidden results stay off the push channel.** While results are hidden, and for survey polls, a tally event carries only the number who answered and is marked `withheld`; the facilitator's screen reloads to get the counts.
+- **Rate limits.** Code lookups count only wrong codes per address, so a room entering the right code is never held back. Joining is limited per phone (30 a minute), with a high per-address ceiling.
 - **Edits and live state are separate.** The facilitator's edits (`title`, `interactions`, `qa`) go through `PUT /api/sessions/<id>` → `editSession` → `store.updateSession`. Everything that changes live is in `state` and goes through `PATCH` → `control` → `store.setState`, which applies only on top of the `seq` it was made from. Every edit ends with a `touch` control, so phones get the active poll's new wording and a deleted active poll stops.
 - **The facilitator's screen keeps its own draft.** It loads the session once, edits locally and saves 600 ms after the last change; a control (Start, Lock) saves first. The server is not asked to overwrite the draft.
 - **Answers**: row `ANS#<poll>#<token>#<n>`. A first answer is a conditional put. A changed answer is `replaceAnswer`, which applies only if the stored answer is still the one the change was made from; the counts then move by the difference in one update.

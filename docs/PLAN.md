@@ -89,7 +89,7 @@ Also:
 | 8 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
 
 ## Verification
-- **Vitest** (48 tests):
+- **Vitest** (58 tests):
   - one answer per token under concurrent sends, and a changed vote that keeps the counts adding up;
   - answers only for the poll that is started; locked voting and ended sessions refuse them;
   - a survey checked whole before anything is stored;
@@ -97,6 +97,6 @@ Also:
   - Q&A: one upvote per person; a waiting question seen only by its asker and the facilitator;
   - code collisions; stale `seq` is dropped;
   - deleting an account; CSV and Excel.
-- **Browser walk** (playwright-core, 48 checks), with a facilitator, the big screen as a signed-out projector and 5 phones: the whole flow, then the ways around the rules that must be refused.
+- **Browser walk** (playwright-core, 51 checks), with a facilitator, the big screen as a signed-out projector and 5 phones: the whole flow, then the ways around the rules that must be refused.
 - **Load test** on dev: about 500 simulated phones vote within 10 s. No vote may be lost, and the time from vote to screen must stay under about 1 s.
 - **Screenshots** in dark and light at phone and 1920×1080, sent to the owner before any deploy.

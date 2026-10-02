@@ -18,13 +18,16 @@ export async function GET(req: Request, ctx: Ctx) {
 
 /** Join, or give a name later: a phone's token, and a name if it has one. */
 export async function POST(req: Request, ctx: Ctx) {
-  if (limited(`join:${clientIp(req)}`, 120)) return fail(429, 'Too many tries. Wait a minute.');
+  /* A full room can share one address, so the per-address limit is set above the people cap;
+     each phone has its own, much lower one. */
+  if (limited(`join:${clientIp(req)}`, 3000)) return fail(429, 'Too many tries. Wait a minute.');
   const db = store();
   const s = await db.getSession((await ctx.params).id);
   if (!s) return fail(404, 'Not found');
   if (isClosed(s)) return fail(409, 'This session has ended');
   const body = await readJson(req);
   if (!isToken(body.token)) return fail(400, 'Bad token');
+  if (limited(`join:${body.token}`, 30)) return fail(429, 'Too many tries. Wait a minute.');
   const nickname = cleanText(String(body.nickname ?? '')).slice(0, LIMITS.nicknameChars);
   if (nickname && isProfane(nickname)) return fail(400, 'Choose another name');
   const r = await db.join(s.id, body.token, nickname, LIMITS.peoplePerSession);

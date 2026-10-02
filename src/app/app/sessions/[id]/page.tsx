@@ -40,38 +40,86 @@ function Host({ id }: { id: string }) {
   /* What the facilitator edits is kept here and saved shortly after each change. It is loaded
      once: this screen is where it changes, so the server is not asked to overwrite it. */
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [saved, setSaved] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [saved, setSaved] = useState<'saved' | 'saving' | 'error' | 'conflict'>('saved');
   const draftRef = useRef<Draft | null>(null);
+  /* The revision the draft was made from. The server refuses a save made from an older one, so a
+     second window open on the same session cannot silently overwrite this one. */
+  const rev = useRef(1);
   const dirty = useRef(false);
+  const conflict = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlight = useRef<Promise<boolean> | null>(null);
   useEffect(() => {
     if (v && !draftRef.current) {
       draftRef.current = { title: v.title, interactions: v.interactions, qa: v.qa };
+      rev.current = v.rev;
       setDraft(draftRef.current);
     }
   }, [v]);
 
-  /** Saves now if there is anything unsaved. Controls call it first, so they act on what is on screen. */
-  const flush = useCallback(async (): Promise<boolean> => {
+  /**
+   * Saves now if there is anything unsaved, and waits for a save already on its way. Saves run
+   * one at a time, so an older one can never land after a newer one. Controls call this first,
+   * so they act on what is on screen. `leaving` marks the last save as the page closes.
+   */
+  const flushRef = useRef<(leaving?: boolean) => Promise<boolean>>(async () => true);
+  const flush = useCallback(async (leaving = false): Promise<boolean> => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    if (!dirty.current || !draftRef.current) return true;
-    dirty.current = false;
-    setSaved('saving');
-    const r = await authed(`/api/sessions/${id}`, { method: 'PUT', body: JSON.stringify(draftRef.current) }).catch(() => null);
-    if (!r?.ok) {
-      dirty.current = true;
-      setSaved('error');
-      return false;
+    for (;;) {
+      if (inFlight.current) {
+        if (!(await inFlight.current)) return false;
+        continue;
+      }
+      if (conflict.current) return false;
+      if (!dirty.current || !draftRef.current) return true;
+      dirty.current = false;
+      setSaved('saving');
+      const body = JSON.stringify({ ...draftRef.current, rev: rev.current });
+      inFlight.current = (async () => {
+        /* A request marked keepalive outlives the page, and may carry up to 64 KB. */
+        const r = await authed(`/api/sessions/${id}`, { method: 'PUT', body, keepalive: leaving && body.length < 60_000 });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          dirty.current = true;
+          if (r.status === 409 && /another window/.test(j.error ?? '')) {
+            conflict.current = true;
+            setSaved('conflict');
+          } else {
+            setSaved('error');
+            /* A save that failed is tried again by itself, so the last edit before a pause is not lost. */
+            timer.current = setTimeout(() => void flushRef.current(), 4000);
+          }
+          return false;
+        }
+        rev.current = j.rev;
+        setData((cur) => (cur ? { ...cur, title: j.title, interactions: j.interactions, qa: j.qa, rev: j.rev, state: j.state.seq > cur.state.seq ? j.state : cur.state } : cur));
+        if (!dirty.current) setSaved('saved');
+        return true;
+      })().finally(() => {
+        inFlight.current = null;
+      });
     }
-    const j = await r.json();
-    setData((cur) => (cur ? { ...cur, title: j.title, interactions: j.interactions, qa: j.qa, state: j.state.seq > cur.state.seq ? j.state : cur.state } : cur));
-    if (!dirty.current) setSaved('saved');
-    return true;
   }, [id, setData]);
+  flushRef.current = flush;
+
+  /* Closing the tab, switching away or leaving this screen saves what is unsaved. */
+  useEffect(() => {
+    const leave = () => void flushRef.current(true);
+    const hide = () => {
+      if (document.visibilityState === 'hidden') leave();
+    };
+    window.addEventListener('pagehide', leave);
+    document.addEventListener('visibilitychange', hide);
+    return () => {
+      window.removeEventListener('pagehide', leave);
+      document.removeEventListener('visibilitychange', hide);
+      leave();
+    };
+  }, []);
 
   const edit = useCallback((fn: (d: Draft) => Draft) => {
-    if (!draftRef.current) return;
+    if (!draftRef.current || conflict.current) return;
     draftRef.current = fn(draftRef.current);
     setDraft(draftRef.current);
     dirty.current = true;
@@ -83,20 +131,41 @@ function Host({ id }: { id: string }) {
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const act = async (body: Record<string, unknown>) => {
+  /** A control. It saves first, and says whether it was applied. */
+  const act = async (body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true);
     setErr(null);
     if (!(await flush())) {
       setBusy(false);
-      return setErr('Not saved');
+      setErr(conflict.current ? 'Reload to carry on' : 'Not saved');
+      return false;
     }
     const r = await authed(`/api/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (!r.ok) return setErr(j.error ?? 'Not applied');
+    if (!r.ok) {
+      setErr(j.error ?? 'Not applied');
+      return false;
+    }
     if (j.state) setData((cur) => (cur && j.state.seq > cur.state.seq ? { ...cur, state: j.state } : cur));
     await refresh();
+    return true;
   };
+  /** Follows a link once what is unsaved has been saved. */
+  const leaveTo = (href: string) => async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await flush();
+    router.push(href);
+  };
+
+  /* When a quiz question's time runs out, this screen fetches how people voted. */
+  const playing = v?.state.quiz && v.state.active === v.state.quiz.quizId ? v.state.quiz : null;
+  const phaseNow = playing ? quizPhase(playing, now) : null;
+  const lastPhase = useRef(phaseNow);
+  useEffect(() => {
+    if (lastPhase.current === 'open' && phaseNow === 'closed') void refresh();
+    lastPhase.current = phaseNow;
+  }, [phaseNow, refresh]);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<'qa' | 'item'>('qa');
@@ -135,13 +204,15 @@ function Host({ id }: { id: string }) {
   return (
     <>
       <header className="topbar">
-        <a className="btn icon-btn ghost" href="/app" aria-label="All sessions"><Icon name="left" /></a>
+        <a className="btn icon-btn ghost" href="/app" aria-label="All sessions" onClick={leaveTo('/app')}><Icon name="left" /></a>
         <input className="title-input grow" aria-label="Session name" value={draft.title} maxLength={LIMITS.titleChars} disabled={ended}
           onChange={(e) => edit((d) => ({ ...d, title: e.target.value }))} />
         <span className="code-pill num" title="Join code"># {v.code.slice(0, 3)} {v.code.slice(3)}</span>
         <span className="row muted num" title="People joined"><Icon name="user" />{v.people}</span>
-        {ended ? <span className="tag">Ended</span> : <span className="tag" role="status">{saved === 'saving' ? 'Saving…' : saved === 'error' ? 'Not saved' : 'Saved'}</span>}
-        <a className="btn" href={`/app/sessions/${id}/results`}>Results</a>
+        {ended ? <span className="tag">Ended</span>
+          : saved === 'conflict' ? <button className="danger" onClick={() => window.location.reload()}>Changed in another window · Reload</button>
+          : <span className={saved === 'error' ? 'tag error' : 'tag'} role="status">{saved === 'saving' ? 'Saving…' : saved === 'error' ? 'Not saved' : 'Saved'}</span>}
+        <a className="btn" href={`/app/sessions/${id}/results`} onClick={leaveTo(`/app/sessions/${id}/results`)}>Results</a>
         {!ended && <a className="btn primary" href={`/present/${id}`} target="_blank" rel="noreferrer"><Icon name="screen" />Present</a>}
         <div className="menu">
           <button className="icon-btn" aria-label="More" aria-expanded={menu} onClick={() => setMenu((x) => !x)}><Icon name="more" /></button>
@@ -222,8 +293,8 @@ function Host({ id }: { id: string }) {
             {item && <button role="tab" aria-selected={tab === 'item'} onClick={() => setTab('item')}><Icon name={TYPE_ICON[item.type]} />{nameOf(item)}</button>}
           </div>
 
-          {(tab === 'qa' || !item) && (
-            <div className="stack">
+          {/* The Q&A stays in the page while an interaction is open, so a reply half typed is still there on coming back. */}
+          <div className="stack" hidden={tab === 'item' && !!item}>
               {!ended && (
                 <div className="card stack">
                   <label className="switch">Questions open
@@ -236,7 +307,7 @@ function Host({ id }: { id: string }) {
                   </label>
                   <label className="switch">Review questions before they show<input type="checkbox" checked={draft.qa.moderation} onChange={(e) => edit((d) => ({ ...d, qa: { ...d.qa, moderation: e.target.checked } }))} /></label>
                   <label className="switch">Anonymous questions<input type="checkbox" checked={draft.qa.anonymous} onChange={(e) => edit((d) => ({ ...d, qa: { ...d.qa, anonymous: e.target.checked } }))} /></label>
-                  <form className="field-row" onSubmit={(e) => { e.preventDefault(); void act({ action: 'announce', text: announcement ?? v.state.announcement }).then(() => setAnnouncement(null)); }}>
+                  <form className="field-row" onSubmit={(e) => { e.preventDefault(); void act({ action: 'announce', text: announcement ?? v.state.announcement }).then((ok) => { if (ok) setAnnouncement(null); }); }}>
                     <input aria-label="Announcement" placeholder="Announcement" maxLength={LIMITS.announcementChars} value={announcement ?? v.state.announcement} onChange={(e) => setAnnouncement(e.target.value)} />
                     <button type="submit" disabled={busy || announcement === null || announcement === v.state.announcement}>Post</button>
                   </form>
@@ -244,8 +315,7 @@ function Host({ id }: { id: string }) {
               )}
               <QaHost sessionId={id} questions={v.questions} state={v.state} moderation={draft.qa.moderation} ended={ended}
                 onChange={(q, state) => setData((cur) => (cur ? { ...cur, questions: withQuestion(cur.questions, q), state: state.seq > cur.state.seq ? state : cur.state } : cur))} />
-            </div>
-          )}
+          </div>
 
           {tab === 'item' && item && (
             <ItemPanel v={v} item={item} now={now} busy={busy} ended={ended} act={act} onChange={editInteraction} onDelete={() => remove(item)} />
@@ -263,7 +333,7 @@ function ItemPanel({ v, item, now, busy, ended, act, onChange, onDelete }: {
   now: number;
   busy: boolean;
   ended: boolean;
-  act: (body: Record<string, unknown>) => Promise<void>;
+  act: (body: Record<string, unknown>) => Promise<boolean>;
   onChange: (i: Interaction) => void;
   onDelete: () => void;
 }) {
@@ -323,7 +393,7 @@ function ItemPanel({ v, item, now, busy, ended, act, onChange, onDelete }: {
 }
 
 /** The quiz's one next step, by where it is: start, reveal, leaderboard or the next question. */
-function QuizControls({ quiz, v, now, busy, act }: { quiz: Quiz; v: HostView; now: number; busy: boolean; act: (body: Record<string, unknown>) => Promise<void> }) {
+function QuizControls({ quiz, v, now, busy, act }: { quiz: Quiz; v: HostView; now: number; busy: boolean; act: (body: Record<string, unknown>) => Promise<boolean> }) {
   const q = v.state.quiz!;
   const phase = quizPhase(q, now);
   const question = quiz.questions[q.index];

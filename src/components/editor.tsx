@@ -1,11 +1,28 @@
 'use client';
 /** The fields a facilitator fills in for a poll, a quiz or a survey. Each change hands back a new copy. */
+import { useEffect, useState } from 'react';
 import { Icon, TYPE_ICON, TYPE_LABEL } from './icons';
 import { blankPoll, blankQuizQuestion, POLL_TYPES, QUIZ_SECONDS, shortId } from '@/lib/engine/polls';
 import { LIMITS } from '@/lib/limits';
 import type { ChoiceOption, Poll, PollType, Quiz, QuizQuestion, Survey } from '@/lib/types';
 
-const num = (v: string, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number(v) || lo));
+/**
+ * A whole number between two bounds. What is typed is kept as typed, so the field can be cleared
+ * and retyped; the value is passed on when it is in range, and the field settles on the value when left.
+ */
+function NumberField({ value, min, max, onChange, disabled }: { value: number; min: number; max: number; onChange: (n: number) => void; disabled?: boolean }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  return (
+    <input type="number" inputMode="numeric" min={min} max={max} value={text} disabled={disabled}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number(e.target.value);
+        if (e.target.value !== '' && Number.isInteger(n) && n >= min && n <= max) onChange(n);
+      }}
+      onBlur={() => setText(String(value))} />
+  );
+}
 
 function Options({ options, max, onChange, disabled, correctId, onCorrect, name }: {
   options: ChoiceOption[];
@@ -47,16 +64,14 @@ export function PollEditor({ poll, onChange, disabled }: { poll: Poll; onChange:
           <Options options={poll.options} max={LIMITS.optionsPerChoice} disabled={disabled}
             onChange={(options) => onChange({ ...poll, options, maxPicks: Math.min(poll.maxPicks, options.length) })} />
           <label>Picks per person
-            <input type="number" min={1} max={poll.options.length} value={poll.maxPicks} disabled={disabled}
-              onChange={(e) => onChange({ ...poll, maxPicks: num(e.target.value, 1, poll.options.length) })} />
+            <NumberField min={1} max={poll.options.length} value={poll.maxPicks} disabled={disabled} onChange={(maxPicks) => onChange({ ...poll, maxPicks })} />
           </label>
         </>
       )}
       {poll.type === 'ranking' && <Options options={poll.options} max={LIMITS.optionsPerChoice} disabled={disabled} onChange={(options) => onChange({ ...poll, options })} />}
       {(poll.type === 'wordcloud' || poll.type === 'open') && (
         <label>{poll.type === 'wordcloud' ? 'Words per person' : 'Answers per person'}
-          <input type="number" min={1} max={LIMITS.entriesPerPerson} value={poll.maxEntries} disabled={disabled}
-            onChange={(e) => onChange({ ...poll, maxEntries: num(e.target.value, 1, LIMITS.entriesPerPerson) })} />
+          <NumberField min={1} max={LIMITS.entriesPerPerson} value={poll.maxEntries} disabled={disabled} onChange={(maxEntries) => onChange({ ...poll, maxEntries })} />
         </label>
       )}
       {poll.type === 'rating' && (

@@ -4,7 +4,11 @@ import { fail } from './http';
 import { store } from './store';
 import type { Session } from './types';
 
-const sameKey = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+/** Compared as bytes, in constant time. Lengths are compared as bytes too, since a non-ASCII character is more than one. */
+function sameKey(a: string, b: string): boolean {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 /**
  * The session, for its owner. Someone else's session reads as missing, so ids cannot be probed.

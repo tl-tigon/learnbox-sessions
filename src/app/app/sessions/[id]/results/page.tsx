@@ -42,7 +42,8 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
     const name = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') ?? '')?.[1] ?? `results.${format}`;
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
     a.click();
-    URL.revokeObjectURL(a.href);
+    /* Some browsers start the download a moment after the click, so the address is kept until then. */
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
 
   if (!email) return null;
@@ -81,7 +82,7 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
               </div>
               <h2><span className="num faint">{n}.</span> {(item.kind === 'poll' ? item.poll.title : item.question.title) || 'Untitled'}</h2>
               {item.kind === 'poll'
-                ? <PollResults poll={item.poll} tally={tally} texts={item.answers.map((a) => ({ text: a.answer.text ?? '' }))} />
+                ? <PollResults poll={item.poll} tally={tally} texts={item.answers.map((a) => ({ text: a.answer.text ?? '' }))} all />
                 : <QuizResults question={item.question} tally={tally} spread correct={item.question.correctId} />}
             </section>
           );

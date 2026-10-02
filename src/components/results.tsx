@@ -18,7 +18,8 @@ function Bar({ label, value, share, lead, mark }: { label: React.ReactNode; valu
   );
 }
 
-export function PollResults({ poll, tally, texts = [] }: { poll: Poll; tally: Tally | null; texts?: { text: string }[] }) {
+/** `all` shows every word and every written answer (the results page); without it a screen shows the top 80 words and the newest 60 answers. */
+export function PollResults({ poll, tally, texts = [], all }: { poll: Poll; tally: Tally | null; texts?: { text: string }[]; all?: boolean }) {
   const t = tally ?? { people: 0, counts: {} };
   const count = (id: string) => Math.max(0, t.counts[id] ?? 0);
 
@@ -57,7 +58,7 @@ export function PollResults({ poll, tally, texts = [] }: { poll: Poll; tally: Ta
     );
   }
   if (poll.type === 'wordcloud') {
-    const words = Object.entries(t.counts).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 80);
+    const words = Object.entries(t.counts).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, all ? undefined : 80);
     const top = words[0]?.[1] ?? 1;
     return (
       <div className="cloud">
@@ -65,7 +66,7 @@ export function PollResults({ poll, tally, texts = [] }: { poll: Poll; tally: Ta
       </div>
     );
   }
-  return <div className="texts">{[...texts].reverse().slice(0, 60).map((x, i) => <div key={i}>{x.text}</div>)}</div>;
+  return <div className="texts">{[...texts].reverse().slice(0, all ? undefined : 60).map((x, i) => <div key={i}>{x.text}</div>)}</div>;
 }
 
 /** A quiz question's options: plain while it is open, with how people voted once time is up, and the correct one marked once revealed. */

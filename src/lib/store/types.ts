@@ -24,8 +24,12 @@ export interface Store {
   getSession(id: string): Promise<Session | null>;
   sessionIdForCode(code: string): Promise<string | null>;
   listSessions(ownerSub: string): Promise<SessionSummary[]>;
-  /** Saves the facilitator's edits. Returns the session as it now is, or null if there is none. */
-  updateSession(id: string, edit: SessionEdit): Promise<Session | null>;
+  /**
+   * Saves the facilitator's edits, only if the live state is still at `fromSeq`: an edit is
+   * checked against a state, and must not land on a newer one. Returns the session as it now is,
+   * or null on a clash or if there is no session.
+   */
+  updateSession(id: string, edit: SessionEdit, fromSeq: number): Promise<Session | null>;
   /** Applies `next` only if the stored state is still at `fromSeq`. Returns the session, or null on a clash. */
   setState(id: string, next: SessionState, fromSeq: number): Promise<Session | null>;
   /** Marks the session ended and frees its code. */
@@ -44,7 +48,7 @@ export interface Store {
   replaceAnswer(sessionId: string, a: StoredAnswer, prevAt: string): Promise<boolean>;
   /** One person's entries on one poll. */
   myAnswers(sessionId: string, pollId: string, token: string): Promise<StoredAnswer[]>;
-  /** Everyone's answers on a poll, oldest first. */
+  /** Everyone's answers on a poll, oldest first. With a limit, the newest that many. */
   pollAnswers(sessionId: string, pollId: string, limit?: number): Promise<StoredAnswer[]>;
 
   /** Adds to a poll's counts (`people` is 1 for a person's first answer, else 0) and returns the new totals. */

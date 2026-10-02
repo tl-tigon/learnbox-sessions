@@ -132,6 +132,8 @@ export interface Session {
   title: string;
   interactions: Interaction[];
   qa: QaSettings;
+  /** Rises with each saved edit, so an edit made from an older copy (another window) is refused instead of overwriting. */
+  rev?: number;
   status: 'live' | 'ended';
   state: SessionState;
   /** Lets a screen that is not signed in (a projector PC) show the presenter view. */

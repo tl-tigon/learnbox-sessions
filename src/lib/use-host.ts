@@ -33,6 +33,8 @@ export interface HostView extends Shared {
   closesAt: number;
   createdAt: string;
   displayKey: string;
+  /** Rises with each saved edit; an edit is sent with the one it was made from. */
+  rev: number;
   qa: QaSettings;
   interactions: Interaction[];
   /** How many have answered each poll and quiz question. */
@@ -50,6 +52,8 @@ function applyShared<T extends Shared>(cur: T, e: PushEvent, countsId: string | 
   if (e.kind === 'state') return e.seq <= cur.state.seq ? cur : { ...cur, status: e.status, state: e.state, serverNow: e.now };
   if (e.kind === 'tally') {
     if (e.pollId !== countsId) return cur;
+    /* Withheld counts carry only how many answered; the counts on screen stay until the reload that follows. */
+    if (e.withheld) return { ...cur, tally: { people: e.tally.people, counts: cur.tally?.counts ?? {} } };
     return { ...cur, tally: e.tally, texts: e.text ? [...cur.texts, { text: e.text, at: e.at ?? '' }] : cur.texts };
   }
   /* No text: the question is hidden, or waiting for review (a reload fetches it for the facilitator). */
@@ -66,13 +70,23 @@ function useScreen<T extends Shared>(id: string, load: () => Promise<T>, countsI
 
   const [channels, setChannels] = useState<string[]>([stateChannel(id), qaChannel(id)]);
   const reload = useRef<() => void>(() => {});
+  const waiting = useRef(false);
   const live = useLive<T>(load, channels, apply, {
     slowMs: 5000,
+    stale: (cur, next) => next.state.seq < cur.state.seq,
     onEvent: (e) => {
-      if (e.kind === 'state' || (e.kind === 'qa' && e.q.status === 'pending')) reload.current();
+      if (e.kind === 'state' || (e.kind === 'qa' && e.q.status === 'pending') || (e.kind === 'tally' && e.withheld)) reload.current();
     },
   });
-  reload.current = () => void live.refresh();
+  /* Events can come in a burst (a room voting at once), so reloads are spaced out. */
+  reload.current = () => {
+    if (waiting.current) return;
+    waiting.current = true;
+    setTimeout(() => {
+      waiting.current = false;
+      void live.refresh();
+    }, 400);
+  };
 
   const countsId = live.data ? countsIdOf(live.data) : null;
   countsRef.current = countsId;

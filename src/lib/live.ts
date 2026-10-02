@@ -3,7 +3,7 @@
  * screen sees. Routes call these; the store keeps the data; push carries changes to screens as
  * they happen.
  */
-import { canChange, checkAnswer, checkQuizAnswer, mergeDelta, undo } from './engine/answers';
+import { canChange, checkAnswer, checkQuizAnswer, mergeDelta, recount, undo } from './engine/answers';
 import { cleanInteractions, findPoll, withNewIds } from './engine/polls';
 import { isShown, publicQuestion } from './engine/questions';
 import { finished, forAudience, isLastQuestion, lobby, openQuestion, publicBoard, quizInPlay, quizPhase, quizPoints, rankBoard, reveal } from './engine/quiz';
@@ -13,7 +13,7 @@ import { LIMITS } from './limits';
 import { publish } from './push/server';
 import { stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from './push/events';
 import type { Store } from './store/types';
-import type { Answer, Interaction, Poll, Quiz, Session, SessionState, Tally } from './types';
+import type { Answer, Interaction, Poll, Quiz, Score, Session, SessionState, Tally } from './types';
 
 export class LiveError extends Error {
   constructor(public status: number, message: string) {
@@ -63,25 +63,40 @@ export const duplicateSession = (db: Store, ownerSub: string, source: Session) =
 /** A quiz that has started keeps its questions: changing them would change what the scores mean. */
 const quizStarted = (s: Session, quizId: string) => s.state.played?.includes(quizId) || (s.state.quiz?.quizId === quizId && s.state.quiz.index >= 0);
 
-/** Saves the facilitator's edits to the title, the interactions and the Q&A settings. */
+/**
+ * Saves the facilitator's edits to the title, the interactions and the Q&A settings. The edit is
+ * worked out against one live state and saved only if that state still stands; if a control
+ * landed in between (a quiz starting, say), it is worked out again on the new state.
+ */
 export async function editSession(db: Store, s: Session, raw: Record<string, unknown>): Promise<Session> {
-  if (isClosed(s)) throw new LiveError(409, 'This session has ended');
-  const edit: Parameters<Store['updateSession']>[1] = {};
-  if (typeof raw.title === 'string') edit.title = title(raw.title);
-  if (Array.isArray(raw.interactions)) {
-    edit.interactions = cleanInteractions(raw.interactions).map((i) => {
-      const stored = s.interactions.find((x) => x.id === i.id);
-      return i.type === 'quiz' && stored?.type === 'quiz' && quizStarted(s, i.id) ? stored : i;
-    });
+  let cur = s;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (isClosed(cur)) throw new LiveError(409, 'This session has ended');
+    /* An edit carries the revision it was made from. A session edited since, in another window, is not overwritten. */
+    if (typeof raw.rev === 'number' && raw.rev !== (cur.rev ?? 1)) throw new LiveError(409, 'This session was changed in another window. Reload to edit it.');
+    const edit: Parameters<Store['updateSession']>[1] = {};
+    if (typeof raw.title === 'string') edit.title = title(raw.title);
+    if (Array.isArray(raw.interactions)) {
+      const session = cur;
+      edit.interactions = cleanInteractions(raw.interactions).map((i) => {
+        const stored = session.interactions.find((x) => x.id === i.id);
+        return i.type === 'quiz' && stored?.type === 'quiz' && quizStarted(session, i.id) ? stored : i;
+      });
+      /* One database row holds them all, and a row has a size limit. */
+      if (JSON.stringify(edit.interactions).length > LIMITS.sessionBytes) throw new LiveError(413, 'This session holds too much. Remove a poll.');
+    }
+    if (raw.qa && typeof raw.qa === 'object') {
+      const qa = raw.qa as Record<string, unknown>;
+      edit.qa = { moderation: qa.moderation === true, anonymous: qa.anonymous !== false };
+    }
+    const saved = await db.updateSession(cur.id, edit, cur.state.seq);
+    /* Phones holding the active poll need its new wording, and whatever pointed at a deleted interaction must let go. */
+    if (saved) return control(db, saved, { action: 'touch' });
+    const fresh = await db.getSession(cur.id);
+    if (!fresh) throw new LiveError(404, 'Not found');
+    cur = fresh;
   }
-  if (raw.qa && typeof raw.qa === 'object') {
-    const qa = raw.qa as Record<string, unknown>;
-    edit.qa = { moderation: qa.moderation === true, anonymous: qa.anonymous !== false };
-  }
-  const saved = await db.updateSession(s.id, edit);
-  if (!saved) throw new LiveError(404, 'Not found');
-  /* Phones holding the active poll need its new wording, and a deleted active poll must stop. */
-  return control(db, saved, { action: 'touch' });
+  throw new LiveError(409, 'Try again');
 }
 
 export type ControlAction =
@@ -107,7 +122,7 @@ export function applyControl(s: Session, a: ControlAction, now = Date.now()): Se
   const playing = (): { quiz: Quiz; q: NonNullable<SessionState['quiz']> } => {
     const quiz = activeOf(s);
     const inPlay = quiz?.type === 'quiz' ? quizInPlay(st, quiz) : null;
-    if (quiz?.type !== 'quiz' || !inPlay) throw new LiveError(409, 'Start the quiz first');
+    if (quiz?.type !== 'quiz' || !inPlay || (inPlay.q.index >= 0 && !inPlay.question)) throw new LiveError(409, 'Start the quiz first');
     return { quiz, q: inPlay.q };
   };
 
@@ -149,7 +164,15 @@ export function applyControl(s: Session, a: ControlAction, now = Date.now()): Se
       const played = a.on && isLastQuestion(quiz, q) && !st.played?.includes(quiz.id) ? [...(st.played ?? []), quiz.id] : st.played;
       return next({ quiz: { ...q, board: !!a.on }, played });
     }
-    case 'touch': return next({ active: activeOf(s) ? st.active : null });
+    case 'touch': {
+      /* After an edit: nothing in the state may point at an interaction that is no longer there. */
+      const quizIds = new Set(s.interactions.filter((i) => i.type === 'quiz').map((i) => i.id));
+      return next({
+        active: activeOf(s) ? st.active : null,
+        quiz: st.quiz && quizIds.has(st.quiz.quizId) ? st.quiz : null,
+        played: st.played?.filter((id) => quizIds.has(id)),
+      });
+    }
   }
 }
 
@@ -179,10 +202,8 @@ export async function control(db: Store, s: Session, a: ControlAction): Promise<
       /* Until now screens had only the number who answered; the reveal sends how people voted. */
       const q = saved.state.quiz;
       const quiz = a.action === 'quiz-reveal' && q ? saved.interactions.find((x) => x.id === q.quizId) : null;
-      if (quiz?.type === 'quiz' && q) {
-        const pollId = quiz.questions[q.index].id;
-        await publish(tallyChannel(saved.id, pollId), { kind: 'tally', pollId, tally: await db.getTally(saved.id, pollId) });
-      }
+      const pollId = quiz?.type === 'quiz' && q ? quiz.questions[q.index]?.id : undefined;
+      if (pollId) await publish(tallyChannel(saved.id, pollId), { kind: 'tally', pollId, tally: await db.getTally(saved.id, pollId) });
       return saved;
     }
     const fresh = await db.getSession(cur.id);
@@ -206,10 +227,28 @@ async function joined(db: Store, s: Session, token: string) {
   return person;
 }
 
+/**
+ * A write that follows a stored answer and must land with it: the counts, a score. It is tried a
+ * few times before giving up. These are plain writes, not a transaction with the answer, because
+ * a whole room writes to the same counts row at once and transactions on one row collide. The
+ * stored answers stay the truth: results are counted again from them.
+ */
+async function surely<T>(write: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await write();
+    } catch (e) {
+      if (attempt >= 2) throw e;
+      await new Promise((done) => setTimeout(done, 40 * 2 ** attempt));
+    }
+  }
+}
+
+/** `tally` is what the person who answered may be shown: the full counts, or only how many answered when results are held back. */
 export interface Responded { tally: Tally; entries: number; done: boolean }
 
 /** Stores one checked answer to a poll and adds it to the counts. A changeable answer replaces the person's earlier one. */
-async function record(db: Store, s: Session, token: string, poll: Poll, raw: unknown): Promise<Responded> {
+async function record(db: Store, s: Session, token: string, poll: Poll, raw: unknown, inSurvey: boolean): Promise<Responded> {
   const c = checkAnswer(poll, raw);
   if (!c.ok) throw new LiveError(400, c.error);
   const at = new Date().toISOString();
@@ -220,13 +259,15 @@ async function record(db: Store, s: Session, token: string, poll: Poll, raw: unk
     const [had] = await db.myAnswers(s.id, poll.id, token);
     if (!had) {
       if (!(await db.addAnswer(s.id, { pollId: poll.id, token, entry: 0, answer: c.answer, at }))) throw new LiveError(409, 'Try again');
-      tally = await db.bumpTally(s.id, poll.id, c.delta, 1);
+      tally = await surely(() => db.bumpTally(s.id, poll.id, c.delta, 1));
     } else {
       /* A change takes the old answer out of the counts and puts the new one in, in one update. */
-      const change = mergeDelta(undo(poll, had.answer), c.delta);
-      if (!Object.keys(change).length) return { tally: await db.getTally(s.id, poll.id), entries: 1, done: true };
-      if (!(await db.replaceAnswer(s.id, { pollId: poll.id, token, entry: 0, answer: c.answer, at }, had.at))) throw new LiveError(409, 'Try again');
-      tally = await db.bumpTally(s.id, poll.id, change, 0);
+      const change = mergeDelta(undo(had.answer), c.delta);
+      if (!Object.keys(change).length) tally = await db.getTally(s.id, poll.id);
+      else {
+        if (!(await db.replaceAnswer(s.id, { pollId: poll.id, token, entry: 0, answer: c.answer, at }, had.at))) throw new LiveError(409, 'Try again');
+        tally = await surely(() => db.bumpTally(s.id, poll.id, change, 0));
+      }
     }
   } else {
     /* Take the first free entry. Entry 0 is the person's first answer to this poll, which is
@@ -239,28 +280,27 @@ async function record(db: Store, s: Session, token: string, poll: Poll, raw: unk
       }
     }
     if (entry < 0) throw new LiveError(409, c.maxEntries > 1 ? 'You have sent the most allowed' : 'You have already answered');
-    tally = await db.bumpTally(s.id, poll.id, c.delta, entry === 0 ? 1 : 0);
+    const first = entry === 0 ? 1 : 0;
+    tally = await surely(() => db.bumpTally(s.id, poll.id, c.delta, first));
   }
 
-  const text = c.answer.type === 'open' ? c.answer.text : undefined;
-  await publish(tallyChannel(s.id, poll.id), { kind: 'tally', pollId: poll.id, tally, text, at });
-  return { tally, entries: entry + 1, done: entry + 1 >= c.maxEntries };
+  /* Every phone can listen to this channel. While results are hidden, and for a survey, only the
+     number who answered goes out; the facilitator's screen reloads to get the rest. */
+  const withheld = inSurvey || !s.state.showResults;
+  const shown = withheld ? answeredOnly(tally) : tally;
+  const text = !withheld && c.answer.type === 'open' ? c.answer.text : undefined;
+  await publish(tallyChannel(s.id, poll.id), { kind: 'tally', pollId: poll.id, tally: shown, text, at, ...(withheld ? { withheld } : {}) });
+  return { tally: shown, entries: entry + 1, done: entry + 1 >= c.maxEntries };
 }
 
-/** The poll with this id, if it is the one open for answers right now. */
-function openPoll(s: Session, pollId: string): Poll {
+/** An answer to the poll the facilitator has started. */
+export async function respond(db: Store, s: Session, token: string, pollId: string, raw: unknown): Promise<Responded> {
   if (isClosed(s)) throw new LiveError(409, 'This session has ended');
   const found = findPoll(s.interactions, pollId);
   if (!found || found.parent.id !== s.state.active) throw new LiveError(409, 'This poll is not open');
   if (s.state.locked) throw new LiveError(409, 'Voting is closed');
-  return found.poll;
-}
-
-/** An answer to the active poll. */
-export async function respond(db: Store, s: Session, token: string, pollId: string, raw: unknown): Promise<Responded> {
-  const poll = openPoll(s, pollId);
   await joined(db, s, token);
-  return record(db, s, token, poll, raw);
+  return record(db, s, token, found.poll, raw, found.parent.type === 'survey');
 }
 
 /**
@@ -284,7 +324,7 @@ export async function respondSurvey(db: Store, s: Session, token: string, survey
   let answered = 0;
   for (const p of filled) {
     try {
-      await record(db, s, token, p, answers[p.id]);
+      await record(db, s, token, p, answers[p.id], true);
       answered += 1;
     } catch (e) {
       /* Sent before: a word or a text answer the person has already given is left as it is. */
@@ -315,8 +355,8 @@ export async function respondQuiz(db: Store, s: Session, token: string, question
   const at = new Date(now).toISOString();
   if (!(await db.addAnswer(s.id, { pollId: question.id, token, entry: 0, answer: c.answer, at, points }))) throw new LiveError(409, 'You have already answered');
 
-  const tally = answeredOnly(await db.bumpTally(s.id, question.id, c.delta, 1));
-  await db.addScore(s.id, quiz.id, token, person.nickname, question.id, points);
+  const tally = answeredOnly(await surely(() => db.bumpTally(s.id, question.id, c.delta, 1)));
+  await surely(() => db.addScore(s.id, quiz.id, token, person.nickname, question.id, points));
   await publish(tallyChannel(s.id, question.id), { kind: 'tally', pollId: question.id, tally, at });
   return { tally, entries: 1, done: true };
 }
@@ -432,7 +472,7 @@ export async function hostView(db: Store, s: Session) {
   const [people, results, questions, tallies] = await Promise.all([db.countPeople(s.id), activeResults(db, s, now), db.listQuestions(s.id), db.listTallies(s.id)]);
   return {
     id: s.id, code: s.code, title: s.title, status: isClosed(s) ? ('ended' as const) : ('live' as const),
-    state: s.state, serverNow: now, people, closesAt: s.closesAt, createdAt: s.createdAt, displayKey: s.displayKey,
+    state: s.state, serverNow: now, people, closesAt: s.closesAt, createdAt: s.createdAt, displayKey: s.displayKey, rev: s.rev ?? 1,
     qa: s.qa,
     interactions: s.interactions,
     /* How many have answered each poll and quiz question, for the list. */
@@ -444,18 +484,32 @@ export async function hostView(db: Store, s: Session) {
   };
 }
 
-/** Full results of a session, interaction by interaction, for the results page and export. People's tokens stay here. */
+/**
+ * Full results of a session, interaction by interaction, for the results page and export. They
+ * are counted afresh from the stored answers, which are the truth; the live counts are only a
+ * running copy. People's tokens stay here.
+ */
 export async function sessionResults(db: Store, s: Session) {
   const pollResult = async (poll: Poll, group: string | null) => {
-    const [tally, answers] = await Promise.all([db.getTally(s.id, poll.id), poll.type === 'open' ? db.pollAnswers(s.id, poll.id, 100_000) : Promise.resolve([])]);
-    return { kind: 'poll' as const, group, poll, tally, answers: answers.map((a) => ({ answer: a.answer, at: a.at })) };
+    const answers = await db.pollAnswers(s.id, poll.id);
+    return { kind: 'poll' as const, group, poll, tally: recount(answers), answers: poll.type === 'open' ? answers.map((a) => ({ answer: a.answer, at: a.at })) : [] };
+  };
+  const quizResult = async (quiz: Quiz) => {
+    const perQuestion = await Promise.all(quiz.questions.map((question) => db.pollAnswers(s.id, question.id)));
+    const questions = quiz.questions.map((question, n) => ({ kind: 'quiz-question' as const, quiz: quiz.title || 'Quiz', question, tally: recount(perQuestion[n]) }));
+    /* Each player's total is the sum of the points their answers earned; the score rows supply the names. */
+    const names = new Map((await db.listScores(s.id, quiz.id)).map((x) => [x.token, x.nickname]));
+    const totals = new Map<string, number>();
+    for (const a of perQuestion.flat()) totals.set(a.token, (totals.get(a.token) ?? 0) + (a.points ?? 0));
+    const scores: Score[] = await Promise.all([...totals].map(async ([token, total]) => (
+      { token, nickname: names.get(token) ?? (await db.getPerson(s.id, token))?.nickname ?? '', total, last: 0, lastId: '' }
+    )));
+    return [...questions, { kind: 'board' as const, quiz: quiz.title || 'Quiz', board: publicBoard(rankBoard(scores, null), LIMITS.peoplePerSession) }];
   };
   const items = (await Promise.all(s.interactions.map(async (i) => {
     if (i.type === 'survey') return Promise.all(i.polls.map((p) => pollResult(p, i.title || 'Survey')));
     if (i.type !== 'quiz') return [await pollResult(i, null)];
-    const questions = await Promise.all(i.questions.map(async (question) => ({ kind: 'quiz-question' as const, quiz: i.title || 'Quiz', question, tally: await db.getTally(s.id, question.id) })));
-    const board = publicBoard(rankBoard(await db.listScores(s.id, i.id), null), LIMITS.peoplePerSession);
-    return [...questions, { kind: 'board' as const, quiz: i.title || 'Quiz', board }];
+    return quizResult(i);
   }))).flat();
   return {
     session: { id: s.id, code: s.code, title: s.title, createdAt: s.createdAt, status: isClosed(s) ? ('ended' as const) : ('live' as const) },

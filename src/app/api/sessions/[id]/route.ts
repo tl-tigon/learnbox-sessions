@@ -27,7 +27,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (s instanceof Response) return s;
   try {
     const saved = await editSession(store(), s, await readJson(req));
-    return json({ title: saved.title, interactions: saved.interactions, qa: saved.qa, state: saved.state });
+    return json({ title: saved.title, interactions: saved.interactions, qa: saved.qa, state: saved.state, rev: saved.rev ?? 1 });
   } catch (e) {
     return failed(e);
   }

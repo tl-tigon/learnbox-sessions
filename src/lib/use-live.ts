@@ -11,7 +11,14 @@ export function useLive<T>(
   load: () => Promise<T | null>,
   channels: string[],
   apply: (cur: T, e: PushEvent) => T,
-  opts: { fastMs?: number; slowMs?: number; enabled?: boolean; onEvent?: (e: PushEvent) => void } = {},
+  opts: {
+    fastMs?: number;
+    slowMs?: number;
+    enabled?: boolean;
+    onEvent?: (e: PushEvent) => void;
+    /** True when a loaded view is older than the one on screen, so it is left out. */
+    stale?: (cur: T, next: T) => boolean;
+  } = {},
 ) {
   const { fastMs = 1500, slowMs = 15000, enabled = true } = opts;
   const onEventRef = useRef(opts.onEvent);
@@ -23,16 +30,21 @@ export function useLive<T>(
   loadRef.current = load;
   const applyRef = useRef(apply);
   applyRef.current = apply;
+  const staleRef = useRef(opts.stale);
+  staleRef.current = opts.stale;
 
+  /* Reloads can overlap: the timer's, and one asked for after a vote or a control. Only the
+     latest one to start is used, so a slow earlier reply never undoes what a later one showed. */
+  const latest = useRef(0);
   const refresh = useCallback(async () => {
+    const ticket = ++latest.current;
     try {
       const v = await loadRef.current();
-      if (v) {
-        setData(v);
-        setError(null);
-      }
+      if (ticket !== latest.current || !v) return;
+      setData((cur) => (cur && staleRef.current?.(cur, v) ? cur : v));
+      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Connection lost');
+      if (ticket === latest.current) setError(e instanceof Error ? e.message : 'Connection lost');
     }
   }, []);
 

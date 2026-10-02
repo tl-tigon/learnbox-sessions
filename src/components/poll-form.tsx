@@ -20,6 +20,25 @@ const filled = (poll: Poll, d: Draft): boolean => {
   return d.text.trim().length > 0;
 };
 
+/**
+ * A draft made to fit the poll as it is now. The facilitator can edit a poll while it is open:
+ * an option added to a ranking joins the end of the order, and a pick of a removed option is dropped.
+ */
+function fit(poll: Poll, d: Draft): Draft {
+  if (!d) return d;
+  if (poll.type === 'ranking' && 'order' in d) {
+    const ids = poll.options.map((o) => o.id);
+    const kept = d.order.filter((id) => ids.includes(id));
+    return kept.length === ids.length && kept.length === d.order.length ? d : { order: [...kept, ...ids.filter((id) => !kept.includes(id))] };
+  }
+  if (poll.type === 'choice' && 'optionIds' in d) {
+    const kept = d.optionIds.filter((id) => poll.options.some((o) => o.id === id)).slice(0, poll.maxPicks);
+    return kept.length === d.optionIds.length ? d : { optionIds: kept };
+  }
+  if (poll.type === 'rating' && 'value' in d) return d.value <= poll.max ? d : null;
+  return d;
+}
+
 /** The draft a ranking starts from: the options as listed, for the person to reorder. */
 const startDraft = (poll: Poll, mine?: Answer): Draft => {
   if (mine && mine.type !== 'quiz' && mine.type !== 'wordcloud' && mine.type !== 'open') return mine as Draft;
@@ -111,7 +130,8 @@ export function PollForm({ poll, mine, locked, name, people, onSend }: {
 }) {
   const changeable = canChange(poll);
   const max = poll.type === 'wordcloud' || poll.type === 'open' ? poll.maxEntries : 1;
-  const [draft, setDraft] = useState<Draft>(() => startDraft(poll, mine[0]));
+  const [raw, setDraft] = useState<Draft>(() => startDraft(poll, mine[0]));
+  const draft = fit(poll, raw);
   const [editing, setEditing] = useState(mine.length === 0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -184,7 +204,10 @@ export function SurveyForm({ survey, mine, locked, name, onSend }: {
 
   /* A text or word already sent stays as it is; its field shows what was sent. */
   const fixed = (p: Poll) => !canChange(p) && !!mine[p.id]?.length;
-  const toSend = Object.fromEntries(survey.polls.filter((p) => !fixed(p) && filled(p, drafts[p.id])).map((p) => [p.id, drafts[p.id]]));
+  const draftOf = (p: Poll) => fit(p, drafts[p.id]);
+  const toSend = Object.fromEntries(survey.polls.filter((p) => !fixed(p) && filled(p, draftOf(p))).map((p) => [p.id, draftOf(p)]));
+  /* There is something to edit only while a question can still take or change an answer. */
+  const editable = survey.polls.some((p) => !fixed(p));
 
   const send = async () => {
     setBusy(true);
@@ -206,7 +229,7 @@ export function SurveyForm({ survey, mine, locked, name, onSend }: {
             <div className="strong"><span className="num faint">{i + 1}.</span> {p.title}</div>
             {sentText !== null
               ? <div className="reply">{sentText}</div>
-              : <PollField poll={p} value={drafts[p.id]} onChange={(d) => setDrafts((cur) => ({ ...cur, [p.id]: d }))} disabled={busy || locked || !editing} />}
+              : <PollField poll={p} value={draftOf(p)} onChange={(d) => setDrafts((cur) => ({ ...cur, [p.id]: d }))} disabled={busy || locked || !editing} />}
           </div>
         );
       })}
@@ -216,7 +239,7 @@ export function SurveyForm({ survey, mine, locked, name, onSend }: {
       ) : !editing ? (
         <div className="spread">
           <span className="row strong"><Icon name="check" />Sent</span>
-          <button type="button" onClick={() => setEditing(true)}>Edit response</button>
+          {editable && <button type="button" onClick={() => setEditing(true)}>Edit response</button>}
         </div>
       ) : (
         <>

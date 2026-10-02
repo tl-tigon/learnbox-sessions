@@ -24,5 +24,6 @@ export interface QuestionEvent { id: string; status: QuestionStatus; text?: stri
 
 export type PushEvent =
   | { kind: 'state'; seq: number; status: Session['status']; state: SessionState; active: ActiveForAudience | null; now: number }
-  | { kind: 'tally'; pollId: string; tally: Tally; text?: string; at?: string }
+  /* `withheld`: results are hidden or the poll is in a survey, so only the number who answered is sent. */
+  | { kind: 'tally'; pollId: string; tally: Tally; text?: string; at?: string; withheld?: boolean }
   | { kind: 'qa'; q: QuestionEvent };

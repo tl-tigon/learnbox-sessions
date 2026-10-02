@@ -81,6 +81,8 @@
 }
 
 * { box-sizing: border-box; }
+/* A hidden tab stays in the page with what was typed in it; this keeps it out of sight whatever its layout class. */
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); }
@@ -142,6 +144,8 @@ input, select, textarea {
   border: 1px solid var(--line); background: var(--surface); color: var(--text);
 }
 textarea { resize: vertical; }
+/* iPhones zoom the page when a field with smaller text takes focus. */
+@media (max-width: 600px) { input, select, textarea { font-size: 16px; } }
 input::placeholder, textarea::placeholder { color: var(--text-3); }
 label { display: grid; gap: 4px; font-size: 12px; font-weight: 500; color: var(--text-2); }
 input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; padding: 0; accent-color: var(--accent); flex: none; }

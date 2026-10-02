@@ -12,6 +12,7 @@ import { PollResults } from '@/components/results';
 import { browserToken, saveName } from '@/lib/audience';
 import type { BoardEntry } from '@/lib/engine/quiz';
 import { LIMITS } from '@/lib/limits';
+import { post, request } from '@/lib/net';
 import { stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from '@/lib/push/events';
 import { useLive } from '@/lib/use-live';
 import type { Answer, QaSettings, SessionState, Tally } from '@/lib/types';
@@ -35,7 +36,6 @@ interface View {
   active: Active | null;
 }
 
-const post = (url: string, body: unknown) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 const activeId = (a: ActiveForAudience | null) => (!a ? null : a.kind === 'poll' ? a.poll.id : a.kind === 'survey' ? a.survey.id : a.id);
 
 export default function AudiencePage({ params }: { params: Promise<{ code: string }> }) {
@@ -44,15 +44,21 @@ export default function AudiencePage({ params }: { params: Promise<{ code: strin
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const r = await fetch(`/api/join/${code}`, { cache: 'no-store' });
+      const r = await request(`/api/join/${code}`, { cache: 'no-store' });
       const j = await r.json().catch(() => ({}));
+      if (!alive) return;
       if (!r.ok) return setProblem(j.error ?? 'No session with that code');
       const jr = await post(`/api/live/${j.id}`, { token: browserToken() });
       const jj = await jr.json().catch(() => ({}));
+      if (!alive) return;
       if (!jr.ok) return setProblem(jj.error ?? 'Could not join');
       setId(j.id);
-    })().catch(() => setProblem('Connection lost'));
+    })();
+    return () => {
+      alive = false;
+    };
   }, [code]);
 
   if (problem) {
@@ -70,7 +76,7 @@ export default function AudiencePage({ params }: { params: Promise<{ code: strin
 function Joined({ id }: { id: string }) {
   const token = browserToken();
   const load = useCallback(async () => {
-    const r = await fetch(`/api/live/${id}?t=${token}`, { cache: 'no-store' });
+    const r = await request(`/api/live/${id}?t=${token}`, { cache: 'no-store' });
     if (!r.ok) throw new Error('Connection lost');
     return (await r.json()) as View;
   }, [id, token]);
@@ -93,7 +99,7 @@ function Joined({ id }: { id: string }) {
       }
       return { ...cur, status: e.status, state: e.state, serverNow: e.now, active };
     }
-    if (e.kind === 'tally' && cur.active?.kind === 'poll' && cur.active.poll.id === e.pollId && cur.state.showResults) {
+    if (e.kind === 'tally' && !e.withheld && cur.active?.kind === 'poll' && cur.active.poll.id === e.pollId && cur.state.showResults) {
       return { ...cur, active: { ...cur.active, tally: e.tally } };
     }
     return cur;
@@ -101,22 +107,32 @@ function Joined({ id }: { id: string }) {
 
   const [channels, setChannels] = useState<string[]>([stateChannel(id)]);
   const reload = useRef<() => void>(() => {});
+  const shown = useRef(true);
   const { data: v, setData, error, refresh } = useLive<View>(load, channels, apply, {
-    /* A quiz step shows this person's own answer, points and place, which only a reload brings.
-       The wait is random so a full room does not ask in the same instant. */
+    stale: (cur, next) => next.state.seq < cur.state.seq,
+    /* Two things a pushed state cannot carry, so a reload fetches them: in a quiz, this person's
+       own answer, points and place; and the counts when results are switched back on. The wait is
+       random so a full room does not ask in the same instant. */
     onEvent: (e) => {
-      if (e.kind === 'state' && e.active?.kind === 'quiz') setTimeout(() => reload.current(), Math.random() * 1200);
+      if (e.kind !== 'state') return;
+      const turnedOn = e.state.showResults && !shown.current;
+      shown.current = e.state.showResults;
+      if (e.active?.kind === 'quiz' || (turnedOn && e.active?.kind === 'poll')) setTimeout(() => reload.current(), Math.random() * 1200);
     },
   });
   reload.current = () => void refresh();
   const now = useServerClock(v?.serverNow);
+  useEffect(() => {
+    if (v) shown.current = v.state.showResults;
+  }, [v]);
 
   const pollId = v?.active?.kind === 'poll' && v.state.showResults ? v.active.poll.id : null;
   useEffect(() => {
     setChannels(pollId ? [stateChannel(id), tallyChannel(id, pollId)] : [stateChannel(id)]);
   }, [id, pollId]);
 
-  /* Starting a poll brings its tab forward, as the facilitator means everyone to answer it. */
+  /* Starting a poll brings its tab forward, as the facilitator means everyone to answer it. Both
+     tabs stay in the page, so a question half typed is still there on coming back. */
   const [tab, setTab] = useState<'qa' | 'polls'>('qa');
   const current = activeId(v?.active ?? null);
   const seen = useRef<string | null | undefined>(undefined);
@@ -168,16 +184,19 @@ function Joined({ id }: { id: string }) {
         {naming && <NameCard name={v.nickname} onSave={async (n) => { const e = await setName(n); if (!e) setNaming(false); return e; }} onClose={() => setNaming(false)} />}
         {ended && <div className="card notice"><span className="dot"><Icon name="lock" /></span>Session ended</div>}
 
-        {tab === 'qa' && <QaPhone sessionId={id} token={token} state={v.state} settings={v.qa} nickname={v.nickname} ended={ended} />}
+        <div hidden={tab !== 'qa'}>
+          <QaPhone sessionId={id} token={token} state={v.state} settings={v.qa} nickname={v.nickname} ended={ended} />
+        </div>
 
-        {tab === 'polls' && !ended && (
-          <section className="stack" aria-live="polite">
+        {!ended && (
+          <section className="stack" hidden={tab !== 'polls'}>
             {!a && <div className="card notice"><span className="dot"><Icon name="bars" /></span>No active poll</div>}
             {a?.kind === 'poll' && (
               <>
                 <PollForm key={a.poll.id} poll={a.poll} mine={a.mine} locked={v.state.locked} name={v.nickname} people={a.tally?.people}
                   onSend={(answer_) => answer({ pollId: a.poll.id, answer: answer_ })} />
-                {a.mine.length > 0 && (v.state.showResults
+                {/* Written answers are for the big screen; a phone shows the counts of the other kinds. */}
+                {a.mine.length > 0 && a.poll.type !== 'open' && (v.state.showResults
                   ? a.tally && <div className="card"><PollResults poll={a.poll} tally={a.tally} /></div>
                   : <span className="row muted"><Icon name="eyeoff" />Results are hidden</span>)}
               </>

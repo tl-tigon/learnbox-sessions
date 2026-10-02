@@ -38,5 +38,16 @@ export function limited(key: string, perMinute: number): boolean {
   return h.n > perMinute;
 }
 
+/** True if this key is already over its limit. It counts nothing itself; `limited` does the counting. */
+export function blocked(key: string, perMinute: number): boolean {
+  const h = hits.get(key);
+  return !!h && h.reset >= Date.now() && h.n >= perMinute;
+}
+
+/**
+ * The caller's address, for rate limits. A proxy appends the address it saw to the end of
+ * X-Forwarded-For, and everything before that is whatever the caller sent, so the last entry is
+ * the one to trust.
+ */
 export const clientIp = (req: Request) =>
-  (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+  (req.headers.get('x-forwarded-for') ?? '').split(',').pop()!.trim() || req.headers.get('x-real-ip') || 'unknown';

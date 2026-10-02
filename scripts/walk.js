@@ -44,7 +44,7 @@ const FIRST = { timeout: 120000 };
     // ---- Build a multiple choice poll and a quiz in the editor
     const add = async (type) => { await p.click('section[aria-label="Polls"] button:has-text("Add")'); await p.click(`.menu .items button:has-text("${type}")`); };
     await add('Multiple choice');
-    await p.fill('label:has-text("Question") input', 'Where should we go?');
+    await p.fill('label:text-is("Question") input', 'Where should we go?');
     await p.fill('input[aria-label="Option 1"]', 'Goa');
     await p.fill('input[aria-label="Option 2"]', 'Coorg');
     await p.click('button:has-text("Add option")');
@@ -127,7 +127,7 @@ const FIRST = { timeout: 120000 };
     await phones[0].fill('textarea[aria-label="Your question"]', Q1);
     await phones[0].uncheck('label:has-text("Ask anonymously") input');
     await phones[0].fill('input[aria-label="Your name"]', 'Asha');
-    await phones[0].click('form button:has-text("Send")');
+    await phones[0].click('form button:has-text("Send"):visible');
     for (const ph of phones) await ph.waitForSelector(`.question:has-text("${Q1}")`, WAIT);
     check('Q&A: a question reaches every phone, with the name given', (await phones[3].textContent('.question .name')) === 'Asha');
     for (const i of [1, 2, 3]) await phones[i].click(`.question:has-text("${Q1}") button.votes`);
@@ -142,7 +142,7 @@ const FIRST = { timeout: 120000 };
     await p.check('label.switch:has-text("Review questions") input');
     await p.waitForSelector('[role="status"]:has-text("Saved")', WAIT);
     await phones[1].fill('textarea[aria-label="Your question"]', Q2);
-    await phones[1].click('form button:has-text("Send")');
+    await phones[1].click('form button:has-text("Send"):visible');
     await phones[1].waitForSelector('text=Waiting for review', WAIT);
     await p.waitForSelector(`.question:has-text("${Q2}") button:has-text("Approve")`, WAIT);
     check('Q&A: a question waiting for review shows only to its asker and the facilitator',
@@ -182,6 +182,9 @@ const FIRST = { timeout: 120000 };
     await phones[0].waitForFunction((t) => [...document.querySelectorAll('.question')].some((e) => e.textContent.includes(t) && e.querySelector('.votes').textContent.trim() === '1'), Q2, WAIT);
     check('Q&A: closed questions refuse a new one and still take upvotes', lateAsk.status === 409, String(lateAsk.status));
     await p.check('label.switch:has-text("Questions open") input');
+    // A question half typed must survive the phone jumping to the Polls tab.
+    await phones[2].waitForSelector('textarea[aria-label="Your question"]', WAIT);
+    await phones[2].fill('textarea[aria-label="Your question"]', 'Half typed when the poll started');
 
     // ---- Multiple choice: start, vote, change a vote, lock, hide results
     const early = await phoneApi(phones[0], 'POST', `/api/live/${sessionId}/answer`, { pollId: choice.id, answer: { optionIds: [choice.options[0].id] } });
@@ -189,16 +192,21 @@ const FIRST = { timeout: 120000 };
     await p.click('button[aria-label="Start Where should we go?"]');
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("Where should we go?")', WAIT);
     check('polls: starting a poll brings it up on every phone', true);
+    await phones[2].click('button[role="tab"]:has-text("Q&A")');
+    const kept = await phones[2].inputValue('textarea[aria-label="Your question"]');
+    check('a question half typed is still there after the phone jumps to the poll', kept === 'Half typed when the poll started', kept);
+    await phones[2].fill('textarea[aria-label="Your question"]', '');
+    await phones[2].click('button[role="tab"]:has-text("Polls")');
     await phones[0].screenshot({ path: path.join(OUT, '06-phone-poll.png') });
     const picks = ['Goa', 'Goa', 'Coorg', 'Goa', 'Lonavala'];
-    for (let i = 0; i < 5; i++) { await phones[i].click(`label.option:has-text("${picks[i]}")`); await phones[i].click('button:has-text("Send")'); await phones[i].waitForSelector('text=Sent', WAIT); }
+    for (let i = 0; i < 5; i++) { await phones[i].click(`label.option:has-text("${picks[i]}")`); await phones[i].click('button:has-text("Send"):visible'); await phones[i].waitForSelector('text=Sent', WAIT); }
     const bars = () => wall.$$eval('.bar', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
     await wall.waitForFunction(() => /Goa\s*60%/.test(document.querySelector('.panel')?.textContent ?? ''), null, WAIT);
     check('polls: the big screen shows the shares as votes arrive', /Goa\s?60%.*Coorg\s?20%.*Lonavala\s?20%/.test(await bars()), await bars());
     await wall.screenshot({ path: path.join(OUT, '07-wall-poll.png') });
     await phones[0].click('button:has-text("Edit response")');
     await phones[0].click('label.option:has-text("Coorg")');
-    await phones[0].click('button:has-text("Send")');
+    await phones[0].click('button:has-text("Send"):visible');
     await wall.waitForFunction(() => /Goa\s*40%/.test(document.querySelector('.panel')?.textContent ?? ''), null, WAIT);
     host = (await api('GET', `/api/sessions/${sessionId}`)).body;
     check('polls: a changed vote moves to the new option and the person is still counted once',
@@ -217,7 +225,7 @@ const FIRST = { timeout: 120000 };
     await p.click('button[aria-label="Start One word for this year"]');
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("One word for this year")', WAIT);
     const words = [['Growth', 'trust'], ['growth'], ['Trust.'], ['speed'], ['growth']];
-    for (let i = 0; i < 5; i++) for (const w of words[i]) { await phones[i].fill('input[aria-label="Your word"]', w); await phones[i].click('button:has-text("Send")'); await phones[i].waitForFunction(() => document.querySelector('input[aria-label="Your word"]')?.value === '', null, WAIT); }
+    for (let i = 0; i < 5; i++) for (const w of words[i]) { await phones[i].fill('input[aria-label="Your word"]', w); await phones[i].click('button:has-text("Send"):visible'); await phones[i].waitForFunction(() => document.querySelector('input[aria-label="Your word"]')?.value === '', null, WAIT); }
     await wall.waitForSelector('.cloud span:has-text("speed")', WAIT);
     const cloud = await wall.$$eval('.cloud span', (s) => s.map((x) => x.textContent));
     check('word cloud: words are merged whatever their case and punctuation', cloud[0] === 'growth' && cloud.includes('trust') && cloud.length === 3, cloud.join(','));
@@ -225,13 +233,13 @@ const FIRST = { timeout: 120000 };
     await p.click('button[aria-label="Start How was the quarter?"]');
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("How was the quarter?")', WAIT);
     const ratings = [5, 4, 4, 3, 5];
-    for (let i = 0; i < 5; i++) { await phones[i].click(`.scale button:text-is("${ratings[i]}")`); await phones[i].click('button:has-text("Send")'); }
+    for (let i = 0; i < 5; i++) { await phones[i].click(`.scale button:text-is("${ratings[i]}")`); await phones[i].click('button:has-text("Send"):visible'); }
     await wall.waitForSelector('.average:has-text("4.2")', WAIT);
     check('rating: the average shows on the big screen', true);
 
     await p.click('button[aria-label="Start What should we change?"]');
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("What should we change?")', WAIT);
-    for (let i = 0; i < 3; i++) { await phones[i].fill('textarea[aria-label="Your answer"]', `Idea number ${i + 1}`); await phones[i].click('button:has-text("Send")'); }
+    for (let i = 0; i < 3; i++) { await phones[i].fill('textarea[aria-label="Your answer"]', `Idea number ${i + 1}`); await phones[i].click('button:has-text("Send"):visible'); }
     await wall.waitForSelector('.texts > div >> nth=2', WAIT);
     const blocked = await phoneApi(phones[4], 'POST', `/api/live/${sessionId}/answer`, { pollId: 'open0001', answer: { text: 'this is shit' } });
     check('open text: answers show on the big screen, and a blocked word is refused', (await wall.$$('.texts > div')).length === 3 && blocked.status === 400, String(blocked.status));
@@ -241,7 +249,7 @@ const FIRST = { timeout: 120000 };
     // Phones 0-2 move Quality to the top; phones 3-4 send the order as listed (Speed, Quality, Cost).
     for (let i = 0; i < 5; i++) {
       if (i < 3) await phones[i].click('.rank-row:has-text("Quality") button[aria-label="Move up"]');
-      await phones[i].click('button:has-text("Send")');
+      await phones[i].click('button:has-text("Send"):visible');
       await phones[i].waitForSelector('text=Sent', WAIT);
     }
     await wall.waitForFunction(() => document.querySelectorAll('.bar').length === 3 && /^1\.\s*Quality/.test(document.querySelector('.bar')?.textContent ?? ''), null, WAIT);
@@ -255,7 +263,7 @@ const FIRST = { timeout: 120000 };
     for (let i = 0; i < 2; i++) {
       await phones[i].click('.scale button:text-is("4")');
       await phones[i].fill('textarea[aria-label="Your answer"]', `Shorter breaks ${i + 1}`);
-      await phones[i].click('button:has-text("Send")');
+      await phones[i].click('button:has-text("Send"):visible');
       await phones[i].waitForSelector('text=Sent', WAIT);
     }
     await phones[0].screenshot({ path: path.join(OUT, '09-phone-survey.png') });
@@ -347,6 +355,12 @@ const FIRST = { timeout: 120000 };
       (await api('GET', `/api/sessions/${sessionId}/results`, undefined, key)).status,
     ];
     check('the display key opens the big screen and nothing else', withKey.join() === '200,401,401,401', withKey.join());
+    /* Same length as the real key, one character changed: refused, and never an error from the comparison. */
+    const badKey = (await api('GET', `/api/sessions/${sessionId}?view=wall`, undefined, { 'x-display-key': `${host.displayKey.slice(0, -1)}!` })).status;
+    check('a wrong display key is refused', badKey === 401, String(badKey));
+    const hostNow = (await api('GET', `/api/sessions/${sessionId}`)).body;
+    const staleEdit = await api('PUT', `/api/sessions/${sessionId}`, { title: 'From an old window', rev: hostNow.rev - 1 });
+    check('an edit made from an older copy of the session is refused, not saved over the newer one', staleEdit.status === 409 && /another window/.test(staleEdit.body.error) && (await api('GET', `/api/sessions/${sessionId}`)).body.title === 'Team offsite', `${staleEdit.status}`);
     const wallData = JSON.stringify((await api('GET', `/api/sessions/${sessionId}?view=wall`, undefined, key)).body);
     check('the big screen is sent no display key, token or waiting question', !wallData.includes(host.displayKey) && !wallData.includes('token') && !wallData.includes('"pending"'));
     const forged = await phones[0].evaluate(async (sid) => (await fetch(`/api/live/${sid}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'x', pollId: 'y', answer: {} }) })).status, sessionId);

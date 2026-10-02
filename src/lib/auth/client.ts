@@ -20,6 +20,7 @@ import {
   signUp,
   updatePassword,
 } from 'aws-amplify/auth';
+import { request } from '../net';
 
 const POOL = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
 const CLIENT = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
@@ -139,5 +140,5 @@ export async function authed(url: string, init: RequestInit = {}): Promise<Respo
   const headers = new Headers(init.headers);
   if (t) headers.set('authorization', `Bearer ${t}`);
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  return fetch(url, { ...init, headers, cache: 'no-store' });
+  return request(url, { ...init, headers, cache: 'no-store' });
 }
