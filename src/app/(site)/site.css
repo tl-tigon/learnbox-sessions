@@ -84,16 +84,32 @@
 .hd-phone { right: 0; top: 7%; width: 25%; }
 .hd .mk-wall main { padding-right: 8cqw; }
 .hd .mk-none { height: 100%; }
-.hd.still .hd-screen, .hd.still .hd-phone { transition: none; }
+.hd.still :is(.hd-screen, .hd-phone, .hd-cam, .hd-ok, .hd-find .mk-qr) { transition: none; }
 /* Where the person's finger is */
 .hd-touch { position: absolute; width: 17%; aspect-ratio: 1; border-radius: 50%; background: rgba(0, 0, 0, 0.16); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 2px 8px rgba(0, 0, 0, 0.2); transform: translate(-50%, -50%) scale(1.25); opacity: 0; pointer-events: none; transition: left 420ms cubic-bezier(0.3, 0.7, 0.2, 1), top 420ms cubic-bezier(0.3, 0.7, 0.2, 1), transform 160ms ease, opacity 220ms ease, background 160ms; }
 .hd-touch.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .hd-touch.down { transform: translate(-50%, -50%) scale(0.7); background: rgba(0, 0, 0, 0.3); }
 /* The phone's camera, finding the code on the big screen */
-.mk-body.hd-cam { background: var(--device); place-items: center; grid-template-rows: minmax(0, 1fr); }
-.hd-cam > i { width: 56%; aspect-ratio: 1; border-radius: 9cqw; box-shadow: inset 0 0 0 1.4cqw rgba(255, 255, 255, 0.85); display: grid; place-items: center; color: #fff; transition: box-shadow 250ms, background 250ms; }
-.hd-cam > i.on { box-shadow: inset 0 0 0 1.4cqw var(--accent); background: var(--accent); }
-.hd-cam svg.icon { width: 16cqw !important; height: 16cqw !important; }
+.hd-cam { position: absolute; inset: 0; z-index: 2; background: var(--device); display: grid; place-items: center; transition: opacity 500ms ease; }
+.hd-cam.gone { opacity: 0; }
+/* The viewfinder: four corners, and in them what the camera sees. */
+.hd-find { position: relative; width: 64%; aspect-ratio: 1; display: grid; place-items: center; }
+.hd-find > i { position: absolute; width: 20%; height: 20%; border: 1.3cqw solid rgba(255, 255, 255, 0.9); transition: border-color 250ms ease; }
+.hd-find > i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 5cqw; }
+.hd-find > i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 5cqw; }
+.hd-find > i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 5cqw; }
+.hd-find > i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 5cqw; }
+.hd-find .mk-qr { width: 72%; height: 72%; margin: 0; padding: 3cqw; border-radius: 3cqw; opacity: 0; transform: scale(0.86); transition: opacity 350ms ease, transform 350ms ease; }
+.hd-find.seen .mk-qr { opacity: 1; transform: scale(1); }
+.hd-cam.found .hd-find > i { border-color: #7ddba8; }
+.hd-ok { position: absolute; bottom: 13%; width: 17cqw; height: 17cqw; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; transform: scale(0); transition: transform 320ms cubic-bezier(0.3, 1.5, 0.5, 1); }
+.hd-cam.found .hd-ok { transform: scale(1); }
+.mk-body .hd-ok svg.icon { width: 9cqw !important; height: 9cqw !important; }
+/* The code on the big screen, while the phone has it */
+.hd-screen .mk-qr { transition: box-shadow 300ms ease; }
+.hd.found .hd-screen .mk-qr { box-shadow: 0 0 0 0.5cqw var(--accent), 0 0 0 1.5cqw var(--accent-soft); }
+/* The phone's page in the picture: it fades when the page changes. */
+.hd-pg { display: grid; gap: 3.2cqw; align-content: start; min-width: 0; }
 .hd-caret::after { content: ''; display: inline-block; width: 1.5px; height: 1.05em; margin-left: 1px; vertical-align: text-bottom; background: var(--accent); animation: hd-blink 900ms steps(2, start) infinite; }
 @keyframes hd-blink { to { visibility: hidden; } }
 .hd-right .mk-opt.picked { box-shadow: inset 0 0 0 2px var(--ok); background: var(--accent-soft); }

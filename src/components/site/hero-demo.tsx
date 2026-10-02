@@ -9,14 +9,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '@/components/icons';
 import {
-  AskRow, Bars, barRows, Board, BOARD, Btn, Cloud, CODE, Field, Options, Panel, People, Phone, PhoneBoard, PhoneQuestion, PhoneVoted, PLabel,
-  POLL, QUESTIONS, QUIZ, Screen, Sent, WallQuestions, WORDS,
+  AskRow, Bars, barRows, Board, BOARD, Btn, Cloud, Field, Options, Panel, People, Phone, PhoneBoard, PhoneQuestion, PhoneVoted, PLabel,
+  POLL, QrDrawing, QUESTIONS, QUIZ, Screen, Sent, WallQuestions, WORDS,
 } from './mock';
 
 const TICK = 250;
 /** The scenes in order, each with its length in ticks. */
 const SCENES = [
-  { name: 'Join', len: 20 },
+  { name: 'Join', len: 19 },
   { name: 'Poll', len: 28 },
   { name: 'Q&A', len: 40 },
   { name: 'Word cloud', len: 26 },
@@ -25,18 +25,24 @@ const SCENES = [
 const STARTS = SCENES.map((_, i) => SCENES.slice(0, i).reduce((a, s) => a + s.len, 0));
 const TOTAL = SCENES.reduce((a, s) => a + s.len, 0);
 
-/* Where the big screen and the phone sit. A change of place is animated by CSS. */
+/*
+ * Where the big screen and the phone sit. A change of place is animated by CSS. Every place uses
+ * the same list of transforms, so the move between any two is a straight blend of each.
+ */
 const SCREEN = {
-  enter: { transform: 'translate(12.5%, 14%) rotateX(32deg) scale(0.86)', opacity: 0 },
-  wide: { transform: 'translate(12.5%, 0)', opacity: 1 },
-  left: { transform: 'translate(0, 0)', opacity: 1 },
+  wide: { transform: 'translate(12.5%, 0) rotateY(0deg) scale(1)', opacity: 1 },
+  left: { transform: 'translate(0, 0) rotateY(0deg) scale(1)', opacity: 1 },
   back: { transform: 'translate(-9%, 0) rotateY(16deg) scale(0.9)', opacity: 0.35 },
 };
 const PHONE = {
-  away: { transform: 'translate(90%, -24%) rotate(26deg)', opacity: 0 },
-  scan: { transform: 'translate(-262%, 3%) rotate(-9deg) scale(0.84)', opacity: 1 },
-  right: { transform: 'translate(0, 0)', opacity: 1 },
-  focus: { transform: 'translate(-150%, 0) scale(1.14)', opacity: 1 },
+  /* Out of the picture, below where it scans from. */
+  away: { transform: 'translate(-150%, 64%) rotate(10deg) scale(0.9)', opacity: 0 },
+  /* Held up in front of the big screen, turned towards its code. */
+  scan: { transform: 'translate(-182%, 5%) rotate(-7deg) scale(0.9)', opacity: 1 },
+  right: { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1 },
+  /* Put down, straight below its place at the right. */
+  down: { transform: 'translate(0, 60%) rotate(0deg) scale(0.9)', opacity: 0 },
+  focus: { transform: 'translate(-150%, 0) rotate(0deg) scale(1.14)', opacity: 1 },
 };
 
 interface Frame {
@@ -46,6 +52,8 @@ interface Frame {
   held: keyof typeof PHONE;
   /** Where the person's finger is: a selector inside the phone, and whether it is pressing. */
   touch?: { on: string; down?: boolean };
+  /** A class on the stage for the moment the scene is in. */
+  mark?: string;
 }
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
@@ -56,24 +64,35 @@ const tap = (k: number, from: number, to: number, on: string) => (k >= from && k
 
 const Typed = ({ text, done }: { text: string; done: boolean }) => <span className={done ? '' : 'hd-caret'}>{text}</span>;
 
+/**
+ * Joining. The phone is lifted in front of the big screen with its camera on; the code comes into
+ * its viewfinder and is found; the camera gives way to the session, already joined, since the QR
+ * code holds the session's address. Only then does the phone move to its place, and the count of
+ * people on the big screen rises as others join. Each step ends before the next begins.
+ */
 function join(k: number): Frame {
-  const joined = k >= 10;
+  const seen = k >= 5;
+  const found = k >= 7;
+  const joined = k >= 9;
   return {
-    at: k < 1 ? 'enter' : 'wide',
-    held: k < 3 ? 'away' : k < 9 ? 'scan' : 'right',
+    at: 'wide',
+    held: k < 2 ? 'away' : k < 11 ? 'scan' : 'right',
+    mark: found && k < 11 ? 'found' : undefined,
     screen: (
-      <Screen icon="chat" label="Q&A" count={0} countIcon="chat" people={joined ? Math.min(24, 1 + Math.round((k - 10) * 2.6)) : 0}>
+      <Screen icon="chat" label="Q&A" count={0} countIcon="chat" people={!joined ? 0 : Math.min(24, 1 + Math.max(0, (k - 12) * 4))}>
         <div className="mk-none"><Icon name="chat" />No questions yet</div>
       </Screen>
     ),
-    phone: k < 7 ? (
-      <div className="mk-phone"><div className="mk-body hd-cam"><i className={k >= 5 ? 'on' : ''}>{k >= 5 && <Icon name="check" />}</i></div></div>
-    ) : !joined ? (
-      <div className="mk-phone"><div className="mk-body"><div className="mk-joinpage"><b className="mk-wm">LearnBox Sessions</b><span className="mk-pill num"><b>#</b>{CODE}<i><Icon name="right" /></i></span></div></div></div>
-    ) : (
-      <Phone tab="qa" fab><AskRow /><div className="mk-none"><Icon name="chat" />No questions yet</div></Phone>
+    phone: (
+      <Phone tab="qa" fab over={(
+        <div className={`hd-cam ${joined ? 'gone' : ''} ${found ? 'found' : ''}`}>
+          <div className={`hd-find ${seen ? 'seen' : ''}`}><i /><i /><i /><i /><QrDrawing /></div>
+          <span className="hd-ok"><Icon name="check" /></span>
+        </div>
+      )}>
+        <div key="list" className="hd-pg"><AskRow /><div className="mk-none"><Icon name="chat" />No questions yet</div></div>
+      </Phone>
     ),
-    touch: tap(k, 8, 10, '.mk-pill i'),
   };
 }
 
@@ -94,13 +113,13 @@ function poll(k: number): Frame {
     ),
     phone: (
       <Phone>
-        {sent ? <PhoneVoted counts={counts} /> : (
-          <>
+        {sent ? <div key="voted" className="hd-pg mk-in"><PhoneVoted counts={counts} /></div> : (
+          <div key="vote" className="hd-pg mk-in">
             <PLabel icon="choice" label="Multiple choice" right={<People n={people} />} />
             <b className="mk-ptitle">{POLL.title}</b>
             <Options options={POLL.options.slice(0, shown)} picked={picked ? 0 : undefined} />
             <Btn primary dim={!picked}>Send</Btn>
-          </>
+          </div>
         )}
       </Phone>
     ),
@@ -127,7 +146,7 @@ function qa(k: number): Frame {
     phone: (
       <Phone tab="qa" fab={!typing}>
         {typing ? (
-          <div className="mk-sheetbox mk-in">
+          <div key="sheet" className="mk-sheetbox mk-in">
             <div className="mk-label"><b>Ask</b><Icon name="x" /></div>
             <Field><Typed text={text} done={text.length >= ASK.text.length} /></Field>
             <small className="mk-note num">{280 - text.length}</small>
@@ -135,10 +154,10 @@ function qa(k: number): Frame {
             <Btn primary dim={text.length < ASK.text.length}>Send</Btn>
           </div>
         ) : (
-          <>
+          <div key="list" className="hd-pg mk-in">
             <AskRow />
             {items.length ? items.slice(0, 2).map((q) => <PhoneQuestion key={q.id} q={q} />) : <div className="mk-none"><Icon name="chat" />No questions yet</div>}
-          </>
+          </div>
         )}
       </Phone>
     ),
@@ -164,12 +183,14 @@ function cloud(k: number): Frame {
     screen: <Screen icon="cloud" label="Word cloud" count={people}><Panel key="cloud" title="One word for this quarter"><Cloud words={words} /></Panel></Screen>,
     phone: (
       <Phone>
-        <PLabel icon="cloud" label="Word cloud" right={<People n={people} />} />
-        <b className="mk-ptitle">One word for this quarter</b>
-        <Field empty={!typed}>{typed ? <Typed text={typed} done={typed === WORD} /> : 'Type a word'}</Field>
-        <Btn primary dim={typed !== WORD}>Send</Btn>
-        <small className="mk-note num">{sent ? 1 : 0} / 3</small>
-        {sent && <Sent />}
+        <div key="cloud" className="hd-pg mk-in">
+          <PLabel icon="cloud" label="Word cloud" right={<People n={people} />} />
+          <b className="mk-ptitle">One word for this quarter</b>
+          <Field empty={!typed}>{typed ? <Typed text={typed} done={typed === WORD} /> : 'Type a word'}</Field>
+          <Btn primary dim={typed !== WORD}>Send</Btn>
+          <small className="mk-note num">{sent ? 1 : 0} / 3</small>
+          {sent && <Sent />}
+        </div>
       </Phone>
     ),
     touch: tap(k, 1, 3, '.mk-field') ?? tap(k, 10, 12, '.mk-btn'),
@@ -187,7 +208,8 @@ function quiz(k: number): Frame {
   const from = Math.max(0, BOARD.length - Math.floor((k - 17) / 2));
   return {
     at: 'left',
-    held: 'right',
+    /* The phone is put down before the story starts again, so its next page is never seen arriving. */
+    held: k >= 29 ? 'down' : 'right',
     screen: (
       <Screen icon="quiz" label="Quiz" count={24}>
         {board ? <Panel key="board" title={QUIZ.name}><Board rows={BOARD} from={from} /></Panel> : open ? (
@@ -204,14 +226,14 @@ function quiz(k: number): Frame {
     ),
     phone: (
       <Phone>
-        {k >= 20 ? <PhoneBoard /> : (
-          <>
+        {k >= 20 ? <div key="board" className="hd-pg mk-in"><PhoneBoard /></div> : (
+          <div key="question" className="hd-pg mk-in">
             <PLabel icon="quiz" label={QUIZ.name} right="2 / 5" />
             <b className="mk-ptitle">{QUIZ.title}</b>
             {open && <div className="mk-timerline num"><Icon name="clock" />{3 - Math.floor(k / 4)}<i><b style={{ width: `${((12 - k) / 12) * 15}%` }} /></i></div>}
             <div className={k >= 14 ? 'hd-right' : ''}><Options options={QUIZ.options} letters picked={picked ? 1 : undefined} /></div>
             {k >= 14 && <span className="mk-sent mk-in"><Icon name="check" />Correct<b className="num">+870</b></span>}
-          </>
+          </div>
         )}
       </Phone>
     ),
@@ -275,7 +297,7 @@ export function HeroDemo() {
 
   return (
     <div className="s-stage" ref={stage}>
-      <div className={`hd ${still ? 'still' : ''}`} role="img" aria-label={`${SCENES[scene].name}: the big screen and a phone`}>
+      <div className={`hd ${still ? 'still' : ''} ${frame.mark ?? ''}`} role="img" aria-label={`${SCENES[scene].name}: the big screen and a phone`}>
         <div className="hd-screen" style={SCREEN[frame.at]}>{frame.screen}</div>
         <div className="hd-phone" style={PHONE[frame.held]} ref={hand}>
           {frame.phone}

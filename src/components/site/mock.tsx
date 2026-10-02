@@ -9,7 +9,7 @@ export const HOST = 'sessions.learnbox.one';
 export const CODE = '482 913';
 
 /** A drawn QR code: the three corner squares and a fixed pattern between them. */
-function QrDrawing() {
+export function QrDrawing() {
   const N = 21;
   const corner = (x: number, y: number) => (x < 7 && y < 7) || (x >= N - 7 && y < 7) || (x < 7 && y >= N - 7);
   const ring = (x: number, y: number) => {
@@ -59,8 +59,8 @@ export function Screen({ icon, label, count, countIcon = 'user', people = 24, ch
   );
 }
 
-/** The phone: its bar with the two tabs, then the page. */
-export function Phone({ tab = 'polls', fab, children }: { tab?: 'qa' | 'polls'; fab?: boolean; children: ReactNode }) {
+/** The phone: its bar with the two tabs, then the page. `over` is a layer that covers the whole of its screen. */
+export function Phone({ tab = 'polls', fab, over, children }: { tab?: 'qa' | 'polls'; fab?: boolean; over?: ReactNode; children: ReactNode }) {
   return (
     <div className="mk-phone">
       <div className="mk-body">
@@ -74,6 +74,7 @@ export function Phone({ tab = 'polls', fab, children }: { tab?: 'qa' | 'polls'; 
         </div>
         <div className="mk-page">{children}</div>
         {fab && <span className="mk-fab">Ask</span>}
+        {over}
       </div>
     </div>
   );
