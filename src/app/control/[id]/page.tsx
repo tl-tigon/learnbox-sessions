@@ -3,9 +3,11 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authed } from '@/lib/auth/client';
+import { QaModeration } from '@/components/qa';
 import { Results } from '@/components/results';
 import { useSignedIn } from '@/components/use-signed-in';
-import { useScreen } from '@/lib/use-screen';
+import { isInteractive } from '@/lib/engine/slides';
+import { useScreen, withQuestion } from '@/lib/use-screen';
 
 export default function Control({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -29,7 +31,11 @@ function Panel({ id }: { id: string }) {
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setErr(j.error ?? 'Not applied');
-    setData((cur) => (cur && j.state.seq > cur.state.seq ? { ...cur, state: j.state, slide: cur.slides[j.state.current] ?? null, tally: j.state.current === cur.state.current ? cur.tally : null, texts: j.state.current === cur.state.current ? cur.texts : [] } : cur));
+    setData((cur) => {
+      if (!cur || j.state.seq <= cur.state.seq) return cur;
+      const same = j.state.current === cur.state.current;
+      return { ...cur, state: j.state, slide: cur.slides[j.state.current] ?? null, tally: same ? cur.tally : null, texts: same ? cur.texts : [], questions: same ? cur.questions : [] };
+    });
     void refresh();
   };
 
@@ -89,15 +95,26 @@ function Panel({ id }: { id: string }) {
             <button className="primary" disabled={busy || v.state.current >= v.slides.length - 1} onClick={() => act({ action: 'next' })}>Next</button>
             <span className="num muted">{v.state.current + 1} / {v.slides.length}</span>
             <button className={v.state.showResults ? 'on' : ''} aria-pressed={v.state.showResults} disabled={busy} onClick={() => act({ action: 'results', on: !v.state.showResults })}>Results {v.state.showResults ? 'shown' : 'hidden'}</button>
-            {slide?.type !== 'content' && (
+            {slide && isInteractive(slide) && (
               <button className={v.state.locked ? 'on' : ''} aria-pressed={v.state.locked} disabled={busy} onClick={() => act({ action: 'lock', on: !v.state.locked })}>{v.state.locked ? 'Answers closed' : 'Close answers'}</button>
+            )}
+            {slide?.type === 'qa' && (
+              <button className={v.state.locked ? 'on' : ''} aria-pressed={v.state.locked} disabled={busy} onClick={() => act({ action: 'lock', on: !v.state.locked })}>{v.state.locked ? 'Questions closed' : 'Close questions'}</button>
             )}
           </div>
 
           {slide && (
             <section className="card stack">
-              <div className="spread"><h2>{slide.title || '—'}</h2>{slide.type !== 'content' && <span className="num muted">{v.tally?.people ?? 0} answered</span>}</div>
-              {slide.type !== 'content' && <Results slide={slide} tally={v.tally} texts={v.texts} />}
+              <div className="spread">
+                <h2>{slide.title || '—'}</h2>
+                {isInteractive(slide) && <span className="num muted">{v.tally?.people ?? 0} answered</span>}
+                {slide.type === 'qa' && <span className="num muted">{v.questions.filter((q) => q.status !== 'hidden').length} questions</span>}
+              </div>
+              {isInteractive(slide) && <Results slide={slide} tally={v.tally} texts={v.texts} />}
+              {slide.type === 'qa' && (
+                <QaModeration sessionId={id} slide={slide} questions={v.questions} state={v.state}
+                  onChange={(q, state) => setData((cur) => (cur ? { ...cur, questions: withQuestion(cur.questions, q), state: state.seq > cur.state.seq ? state : cur.state } : cur))} />
+              )}
             </section>
           )}
 

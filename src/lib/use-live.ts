@@ -11,9 +11,11 @@ export function useLive<T>(
   load: () => Promise<T | null>,
   channels: string[],
   apply: (cur: T, e: PushEvent) => T,
-  opts: { fastMs?: number; slowMs?: number; enabled?: boolean } = {},
+  opts: { fastMs?: number; slowMs?: number; enabled?: boolean; onEvent?: (e: PushEvent) => void } = {},
 ) {
   const { fastMs = 1500, slowMs = 15000, enabled = true } = opts;
+  const onEventRef = useRef(opts.onEvent);
+  onEventRef.current = opts.onEvent;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pushUp, setPushUp] = useState(false);
@@ -57,7 +59,10 @@ export function useLive<T>(
     const offs = key
       .split('|')
       .filter(Boolean)
-      .map((c) => subscribe(c, (e) => setData((cur) => (cur ? applyRef.current(cur, e) : cur))));
+      .map((c) => subscribe(c, (e) => {
+        setData((cur) => (cur ? applyRef.current(cur, e) : cur));
+        onEventRef.current?.(e);
+      }));
     return () => {
       offStatus();
       offs.forEach((o) => o?.());

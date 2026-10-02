@@ -1,6 +1,6 @@
 /**
  * Results as CSV: one block per slide. Counts for choice, rating and word cloud; every answer
- * for open text. People are never named, only counted.
+ * for open text; every question for Q&A, with the name its asker chose to show.
  */
 import type { sessionResults } from './live';
 
@@ -13,11 +13,19 @@ const cell = (v: unknown) => {
   return `"${safe.replace(/"/g, '""')}"`;
 };
 const line = (...cells: unknown[]) => cells.map(cell).join(',');
+const STATUS = { pending: 'Waiting', live: 'Approved', answered: 'Answered', hidden: 'Hidden' } as const;
 
 export function resultsCsv(r: Results): string {
   const out: string[] = [line('Session', r.session.title), line('Code', r.session.code), line('Started', r.session.createdAt), line('People', r.people), ''];
-  r.rows.forEach(({ slide, tally, answers }, i) => {
-    out.push(line(`Slide ${i + 1}`, slide.title), line('Answered', tally.people));
+  r.rows.forEach(({ slide, tally, answers, questions }, i) => {
+    out.push(line(`Slide ${i + 1}`, slide.title));
+    if (slide.type === 'qa') {
+      out.push(line('Questions', questions.length), line('Question', 'Asked by', 'Votes', 'Status', 'Time'));
+      for (const q of questions) out.push(line(q.text, q.name || 'Anonymous', q.votes, STATUS[q.status], q.at));
+      out.push('');
+      return;
+    }
+    out.push(line('Answered', tally.people));
     if (slide.type === 'choice') {
       out.push(line('Option', 'Picks'));
       for (const o of slide.options) out.push(line(o.label, tally.counts[o.id] ?? 0));

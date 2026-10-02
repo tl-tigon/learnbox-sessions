@@ -13,6 +13,7 @@ const TYPE_LABEL: Record<SlideType, string> = {
   wordcloud: 'Word cloud',
   rating: 'Rating',
   open: 'Open text',
+  qa: 'Q&A',
   content: 'Heading',
 };
 
@@ -117,7 +118,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 <button className="danger" onClick={() => { edit((d) => { d.slides.splice(sel, 1); }); setSel(Math.max(0, sel - 1)); }}>Delete slide</button>
               </div>
             </div>
-            <label>{slide.type === 'content' ? 'Heading' : 'Question'}
+            <label>{slide.type === 'content' ? 'Heading' : slide.type === 'qa' ? 'Title' : 'Question'}
               <input value={slide.title} maxLength={LIMITS.titleChars} onChange={(e) => editSlide((s) => { s.title = e.target.value; })} />
             </label>
             <SlideSettings slide={slide} edit={editSlide} />
@@ -178,6 +179,13 @@ function SlideSettings({ slide, edit }: { slide: Slide; edit: (fn: (s: Slide) =>
           </label>
           <label>Label for 1<input value={slide.lowLabel} maxLength={LIMITS.optionChars} onChange={(e) => edit((s) => { if (s.type === 'rating') s.lowLabel = e.target.value; })} /></label>
           <label>Label for {slide.max}<input value={slide.highLabel} maxLength={LIMITS.optionChars} onChange={(e) => edit((s) => { if (s.type === 'rating') s.highLabel = e.target.value; })} /></label>
+        </div>
+      );
+    case 'qa':
+      return (
+        <div className="stack">
+          <label className="check"><input type="checkbox" checked={slide.moderation} onChange={(e) => edit((s) => { if (s.type === 'qa') s.moderation = e.target.checked; })} />Approve questions before they show</label>
+          <label className="check"><input type="checkbox" checked={slide.anonymous} onChange={(e) => edit((s) => { if (s.type === 'qa') s.anonymous = e.target.checked; })} />Anonymous questions allowed</label>
         </div>
       );
     case 'content':

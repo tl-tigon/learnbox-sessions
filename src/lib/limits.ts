@@ -15,6 +15,9 @@ export const LIMITS = {
   openChars: 280,
   contentChars: 1000,
   nicknameChars: 24,
+  questionChars: 280,
+  questionsPerPerson: 10,
+  questionsPerSlide: 500,
   /** A session closes itself this long after it starts. */
   sessionHours: 24,
 } as const;

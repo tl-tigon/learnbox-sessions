@@ -2,7 +2,10 @@
 /** The big screen: the join code and QR, the current slide, and its results as they come in. */
 import { use, useEffect, useState } from 'react';
 import { Qr } from '@/components/qr';
+import { QaScreen } from '@/components/qa';
 import { Results } from '@/components/results';
+import { isShown } from '@/lib/engine/questions';
+import { isInteractive } from '@/lib/engine/slides';
 import { useScreen } from '@/lib/use-screen';
 
 export default function Present({ params }: { params: Promise<{ id: string }> }) {
@@ -42,7 +45,8 @@ function Screen({ id, displayKey }: { id: string; displayKey: string | null }) {
         <section className="stack" style={{ alignContent: 'start' }}>
           <h1>{slide.title}</h1>
           {slide.type === 'content' && slide.body && <p style={{ fontSize: 28, whiteSpace: 'pre-wrap' }}>{slide.body}</p>}
-          {slide.type !== 'content' && (v.state.showResults ? <Results slide={slide} tally={v.tally} texts={v.texts} /> : null)}
+          {slide.type === 'qa' && <QaScreen questions={v.questions} state={v.state} />}
+          {isInteractive(slide) && (v.state.showResults ? <Results slide={slide} tally={v.tally} texts={v.texts} /> : null)}
         </section>
       ) : (
         <section className="row" style={{ gap: 48, alignItems: 'center', justifyContent: 'center' }}>
@@ -55,7 +59,9 @@ function Screen({ id, displayKey }: { id: string; displayKey: string | null }) {
       )}
 
       <footer className="spread muted">
-        {slide && slide.type !== 'content' ? <span className="num">{v.tally?.people ?? 0} answered{v.state.locked ? ' · closed' : ''}</span> : <span />}
+        {slide && isInteractive(slide) ? <span className="num">{v.tally?.people ?? 0} answered{v.state.locked ? ' · closed' : ''}</span>
+          : slide?.type === 'qa' ? <span className="num">{v.questions.filter((q) => isShown(q.status)).length} questions{v.state.locked ? ' · closed' : ''}</span>
+          : <span />}
         {slide ? <Qr url={joinUrl} size={120} /> : <span />}
       </footer>
     </main>

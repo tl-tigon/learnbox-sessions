@@ -2,7 +2,7 @@
  * The in-memory store, for local development and tests. Same guarantees as DynamoDB, kept on
  * `globalThis` so Next's dev reloads do not wipe it.
  */
-import type { Presentation, Session, SessionState, Tally } from '../types';
+import type { Presentation, Question, Session, SessionState, Tally } from '../types';
 import type { Person, Store, StoredAnswer } from './types';
 
 interface Db {
@@ -12,6 +12,8 @@ interface Db {
   people: Map<string, Map<string, Person>>;
   answers: Map<string, Map<string, StoredAnswer>>;
   tallies: Map<string, Tally>;
+  questions: Map<string, Map<string, Question>>;
+  upvotes: Map<string, Set<string>>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -19,6 +21,9 @@ const clone = <T>(v: T): T => structuredClone(v);
 export function memoryStore(db: Db = freshDb()): Store {
   const peopleOf = (sid: string) => db.people.get(sid) ?? db.people.set(sid, new Map()).get(sid)!;
   const answersOf = (sid: string) => db.answers.get(sid) ?? db.answers.set(sid, new Map()).get(sid)!;
+  /* `??=` because a dev server keeps its database across reloads, including one made before Q&A. */
+  const questionsOf = (sid: string) => (db.questions ??= new Map()).get(sid) ?? db.questions.set(sid, new Map()).get(sid)!;
+  const upvotesOf = (sid: string) => (db.upvotes ??= new Map()).get(sid) ?? db.upvotes.set(sid, new Set()).get(sid)!;
   const akey = (a: Pick<StoredAnswer, 'slideId' | 'token' | 'entry'>) => `${a.slideId}#${a.token}#${a.entry}`;
 
   return {
@@ -119,9 +124,39 @@ export function memoryStore(db: Db = freshDb()): Store {
     async getTally(sessionId, slideId) {
       return clone(db.tallies.get(`${sessionId}#${slideId}`) ?? { people: 0, counts: {} });
     },
+
+    async addQuestion(sessionId, q) {
+      questionsOf(sessionId).set(`${q.slideId}#${q.id}`, clone(q));
+    },
+    async getQuestion(sessionId, slideId, id) {
+      const q = questionsOf(sessionId).get(`${slideId}#${id}`);
+      return q ? clone(q) : null;
+    },
+    async listQuestions(sessionId, slideId) {
+      return [...questionsOf(sessionId).values()].filter((q) => q.slideId === slideId).sort((a, b) => a.id.localeCompare(b.id)).map(clone);
+    },
+    async setQuestionStatus(sessionId, slideId, id, status) {
+      const q = questionsOf(sessionId).get(`${slideId}#${id}`);
+      if (!q) return null;
+      q.status = status;
+      return clone(q);
+    },
+    async upvote(sessionId, slideId, id, token) {
+      const q = questionsOf(sessionId).get(`${slideId}#${id}`);
+      const votes = upvotesOf(sessionId);
+      const k = `${token}#${id}`;
+      if (!q || votes.has(k)) return null;
+      votes.add(k);
+      q.votes += 1;
+      return clone(q);
+    },
+    async myUpvotes(sessionId, token) {
+      const prefix = `${token}#`;
+      return [...upvotesOf(sessionId)].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+    },
   };
 }
 
 export function freshDb(): Db {
-  return { presentations: new Map(), sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map() };
+  return { presentations: new Map(), sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map() };
 }

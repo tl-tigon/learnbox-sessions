@@ -19,7 +19,7 @@ export function AnswerForm({ slide, sent, disabled, onSend }: {
   const [err, setErr] = useState<string | null>(null);
 
   const max = slide.type === 'wordcloud' || slide.type === 'open' ? slide.maxEntries : 1;
-  if (slide.type === 'content') return null;
+  if (slide.type === 'content' || slide.type === 'qa') return null;
   if (sent >= max) return <p className="muted">Sent</p>;
 
   const send = async (answer: unknown) => {

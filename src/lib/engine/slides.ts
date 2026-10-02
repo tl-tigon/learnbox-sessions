@@ -6,7 +6,7 @@ import { LIMITS } from '../limits';
 import { cleanText } from './words';
 import type { Slide, SlideType } from '../types';
 
-export const SLIDE_TYPES: SlideType[] = ['choice', 'wordcloud', 'rating', 'open', 'content'];
+export const SLIDE_TYPES: SlideType[] = ['choice', 'wordcloud', 'rating', 'open', 'qa', 'content'];
 
 const clip = (s: unknown, n: number) => cleanText(typeof s === 'string' ? s : '').slice(0, n);
 const int = (v: unknown, lo: number, hi: number, dflt: number) => {
@@ -28,6 +28,8 @@ export function blankSlide(type: SlideType): Slide {
       return { id, type, title: '', max: 5, lowLabel: '', highLabel: '' };
     case 'open':
       return { id, type, title: '', maxEntries: 1 };
+    case 'qa':
+      return { id, type, title: '', moderation: false, anonymous: true };
     case 'content':
       return { id, type, title: '', body: '' };
   }
@@ -65,6 +67,8 @@ export function cleanSlide(raw: unknown): Slide | null {
       };
     case 'open':
       return { id, type, title, maxEntries: int(r.maxEntries, 1, LIMITS.entriesPerPerson, 1) };
+    case 'qa':
+      return { id, type, title, moderation: r.moderation === true, anonymous: r.anonymous !== false };
     case 'content':
       return { id, type, title, body: clip(r.body, LIMITS.contentChars) };
   }
@@ -84,5 +88,5 @@ export function cleanSlides(raw: unknown): Slide[] {
   return out;
 }
 
-/** Slides that take an answer. */
-export const isInteractive = (s: Slide) => s.type !== 'content';
+/** Slides that take an answer. A Q&A slide takes questions instead, and a heading takes nothing. */
+export const isInteractive = (s: Slide) => s.type !== 'content' && s.type !== 'qa';

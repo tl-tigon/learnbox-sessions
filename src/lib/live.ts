@@ -3,6 +3,7 @@
  * Routes call these; the store keeps the data; push carries changes to screens as they happen.
  */
 import { checkAnswer } from './engine/answers';
+import { isShown, publicQuestion } from './engine/questions';
 import { isInteractive } from './engine/slides';
 import { newCode, newId, newSecret } from './ids';
 import { LIMITS } from './limits';
@@ -52,18 +53,20 @@ export type ControlAction =
   | { action: 'next' }
   | { action: 'prev' }
   | { action: 'results'; on: boolean }
-  | { action: 'lock'; on: boolean };
+  | { action: 'lock'; on: boolean }
+  | { action: 'highlight'; id: string | null };
 
 export function applyControl(s: Session, a: ControlAction): SessionState {
   const st = s.state;
   const last = s.slides.length - 1;
-  const move = (i: number): SessionState => ({ ...st, current: Math.max(0, Math.min(last, i)), locked: false, seq: st.seq + 1 });
+  const move = (i: number): SessionState => ({ ...st, current: Math.max(0, Math.min(last, i)), locked: false, highlight: null, seq: st.seq + 1 });
   switch (a.action) {
     case 'go': return move(Math.trunc(Number(a.index)) || 0);
     case 'next': return move(st.current + 1);
     case 'prev': return move(st.current - 1);
     case 'results': return { ...st, showResults: !!a.on, seq: st.seq + 1 };
     case 'lock': return { ...st, locked: !!a.on, seq: st.seq + 1 };
+    case 'highlight': return { ...st, highlight: a.id, seq: st.seq + 1 };
   }
 }
 
@@ -146,13 +149,17 @@ export async function audienceView(db: Store, s: Session, token: string | null) 
   return { ...base, joined: !!person, slide, index: s.state.current, total: s.slides.length, mine: mine.map((m) => m.answer), tally };
 }
 
-/** What the big screen and the control view see. */
-export async function screenView(db: Store, s: Session) {
+/**
+ * What the big screen and the control view see. `moderator` adds the questions that wait for
+ * approval or are hidden; a screen opened with the display key gets only what the audience sees.
+ */
+export async function screenView(db: Store, s: Session, moderator = false) {
   const slide = s.slides[s.state.current] ?? null;
-  const [people, tally, recent] = await Promise.all([
+  const [people, tally, recent, questions] = await Promise.all([
     db.countPeople(s.id),
     slide && isInteractive(slide) ? db.getTally(s.id, slide.id) : Promise.resolve(null),
     slide?.type === 'open' ? db.slideAnswers(s.id, slide.id, 500) : Promise.resolve([]),
+    slide?.type === 'qa' ? db.listQuestions(s.id, slide.id) : Promise.resolve([]),
   ]);
   return {
     id: s.id,
@@ -166,16 +173,21 @@ export async function screenView(db: Store, s: Session) {
     people,
     tally,
     texts: recent.map((r) => ({ text: r.answer.type === 'open' ? r.answer.text : '', at: r.at })),
+    questions: questions.filter((q) => moderator || isShown(q.status)).map(publicQuestion),
   };
 }
 
 /** Full results of a session, slide by slide, for the results page and export. */
 export async function sessionResults(db: Store, s: Session) {
-  const slides = s.slides.filter(isInteractive);
+  const slides = s.slides.filter((x) => x.type !== 'content');
   const rows = await Promise.all(
     slides.map(async (slide) => {
+      if (slide.type === 'qa') {
+        const questions = (await db.listQuestions(s.id, slide.id)).map(publicQuestion);
+        return { slide, tally: { people: 0, counts: {} } as Tally, answers: [], questions };
+      }
       const [tally, answers] = await Promise.all([db.getTally(s.id, slide.id), db.slideAnswers(s.id, slide.id, 100_000)]);
-      return { slide, tally, answers };
+      return { slide, tally, answers, questions: [] };
     }),
   );
   return { session: { id: s.id, code: s.code, title: s.title, mode: s.mode, createdAt: s.createdAt, status: isClosed(s) ? 'ended' : 'live' }, people: await db.countPeople(s.id), rows };

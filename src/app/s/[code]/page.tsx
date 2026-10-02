@@ -5,8 +5,10 @@
  */
 import { use, useCallback, useEffect, useState } from 'react';
 import { AnswerForm } from '@/components/answer-form';
+import { QaPhone } from '@/components/qa';
 import { Results } from '@/components/results';
 import { browserToken, recordSent, sentCounts } from '@/lib/audience';
+import { isInteractive } from '@/lib/engine/slides';
 import { useLive } from '@/lib/use-live';
 import { stateChannel, tallyChannel, type PushEvent } from '@/lib/push/events';
 import type { Answer, Session, SessionState, Slide, Tally } from '@/lib/types';
@@ -99,7 +101,7 @@ function Joined({ id }: { id: string }) {
 
   if (!v) return <main className="narrow"><p className="muted">{error ?? 'Joining…'}</p></main>;
   if (v.status === 'ended') return <main className="narrow stack"><h2>{v.title}</h2><p className="muted">Session ended</p></main>;
-  if (v.mode === 'survey') return <Survey v={v} send={send} />;
+  if (v.mode === 'survey') return <Survey v={v} token={token} send={send} />;
 
   const slide = v.slide;
   const sent = slide ? Math.max(v.mine?.length ?? 0, sentCounts(id)[slide.id] ?? 0) : 0;
@@ -110,17 +112,19 @@ function Joined({ id }: { id: string }) {
         <section className="card stack" aria-live="polite">
           <h2>{slide.title}</h2>
           {slide.type === 'content' && slide.body && <p style={{ whiteSpace: 'pre-wrap' }}>{slide.body}</p>}
-          {v.state.locked && slide.type !== 'content' ? <p className="muted">Answers closed</p> : (
+          {slide.type === 'qa' ? (
+            <QaPhone key={slide.id} sessionId={id} slide={slide} token={token} state={v.state} closed={v.state.locked} />
+          ) : v.state.locked && isInteractive(slide) ? <p className="muted">Answers closed</p> : (
             <AnswerForm key={slide.id} slide={slide} sent={sent} onSend={(a) => send(slide, a)} />
           )}
-          {v.state.showResults && v.tally && sent > 0 && <Results slide={slide} tally={v.tally} />}
+          {isInteractive(slide) && v.state.showResults && v.tally && sent > 0 && <Results slide={slide} tally={v.tally} />}
         </section>
       )}
     </main>
   );
 }
 
-function Survey({ v, send }: { v: View; send: (s: Slide, a: unknown) => Promise<string | null> }) {
+function Survey({ v, token, send }: { v: View; token: string; send: (s: Slide, a: unknown) => Promise<string | null> }) {
   const slides = v.slides ?? [];
   const [i, setI] = useState(0);
   const [, force] = useState(0);
@@ -134,11 +138,15 @@ function Survey({ v, send }: { v: View; send: (s: Slide, a: unknown) => Promise<
       <section className="card stack">
         <h2>{slide.title}</h2>
         {slide.type === 'content' && slide.body && <p style={{ whiteSpace: 'pre-wrap' }}>{slide.body}</p>}
-        <AnswerForm key={slide.id} slide={slide} sent={sent} onSend={async (a) => {
-          const e = await send(slide, a);
-          force((n) => n + 1);
-          return e;
-        }} />
+        {slide.type === 'qa' ? (
+          <QaPhone key={slide.id} sessionId={v.id} slide={slide} token={token} state={v.state} closed={false} />
+        ) : (
+          <AnswerForm key={slide.id} slide={slide} sent={sent} onSend={async (a) => {
+            const e = await send(slide, a);
+            force((n) => n + 1);
+            return e;
+          }} />
+        )}
       </section>
       <div className="spread">
         <button disabled={i === 0} onClick={() => setI(i - 1)}>Back</button>

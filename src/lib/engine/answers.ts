@@ -44,6 +44,7 @@ export function checkAnswer(slide: Slide, raw: unknown): Checked {
       if (isProfane(text)) return fail('That answer has a blocked word');
       return { ok: true, answer: { type: 'open', text }, delta: {}, maxEntries: slide.maxEntries };
     }
+    case 'qa':
     case 'content':
       return fail('This slide takes no answer');
   }

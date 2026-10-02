@@ -24,8 +24,8 @@ async function load(req: Request, ctx: Ctx, allowKey: boolean): Promise<Session 
 export async function GET(req: Request, ctx: Ctx) {
   const s = await load(req, ctx, true);
   if (s instanceof Response) return s;
-  const view = await screenView(store(), s);
   const owner = !req.headers.get('x-display-key');
+  const view = await screenView(store(), s, owner);
   return json({ ...view, ...(owner ? { displayKey: s.displayKey } : {}) });
 }
 

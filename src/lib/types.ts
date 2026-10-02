@@ -6,7 +6,7 @@
  * later never changes a session that already ran, and every answer belongs to the session.
  */
 
-export type SlideType = 'choice' | 'wordcloud' | 'rating' | 'open' | 'content';
+export type SlideType = 'choice' | 'wordcloud' | 'rating' | 'open' | 'qa' | 'content';
 
 interface SlideBase {
   id: string;
@@ -44,12 +44,21 @@ export interface OpenSlide extends SlideBase {
   maxEntries: number;
 }
 
+/** The audience asks questions and upvotes them. `title` is the slide's heading. */
+export interface QaSlide extends SlideBase {
+  type: 'qa';
+  /** Questions wait for the facilitator's approval before anyone else sees them. */
+  moderation: boolean;
+  /** People may ask without their name. */
+  anonymous: boolean;
+}
+
 export interface ContentSlide extends SlideBase {
   type: 'content';
   body: string;
 }
 
-export type Slide = ChoiceSlide | WordcloudSlide | RatingSlide | OpenSlide | ContentSlide;
+export type Slide = ChoiceSlide | WordcloudSlide | RatingSlide | OpenSlide | QaSlide | ContentSlide;
 
 export interface Presentation {
   id: string;
@@ -70,6 +79,8 @@ export interface SessionState {
   showResults: boolean;
   /** Answers closed on the current slide. */
   locked: boolean;
+  /** The question the presenter is answering now, on a Q&A slide. */
+  highlight?: string | null;
   /** Rises on every change, so a late or repeated update is ignored. */
   seq: number;
 }
@@ -105,4 +116,20 @@ export interface Tally {
   people: number;
   /** choice: option id -> picks. rating: "1".."max" -> votes. wordcloud: word -> times sent. */
   counts: Record<string, number>;
+}
+
+/** pending: waiting for approval. live: everyone sees it. answered and hidden are set by the facilitator. */
+export type QuestionStatus = 'pending' | 'live' | 'answered' | 'hidden';
+
+/** One question on a Q&A slide. The token stays on the server. */
+export interface Question {
+  id: string;
+  slideId: string;
+  token: string;
+  text: string;
+  /** The asker's name; empty when asked anonymously. */
+  name: string;
+  status: QuestionStatus;
+  votes: number;
+  at: string;
 }

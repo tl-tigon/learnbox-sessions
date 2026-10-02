@@ -4,7 +4,7 @@ This continues the work started in the LearnBox session. Read this file, then `C
 
 ## Where things stand
 
-**Phase 1 is built and tested.** It is in a local git repo only (`main`, commit `165f5be`). There is no GitHub remote yet.
+**Phases 1 (polls) and 2 (Q&A) are built and tested.** They are in a local git repo only (`main`). There is no GitHub remote yet.
 
 **What works now** (in-memory store, with development sign-in):
 - **Facilitator**:
@@ -12,7 +12,13 @@ This continues the work started in the LearnBox session. Read this file, then `C
   - dashboard;
   - presentation editor with autosave;
   - Present, or Run as survey.
-- **Slide types**: multiple choice (1 to N picks), word cloud (1–3 words, normalised and profanity-filtered), rating (1–3/4/5/7/10 with end labels), open text (1–3 answers), heading.
+- **Slide types**: multiple choice (1 to N picks), word cloud (1–3 words, normalised and profanity-filtered), rating (1–3/4/5/7/10 with end labels), open text (1–3 answers), Q&A, heading.
+- **Q&A**:
+  - the audience asks questions (with a name, or anonymously if the slide allows it) and upvotes, one vote per person;
+  - with moderation on, a question waits for the facilitator's approval and only its asker sees it meanwhile;
+  - the control view has the queue: Approve, Hide, Highlight, Mark answered, sorted Top or Recent;
+  - the big screen shows the highlighted question large and the top questions with votes;
+  - the results page and the CSV list every question with its votes and status.
 - **Audience**: joins at `/` or `/s/<code>` with no account, using a browser token. They follow the presenter, or go at their own pace in a survey.
 - **Presenter screen** `/present/<id>`:
   - join bar with code, QR and people joined;
@@ -29,11 +35,11 @@ This continues the work started in the LearnBox session. Read this file, then `C
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 14 vitest tests (engine, store guarantees, views).
-- A browser walk passed 17 of 17 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 24 vitest tests (engine, store guarantees, views, Q&A).
+- A browser walk passed 27 of 27 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
-  - It covered a facilitator, the big screen and 5 phones; every slide type; hide and show results; lock; end; CSV; survey; and a check that another account is blocked.
+  - It covered a facilitator, the big screen (as a signed-out projector with the display key) and 5 phones; every slide type; hide and show results; lock; a moderated Q&A; end; CSV; survey; and checks that another account is blocked.
 
 **Written but not yet run:**
 - `src/lib/store/dynamo.ts`: the DynamoDB store, which needs the table to exist.
@@ -65,25 +71,7 @@ This continues the work started in the LearnBox session. Read this file, then `C
 
 ## Next steps (in order, unless the owner redirects)
 
-### 1. Phase 2: Q&A
-Add slide type `qa` to `src/lib/types.ts`, with settings `moderation: boolean` and `anonymous: boolean`.
-
-| Row | Key | Fields |
-|---|---|---|
-| Question | `SESS#<id>` / `QA#<slideId>#<qid>` | text, nickname or anonymous, token, status `pending\|live\|answered\|hidden`, votes, at |
-| Upvote | `SESS#<id>` / `UPVOTE#<qid>#<token>` | conditional put, one per person |
-
-Votes are counted with `ADD votes :1` after the upvote put succeeds.
-
-**Routes:**
-- audience: ask, upvote, list;
-- owner: approve, hide, highlight, answered.
-
-The highlighted question id goes in the session state, so it travels on the state channel. Each Q&A change is pushed on `/live/<id>/qa/<slideId>`.
-
-**Screens:** the phone list with an ask box, a moderation queue in the control view, and the highlighted question on the big screen.
-
-### 2. Phase 3: Quiz
+### 1. Phase 3: Quiz
 Slide types: `quiz` (2–4 options, one correct, `seconds` 10/20/30/60) and `leaderboard`.
 
 **Timing:**
@@ -99,22 +87,33 @@ Slide types: `quiz` (2–4 options, one correct, `seconds` 10/20/30/60) and `lea
 
 **Join:** a nickname is required for quiz sessions. The join route already takes one.
 
-### 3. Phase 4: the rest of v1
+### 2. Phase 4: the rest of v1
 - Excel export (`exceljs`).
 - `/app/account`: change password; delete account, which deletes everything owned and then the Cognito user.
 - Front page content, Terms and Privacy.
 - The LearnBox places: the wordmark, the front page section, the dashboard panel and the results page panel (`design/BRIEF.md` §4F).
 - TTL `expiresAt` = 12 months on session rows.
 
-### 4. Phase 0 provisioning, on the owner's OK
+### 3. Phase 0 provisioning, on the owner's OK
 Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then:
 - run the store tests against the dev table;
 - run a load test of about 500 simulated phones.
 
-### 5. Phase 5: apply the Claude Design handoff
+### 4. Phase 5: apply the Claude Design handoff
+
+## How Q&A is built (Phase 2)
+- **Rules**: `src/lib/engine/questions.ts` (checks, what a screen may see, ordering) and `src/lib/qa.ts` (ask, upvote, moderate).
+- **Rows**: question `SESS#<id>` / `QA#<slideId>#<qid>`; upvote `SESS#<id>` / `UPVOTE#<token>#<qid>` (token first, so one query lists a person's votes). The vote count goes up only when the upvote row is new.
+- **Routes**: audience `GET`/`POST /api/live/<id>/qa/<slideId>` and `POST …/<qid>/vote`; owner `PATCH /api/sessions/<id>/qa/<slideId>/<qid>`.
+- **Push**: `/live/<id>/qa/<slideId>`. Every phone can read it, so a waiting or hidden question travels as id and status only; the control view reloads to fetch a waiting one.
+- **Highlight**: `state.highlight` in the session state. It clears on a slide move, and when the question is hidden or marked answered.
+- **Limits**: 280 characters, 10 questions per person per slide, 500 per slide (`LIMITS`).
 
 ## Gotchas found so far
 - **PowerShell writes:** in Windows PowerShell 5.1, `Get-Content` / `Set-Content` mangle UTF-8 characters such as "·". Use the Edit/Write tools for files that contain them.
 - **Screenshots:** a Playwright screenshot of a background tab can hang. Call `page.bringToFront()` first.
 - **Production guards:** `next start` (production) refuses the memory store and dev sign-in by design. Use `npm run dev` (port 3200) for local walks, or set `STORE=dynamo` with real Cognito.
+- **Background tabs stop polling:** `useLive` polls only while the page is visible. In the walk, each screen has its own browser context so all stay in the foreground; `bringToFront()` on one page puts the others in its context in the background.
+- **Build while the dev server runs:** `NEXT_DIST_DIR=.next-check npx next build`, then `git checkout tsconfig.json` and delete `.next-check` (the build adds that folder to `tsconfig.json`).
+- **Stale sessions in dev:** a walk that fails midway leaves a live session, and three live sessions block the next walk. End them from the dashboard, or restart the dev server.
 - **Live counts:** the counts row in DynamoDB keeps each count as a top-level attribute `c:<key>`, so `ADD` works for a word nobody has sent before.

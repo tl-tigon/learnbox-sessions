@@ -1,4 +1,4 @@
-import type { Answer, Presentation, Session, SessionState, Tally } from '../types';
+import type { Answer, Presentation, Question, QuestionStatus, Session, SessionState, Tally } from '../types';
 
 export interface PresentationSummary { id: string; title: string; slideCount: number; updatedAt: string }
 export interface SessionSummary { id: string; code: string; title: string; status: Session['status']; mode: Session['mode']; createdAt: string; closesAt: number }
@@ -11,7 +11,8 @@ export interface Person { token: string; nickname: string; joinedAt: string }
  * DynamoDB. Both must give the same guarantees, which the store tests check:
  * - a session code points at one live session at a time;
  * - a person's answer to a slide entry is written once, however many times it is sent;
- * - a state change applies only on top of the state it was made from (`seq`).
+ * - a state change applies only on top of the state it was made from (`seq`);
+ * - a person's upvote on a question counts once, however many times it is sent.
  */
 export interface Store {
   listPresentations(ownerSub: string): Promise<PresentationSummary[]>;
@@ -44,4 +45,15 @@ export interface Store {
   /** Adds to a slide's counts and returns the new totals. */
   bumpTally(sessionId: string, slideId: string, delta: Record<string, number>, newPerson: boolean): Promise<Tally>;
   getTally(sessionId: string, slideId: string): Promise<Tally>;
+
+  addQuestion(sessionId: string, q: Question): Promise<void>;
+  getQuestion(sessionId: string, slideId: string, id: string): Promise<Question | null>;
+  /** Every question on a slide, oldest first. */
+  listQuestions(sessionId: string, slideId: string): Promise<Question[]>;
+  /** Returns the question as it now is, or null if there is none. */
+  setQuestionStatus(sessionId: string, slideId: string, id: string, status: QuestionStatus): Promise<Question | null>;
+  /** Adds one vote from this person. Null if they have already voted on it, or it does not exist. */
+  upvote(sessionId: string, slideId: string, id: string, token: string): Promise<Question | null>;
+  /** Ids of the questions this person has upvoted in the session. */
+  myUpvotes(sessionId: string, token: string): Promise<string[]>;
 }

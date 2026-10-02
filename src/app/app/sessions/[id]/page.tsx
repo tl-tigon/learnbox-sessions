@@ -3,12 +3,15 @@ import { use, useEffect, useState } from 'react';
 import { authed } from '@/lib/auth/client';
 import { Results } from '@/components/results';
 import { useSignedIn } from '@/components/use-signed-in';
+import { sortQuestions, type PublicQuestion } from '@/lib/engine/questions';
 import type { Slide, Tally } from '@/lib/types';
+
+const STATUS = { pending: 'Waiting', live: 'Approved', answered: 'Answered', hidden: 'Hidden' } as const;
 
 interface Data {
   session: { id: string; code: string; title: string; mode: string; createdAt: string; status: string };
   people: number;
-  rows: { slide: Slide; tally: Tally; answers: { answer: { type: string; text?: string }; at: string }[] }[];
+  rows: { slide: Slide; tally: Tally; answers: { answer: { type: string; text?: string }; at: string }[]; questions: PublicQuestion[] }[];
 }
 
 export default function SessionResults({ params }: { params: Promise<{ id: string }> }) {
@@ -45,10 +48,27 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
         <span className="muted num">{new Date(d.session.createdAt).toLocaleString()} · code {d.session.code} · {d.people} joined · {d.session.status === 'live' ? 'Live' : 'Ended'}</span>
       </div>
       {err && <p className="error">{err}</p>}
-      {d.rows.map(({ slide, tally, answers }, i) => (
+      {d.rows.map(({ slide, tally, answers, questions }, i) => (
         <section key={slide.id} className="card stack">
-          <div className="spread"><h2>{i + 1}. {slide.title || '—'}</h2><span className="num muted">{tally.people} answered</span></div>
-          <Results slide={slide} tally={tally} texts={answers.map((a) => ({ text: a.answer.text ?? '' }))} />
+          <div className="spread">
+            <h2>{i + 1}. {slide.title || '—'}</h2>
+            <span className="num muted">{slide.type === 'qa' ? `${questions.length} questions` : `${tally.people} answered`}</span>
+          </div>
+          {slide.type === 'qa' ? (
+            <div className="list">
+              {sortQuestions(questions, 'top').map((q) => (
+                <div key={q.id} className="question">
+                  <div className="stack" style={{ gap: 4 }}>
+                    <span>{q.text}</span>
+                    <span className="muted small">{q.name || 'Anonymous'} · {STATUS[q.status]}</span>
+                  </div>
+                  <span className="num">▲ {q.votes}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Results slide={slide} tally={tally} texts={answers.map((a) => ({ text: a.answer.text ?? '' }))} />
+          )}
         </section>
       ))}
     </main>

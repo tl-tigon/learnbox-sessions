@@ -10,6 +10,8 @@
  *   SESS#<id>       PART#<token>            one person
  *   SESS#<id>       ANS#<slide>#<token>#<n> one answer entry
  *   SESS#<id>       TALLY#<slide>           live counts; each count is a top-level "c:<key>" number
+ *   SESS#<id>       QA#<slide>#<qid>        one question; qids sort by time
+ *   SESS#<id>       UPVOTE#<token>#<qid>    one person's upvote on one question
  *   CODE#<code>     META                    which live session a code belongs to
  *
  * Counts are top-level attributes rather than a map so `ADD` works on a word nobody has sent yet;
@@ -17,7 +19,7 @@
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import type { Session, SessionState, Tally } from '../types';
+import type { Question, Session, SessionState, Tally } from '../types';
 import type { Person, Store, StoredAnswer } from './types';
 
 const isClash = (e: unknown) => (e as { name?: string })?.name === 'ConditionalCheckFailedException';
@@ -57,6 +59,8 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     for (const [k, v] of Object.entries(i ?? {})) if (k.startsWith('c:')) counts[k.slice(2)] = Number(v);
     return { people: Number(i?.people ?? 0), counts };
   };
+  const questionFrom = (i): Question | null =>
+    i ? { id: i.id, slideId: i.slideId, token: i.token, text: i.text, name: i.name ?? '', status: i.status, votes: Number(i.votes ?? 0), at: i.at } : null;
   const answerFrom = (i): StoredAnswer => ({ slideId: i.slideId, token: i.token, entry: i.entry, answer: i.answer, at: i.at });
 
   return {
@@ -261,6 +265,59 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     },
     async getTally(sessionId, slideId) {
       return tallyFrom(await get(`SESS#${sessionId}`, `TALLY#${slideId}`, true));
+    },
+
+    async addQuestion(sessionId, q) {
+      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `SESS#${sessionId}`, SK: `QA#${q.slideId}#${q.id}`, ...q } }));
+    },
+    async getQuestion(sessionId, slideId, id) {
+      return questionFrom(await get(`SESS#${sessionId}`, `QA#${slideId}#${id}`, true));
+    },
+    async listQuestions(sessionId, slideId) {
+      return (await queryAll(`SESS#${sessionId}`, `QA#${slideId}#`)).map(questionFrom);
+    },
+    async setQuestionStatus(sessionId, slideId, id, status) {
+      try {
+        const r = await ddb.send(new UpdateCommand({
+          TableName: table,
+          Key: { PK: `SESS#${sessionId}`, SK: `QA#${slideId}#${id}` },
+          UpdateExpression: 'SET #status = :s',
+          ConditionExpression: 'attribute_exists(SK)',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExpressionAttributeValues: { ':s': status },
+          ReturnValues: 'ALL_NEW',
+        }));
+        return questionFrom(r.Attributes);
+      } catch (e) {
+        if (isClash(e)) return null;
+        throw e;
+      }
+    },
+    async upvote(sessionId, slideId, id, token) {
+      /* The upvote row is the person's one vote; the count goes up only when that row is new. */
+      try {
+        await ddb.send(new PutCommand({
+          TableName: table,
+          Item: { PK: `SESS#${sessionId}`, SK: `UPVOTE#${token}#${id}`, at: new Date().toISOString() },
+          ConditionExpression: 'attribute_not_exists(SK)',
+        }));
+        const r = await ddb.send(new UpdateCommand({
+          TableName: table,
+          Key: { PK: `SESS#${sessionId}`, SK: `QA#${slideId}#${id}` },
+          UpdateExpression: 'ADD votes :one',
+          ConditionExpression: 'attribute_exists(SK)',
+          ExpressionAttributeValues: { ':one': 1 },
+          ReturnValues: 'ALL_NEW',
+        }));
+        return questionFrom(r.Attributes);
+      } catch (e) {
+        if (isClash(e)) return null;
+        throw e;
+      }
+    },
+    async myUpvotes(sessionId, token) {
+      const prefix = `UPVOTE#${token}#`;
+      return (await queryAll(`SESS#${sessionId}`, prefix)).map((r) => String(r.SK).slice(prefix.length));
     },
   };
 }
