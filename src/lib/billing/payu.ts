@@ -47,5 +47,6 @@ export async function lookUp(url: string, key: string, salt: string, txnid: stri
   const j = (await r.json().catch(() => null)) as { transaction_details?: Record<string, { status?: string; amt?: string; transaction_amount?: string; mihpayid?: string }> } | null;
   const t = j?.transaction_details?.[txnid];
   const status = t?.status === 'success' ? 'success' : t?.status === 'failure' ? 'failure' : 'unknown';
-  return { status, amount: String(t?.amt ?? t?.transaction_amount ?? ''), ref: String(t?.mihpayid ?? '') };
+  /* `transaction_amount` is what the order asked for; `amt` is that plus any charges PayU added for the buyer. */
+  return { status, amount: String(t?.transaction_amount ?? t?.amt ?? ''), ref: String(t?.mihpayid ?? '') };
 }

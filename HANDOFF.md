@@ -28,7 +28,10 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Pro costs ₹49 a month, paid once as ₹588 for 12 months. It does not renew; a second payment adds 12 months to the end of the first.
   - Paying: the account page asks for a name and a mobile number (PayU requires both; the number is not stored), then posts to PayU's payment page. PayU sends the browser back with a signed outcome. On each load of the account page the server also asks PayU about payments whose outcome never came back.
   - When Pro ends the account is on Free again. Its sessions keep what they hold and can be edited; they take no more polls, their surveys do not start, and they cannot be copied.
-  - **Not yet run against PayU.** The code follows PayU's documentation and is tested against its formulas; in development a stand-in payment page signs as PayU does. It needs the owner's PayU key and salt to try on PayU's test site.
+  - **Run against PayU's test site** (2026-10-03) with PayU's public test key (`gtKFFx`) and test card, in three cases: a payment that succeeds (PayU's signed outcome came back and the account became Pro), one that fails (the account stayed on Free), and one that succeeds while the browser never comes back (the next load of the account page asked PayU and gave Pro). That run found one fault, now fixed and tested: when PayU adds charges for the buyer, its lookup gives the total as `amt` and the order's amount as `transaction_amount`.
+    - PayU's own payment page for that public test merchant does not load (PayU's storage answers "Access Denied"), so the test card was sent with the request and PayU went straight to its test bank. The page a buyer picks a payment method on has therefore not been seen from this product.
+    - **Not yet run with the owner's own keys.** The keys the owner put in `.env.local` are Live keys; PayU's test site refuses them. With them set and `PAYU_ENV` not `live`, Pay opens PayU's error page.
+    - The browser walk pays on the stand-in page, which is used only when no PayU key is set: run it with `PAYU_KEY` and `PAYU_SALT` commented out, or start the server with both set to nothing.
 - **Q&A, open for the whole session**
   - The audience asks from a sheet (with a name; left empty, the question is anonymous if that is allowed) and upvotes, one vote per person.
   - A person can withdraw their own question while it is live or waiting for review.
@@ -115,7 +118,9 @@ These are in `src/lib/limits.ts`.
 2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
 3. **OK to create a private GitHub repo** under `tl-tigon`.
 4. **PayU**, to switch payments on:
-   - the merchant key and salt from the PayU dashboard, test ones first. They go in `.env.local` as `PAYU_KEY` and `PAYU_SALT` (never in git), then one test payment is run end to end on PayU's test site before `PAYU_ENV=live`;
+   - the owner's PayU account is approved for `www.tigon.one` (seen 2026-10-03). Payments for LearnBox Sessions come from `sessions.learnbox.one`: ask PayU whether that site can be added to the account or needs its own. PayU checks a site for contact, terms, privacy and refund pages, which this site does not have yet. Do not change the account's website while `tigon.one` takes payments through it;
+   - the keys in `.env.local` are the Live ones. Either test keys from the dashboard's Test Mode (if the account still has it), or the owner's go-ahead for `PAYU_ENV=live` and one real payment of ₹588, refunded afterwards from the dashboard;
+   - whether PayU adds a convenience fee for the buyer on this account (its test merchant added ₹36.24 to ₹588);
    - whether the account takes international cards (the price is in rupees only);
    - whether ₹588 includes GST, and who issues the invoice. Nothing here makes an invoice;
    - how the price is charged: built as one payment of ₹588 for 12 months with no renewal (Slido's annual plan works the same way). A ₹49 one-month option is a small change; a card charged every month needs PayU's subscriptions product and is not built;

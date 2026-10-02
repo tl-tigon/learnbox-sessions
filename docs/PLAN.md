@@ -86,7 +86,7 @@ Also:
 | 5 | The event model: sessions as events, always-open Q&A, polls started one at a time, vote changes, ranking, surveys, quiz runs, replies, announcement, duplicate | **Built and tested** (2026-10-02) |
 | 6 | The interface, modelled on Slido's (`design/slido-study/STUDY.md`), in LearnBox green with Inter | **Built** (2026-10-02). The facilitator's and the participant's screens follow Slido's own, run from both sides in a test event in the owner's account |
 | 7 | The site: front page, product tour, six product pages, use cases, pricing | **Built** (2026-10-02), laid out as slido.com is; its copy is a draft |
-| 7b | Plans: Free and Pro, the limits checked on the server, the Pricing page, paying through PayU | **Built and tested** (2026-10-03) against PayU's documentation and a stand-in payment page; not yet run against PayU, which needs the owner's key and salt |
+| 7b | Plans: Free and Pro, the limits checked on the server, the Pricing page, paying through PayU | **Built and tested** (2026-10-03). Paid, failed and never-returned payments were run on PayU's test site with PayU's public test key. Waiting on the owner: a payment with their own keys, and PayU's approval of `sessions.learnbox.one` |
 | 8 | The site's copy approved; the LearnBox places; Terms and Privacy; cost alarms | Waiting on the owner |
 | 9 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
 

@@ -215,7 +215,10 @@ describe('paying for Pro', () => {
     expect(asked[0]).toContain('https://test.payu.in/merchant/postservice?form=2');
     expect(asked[0]).toContain(`command=verify_payment&var1=${fields.txnid}`);
 
-    await reconcile(db, 'buyer-1', answer({ mihpayid: '77', status: 'success', amt: '588.00' }));
+    /* As PayU's test site answers when it has added charges for the buyer: `amt` is the total, `transaction_amount` the order's. */
+    await reconcile(db, 'buyer-1', answer({ mihpayid: '77', status: 'success', amt: '588.00', transaction_amount: '1.00' }));
+    expect(await db.getAccount('buyer-1')).toBeNull();
+    await reconcile(db, 'buyer-1', answer({ mihpayid: '613345778913325568', status: 'success', unmappedstatus: 'captured', amt: '624.24', transaction_amount: '588.00', additional_charges: '36.24' }));
     expect(planName(await db.getAccount('buyer-1'))).toBe('pro');
     const until = (await db.getAccount('buyer-1'))!.proUntil;
     const before = asked.length;
