@@ -33,7 +33,7 @@ export default function Dashboard() {
   return (
     <main className="wrap stack">
       <div className="spread">
-        <strong>Live</strong>
+        <strong>LearnBox Sessions</strong>
         <div className="row small">
           <span className="muted">{email}</span>
           <button onClick={async () => { await signOut(); router.push('/'); }}>Sign out</button>

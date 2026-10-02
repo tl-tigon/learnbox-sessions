@@ -1,16 +1,16 @@
-# Live: design brief
+# LearnBox Sessions: design brief
 
-"Live" is a working name; the final name isn't chosen yet. Use it as a plain wordmark that can be swapped later. The product will run at a subdomain of `learnbox.one`; this brief uses `live.learnbox.one` as a stand-in.
+The product is **LearnBox Sessions**. Always write the name in full: the wordmark, the page titles and the copy never shorten it to "Sessions". It runs at `sessions.learnbox.one`.
 
 ## 1. What the product is
 
-Live is a free, self-serve tool for running polls, Q&A, quizzes and surveys with an audience. It is in the same space as Mentimeter, Slido and Kahoot.
+LearnBox Sessions is a free, self-serve tool for running polls, Q&A, quizzes and surveys with an audience. It is in the same space as Mentimeter, Slido and Kahoot.
 
 - **Facilitators** are trainers, L&D managers, teachers and speakers. They sign up, build a presentation of interactive slides, and run it as a live session.
 - **The audience** joins on their phones with a 6-digit code or a QR code. They need no account and no app.
 - **Results** appear live on the big screen as people answer.
 
-**Live is made by LearnBox.** LearnBox makes simulations for corporate training, and that is the paid business. Live is its free tool, in the way HubSpot offers free tools beside its main product. Live has two jobs:
+**LearnBox Sessions is made by LearnBox.** LearnBox makes simulations for corporate training, and that is the paid business. LearnBox Sessions is its free tool, in the way HubSpot offers free tools beside its main product. It has two jobs:
 
 1. Be a product facilitators choose over Mentimeter or Slido on its own merit.
 2. Show those facilitators that LearnBox exists, in a few fixed places (§4F).
@@ -25,7 +25,7 @@ There are three places the product is seen, and each needs to work well:
 
 ## 2. The quality bar
 
-Live is a SaaS product and is the first thing a facilitator sees of LearnBox. Every screen is finished to the standard of the signed-in apps of Mentimeter, Slido and Typeform. This applies equally to the front page and to every screen after sign-in.
+LearnBox Sessions is a SaaS product and is the first thing a facilitator sees of LearnBox. Every screen is finished to the standard of the signed-in apps of Mentimeter, Slido and Typeform. This applies equally to the front page and to every screen after sign-in.
 
 - **Front page**: a full product page (§4A.1). Its visuals are the real product screens from this brief (presenter screen, phone, control view) with the §6 data. Use product screens, in place of illustrations or stock images.
 - **Facilitator app**: one consistent app shell (§4E.22) across dashboard, results and account. Presentations show a thumbnail of their first slide. The editor is built around a live preview.
@@ -36,7 +36,7 @@ Live is a SaaS product and is the first thing a facilitator sees of LearnBox. Ev
 
 ## 3. The visual system
 
-Live has its **own** visual system. It carries a small "by LearnBox" mark (§4F) and otherwise stands as its own product. Please define:
+LearnBox Sessions has its **own** visual system. Its wordmark carries the LearnBox name (§4F), and it otherwise stands as its own product. Please define:
 
 - **Colour tokens** as CSS custom properties in one `:root` block, with both a **dark** and a **light** theme.
   - Name the roles: background, surface, raised surface, line, text, muted text, accent, accent ink, danger, success, and the chart series.
@@ -68,7 +68,7 @@ Live has its **own** visual system. It carries a small "by LearnBox" mark (§4F)
 
 Two kinds of visitor arrive here: an audience member holding a code, and a facilitator deciding whether to sign up. Both find their action without scrolling, at phone and laptop width.
 
-- **Header**: wordmark with "by LearnBox"; a join-by-code field; Sign in; Create account.
+- **Header**: the wordmark; a join-by-code field; Sign in; Create account.
 - **Top section**: the headline and line from §5, the primary action "Create free account", and the product shown running: the presenter screen with live results and a phone answering.
 - **Slide types**: Multiple choice, Word cloud, Rating, Open text, Q&A, Quiz, Survey. Each has its icon, its line from §5 and a small view of its result on the presenter screen.
 - **How it works**: the four steps in §5, each with the product screen it refers to.
@@ -93,7 +93,7 @@ Two kinds of visitor arrive here: an audience member holding a code, and a facil
 
 ### B. Audience: phone
 
-Every audience screen carries the "by LearnBox" mark, small, at the foot (§4F).
+Every audience screen carries the wordmark, small, at the foot (§4F).
 
 **4. Joining**
 - Code entry with large digits.
@@ -145,10 +145,10 @@ Every audience screen carries the "by LearnBox" mark, small, at the foot (§4F).
 ### C. Presenter screen (1920×1080 and 1366×768)
 
 **12. Join splash**
-- A large QR code, the URL (`live.learnbox.one/123456`), the code split as `954 152`, the session title, and the number of people joined (live).
+- A large QR code, the URL (`sessions.learnbox.one/123456`), the code split as `954 152`, the session title, and the number of people joined (live).
 
 **13. Join bar**
-- Kept small on every slide: URL, code, people joined, a small QR code, and the "by LearnBox" mark.
+- Kept small on every slide: URL, code, people joined, a small QR code, and the wordmark.
 
 **14. Results for each type**, live:
 - **Multiple choice**: horizontal bars with label, count and %.
@@ -199,7 +199,7 @@ Every audience screen carries the "by LearnBox" mark, small, at the foot (§4F).
 **22. App shell and dashboard**
 
 The shell is the same on the dashboard, results and account:
-- wordmark with "by LearnBox";
+- the wordmark;
 - navigation: Presentations, Sessions, LearnBox simulations (opens `learnbox.one`);
 - account menu: account email, Account, theme (dark / light), Sign out.
 
@@ -246,13 +246,13 @@ Dashboard:
 - Email, change password, delete account.
 - The delete confirm states what is removed: presentations, sessions and all answers.
 
-### F. LearnBox: where Live points to it
+### F. LearnBox: where the product points to it
 
 Four fixed places. Each is a static part of the page. None opens over the facilitator's work, moves, or repeats within a view.
 
 | Place | What it is |
 |---|---|
-| "by LearnBox" mark | Small text beside the wordmark in the public header and the app shell; at the foot of every audience phone screen; in the presenter screen's join bar. On public pages and in the app it links to `learnbox.one`. |
+| Wordmark | "LearnBox Sessions", in full, in the public header and the app shell; small at the foot of every audience phone screen; small in the presenter screen's join bar. |
 | Front page section | Heading, line, simulation list and link from §5. |
 | Dashboard panel | Heading, line and link from §5. It sits beside or below the facilitator's own content and takes less room than it. |
 | Results page panel | The same panel, after the last slide's results. |
@@ -300,7 +300,7 @@ Draft by the owner's instruction: plain statements, no slogans. Use it exactly; 
 
 **LearnBox: front page section**
 - Heading: "LearnBox simulations"
-- Line: "Live is made by LearnBox. LearnBox makes simulations that teach professional skills through practice, for corporate training."
+- Line: "LearnBox Sessions is a free tool from LearnBox. LearnBox makes simulations that teach professional skills through practice, for corporate training."
 - Simulation list: **[OWNER: the simulations to show, with a name and one line each]**
 - Link: "See the simulations" → `learnbox.one`
 
@@ -309,7 +309,7 @@ Draft by the owner's instruction: plain statements, no slogans. Use it exactly; 
 - Line: "Simulations that teach professional skills through practice, for corporate training."
 - Link: "See the simulations" → `learnbox.one`
 
-**Mark:** "by LearnBox"
+**Wordmark:** "LearnBox Sessions"
 
 ## 6. Data to design with
 

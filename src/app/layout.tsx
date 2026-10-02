@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Live',
+  title: 'LearnBox Sessions',
   description: 'Live polls, Q&A and quizzes for any audience.',
 };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1 };

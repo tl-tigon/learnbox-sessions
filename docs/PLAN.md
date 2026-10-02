@@ -1,8 +1,10 @@
-# Live: plan (approved by the owner on 2026-10-01)
+# LearnBox Sessions: plan (approved by the owner on 2026-10-01)
+
+The plan was approved under the working name "Live". The owner chose the name LearnBox Sessions on 2026-10-02.
 
 ## In plain terms
 
-Live is a free product that anyone can sign up for. Facilitators use it with any audience, in a room or on a call.
+LearnBox Sessions is a free product that anyone can sign up for. Facilitators use it with any audience, in a room or on a call.
 
 **Facilitators**
 - Sign up with email (confirmed by a code) or with Google. There are no plans, payments or invitations.
@@ -24,12 +26,12 @@ Live is a free product that anyone can sign up for. Facilitators use it with any
 
 **Later:** a PowerPoint add-in that puts a live question inside a slide.
 
-**LearnBox's free tool** (added 2026-10-01). Live brings facilitators to LearnBox's simulation business, the way HubSpot's free tools bring people to HubSpot.
-- It runs at a subdomain of `learnbox.one`.
+**LearnBox's free tool** (added 2026-10-01). It brings facilitators to LearnBox's simulation business, the way HubSpot's free tools bring people to HubSpot.
+- It runs at `sessions.learnbox.one`.
 - The front page and every signed-in screen are finished to SaaS standard.
-- It points to LearnBox in four fixed places: a "by LearnBox" mark, a front page section, a dashboard panel and a results page panel.
+- It points to LearnBox in four fixed places: the wordmark, a front page section, a dashboard panel and a results page panel.
 
-**Built separately from LearnBox.** Live has its own repo, logins, database and deploys. The quiz uses points and a leaderboard by the owner's choice, and LearnBox's no-gamification rule does not apply here.
+**Built separately from LearnBox.** It has its own repo, logins, database and deploys. The quiz uses points and a leaderboard by the owner's choice, and LearnBox's no-gamification rule does not apply here.
 
 ## Approach
 
@@ -75,7 +77,7 @@ Also:
 
 | # | What | Status |
 |---|---|---|
-| 0 | Name and domain; AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, Amplify app, budget alert; private GitHub repo. **Each needs the owner's OK.** Claude Design brief. | Brief done (`design/`); AWS and GitHub not started |
+| 0 | Name and domain; AWS setup: Cognito pool (self sign-up, Google, SES), table and dev table, AppSync Events API, Amplify app, budget alert; private GitHub repo. **Each needs the owner's OK.** Claude Design brief. | Name chosen: LearnBox Sessions at `sessions.learnbox.one`. Brief done (`design/`); AWS and GitHub not started |
 | 1 | Engine and polls: presentations, sessions, code and QR, join, live push, the four poll types plus heading; presenter screen and control view; survey mode; results page and CSV | **Built and tested** (commit 165f5be) |
 | 2 | Q&A: ask, upvote, anonymous, moderation, highlight | Next |
 | 3 | Quiz: timed questions, server-timed points, leaderboard, podium | — |

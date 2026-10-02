@@ -1,6 +1,6 @@
-Design the full UI for **Live**: a free SaaS tool for running live polls, Q&A, quizzes and surveys with an audience, in the same space as Mentimeter, Slido and Kahoot. "Live" is a working name, so use it as a plain wordmark.
+Design the full UI for **LearnBox Sessions**: a free SaaS tool for running live polls, Q&A, quizzes and surveys with an audience, in the same space as Mentimeter, Slido and Kahoot. Always write the name in full, and design a wordmark for it.
 
-Live is made by **LearnBox**, which sells simulations for corporate training. Live is LearnBox's free tool, in the way HubSpot offers free tools beside its main product. It has to be a product facilitators would choose on its own merit, and it points to LearnBox in four fixed places.
+LearnBox Sessions is made by **LearnBox**, which sells simulations for corporate training. It is LearnBox's free tool, in the way HubSpot offers free tools beside its main product. It has to be a product facilitators would choose on its own merit, and it points to LearnBox in four fixed places.
 
 The attached **BRIEF.md** is the specification. It lists:
 - the quality bar (§2);
@@ -29,7 +29,7 @@ Seven things matter most:
 7. **The control view** must work one-handed on a phone while presenting.
 
 Please hand back `.dc.html` files:
-1. **Foundations**: the tokens (dark and light), the type scale, the chart palette, the slide-type icons, buttons, inputs, the QR frame, the "by LearnBox" mark and the LearnBox panel.
+1. **Foundations**: the tokens (dark and light), the type scale, the chart palette, the slide-type icons, buttons, inputs, the QR frame, the wordmark and the LearnBox panel.
 2. **Public (1366×768 and phone 390px)**: front page (every section and state in §4A.1), sign in and create account (all states), Terms and Privacy.
 3. **Audience (phone, 390px)**: every state in §4B.
 4. **Presenter screen (1920×1080 and 1366×768)**: every state in §4C, with the small-room and large-room data.

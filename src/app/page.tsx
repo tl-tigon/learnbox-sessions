@@ -9,7 +9,7 @@ export default function Home() {
   return (
     <main className="narrow stack">
       <div className="spread">
-        <strong>Live</strong>
+        <strong>LearnBox Sessions</strong>
         <div className="row">
           <a className="btn" href="/sign-in">Sign in</a>
           <a className="btn primary" href="/sign-in?mode=up">Sign up</a>

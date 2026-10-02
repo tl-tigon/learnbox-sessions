@@ -1,16 +1,19 @@
-# Live
+# LearnBox Sessions
 
-"Live" is a working name. It is a free, self-serve tool for live polls, Q&A, quizzes and surveys with any audience, like Mentimeter, Slido and Kahoot.
+LearnBox Sessions is a free, self-serve tool for live polls, Q&A, quizzes and surveys with any audience, like Mentimeter, Slido and Kahoot.
+
+- **The name is always written in full** in the UI and in copy. "Sessions" alone is another company's product (sessions.us), and "session" here also means one run of a presentation.
+- "Live" was the working name. It stays in the repo folder, file names, routes and channel names (`live-audience`, `src/lib/live.ts`, `/api/live`).
 
 - **Facilitators** sign up and build presentations.
 - **The audience** joins on phones with a 6-digit code and needs no account.
 - **Results** update live on a presenter screen.
 
-**Live is LearnBox's free tool.** LearnBox (`../LMS`) sells simulations for corporate training; Live brings facilitators to it, the way HubSpot's free tools bring people to HubSpot. Live will run at a subdomain of `learnbox.one`.
-- Live is a SaaS product: the front page and every signed-in screen are finished to that standard.
-- Live points to LearnBox in four fixed places: the "by LearnBox" mark, a front page section, a dashboard panel and a results page panel (`design/BRIEF.md` §4F).
+**It is LearnBox's free tool.** LearnBox (`../LMS`) sells simulations for corporate training; LearnBox Sessions brings facilitators to it, the way HubSpot's free tools bring people to HubSpot. It will run at `sessions.learnbox.one`.
+- It is a SaaS product: the front page and every signed-in screen are finished to that standard.
+- It points to LearnBox in four fixed places: the wordmark, a front page section, a dashboard panel and a results page panel (`design/BRIEF.md` §4F).
 
-The code stays separate from LearnBox: Live has its own repo, AWS resources and deploys. Never change LearnBox from here.
+The code stays separate from LearnBox: this product has its own repo, AWS resources and deploys. Never change LearnBox from here.
 
 **Start here:**
 - `HANDOFF.md`: current state and next steps.
