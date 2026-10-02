@@ -5,10 +5,10 @@
 
 ## In plain terms
 
-LearnBox Sessions is a free product that anyone can sign up for. Facilitators use it with any audience, in a room or on a call.
+LearnBox Sessions is a product anyone can sign up for, free, with a paid Pro plan for larger sessions (2026-10-03). Facilitators use it with any audience, in a room or on a call.
 
 **Facilitators**
-- Sign up with email (confirmed by a code) or with Google. There are no plans, payments or invitations.
+- Sign up with email (confirmed by a code) or with Google. Every account starts on Free. Pro is ₹49 a month, paid once as ₹588 for 12 months through PayU, and adds 1,000 people, 50 polls, surveys and downloads.
 - Make a session. Its 6-digit code works for up to 7 days.
 - Add polls, quizzes and surveys to it, before or during the session.
 - Run it from the session screen (laptop or phone): start one poll at a time, lock voting, show or hide results, and moderate the Q&A beside it.
@@ -63,10 +63,10 @@ Counts are a fast running total. The stored answers are the source of truth.
 ### Fair use (`src/lib/limits.ts`)
 | Limit | Value |
 |---|---|
-| People per session | 1,000 |
+| People per session | 1,000 on Pro, 200 on Free |
 | Live sessions per account at once | 5 |
 | Sessions per account | 100 |
-| Polls, quizzes and surveys per session | 50 |
+| Polls, quizzes and surveys per session | 50 on Pro, 10 on Free (no surveys on Free) |
 | A session's code works for | 7 days |
 
 Also:
@@ -86,6 +86,7 @@ Also:
 | 5 | The event model: sessions as events, always-open Q&A, polls started one at a time, vote changes, ranking, surveys, quiz runs, replies, announcement, duplicate | **Built and tested** (2026-10-02) |
 | 6 | The interface, modelled on Slido's (`design/slido-study/STUDY.md`), in LearnBox green with Inter | **Built** (2026-10-02). The facilitator's and the participant's screens follow Slido's own, run from both sides in a test event in the owner's account |
 | 7 | The site: front page, product tour, six product pages, use cases, pricing | **Built** (2026-10-02), laid out as slido.com is; its copy is a draft |
+| 7b | Plans: Free and Pro, the limits checked on the server, the Pricing page, paying through PayU | **Built and tested** (2026-10-03) against PayU's documentation and a stand-in payment page; not yet run against PayU, which needs the owner's key and salt |
 | 8 | The site's copy approved; the LearnBox places; Terms and Privacy; cost alarms | Waiting on the owner |
 | 9 | PowerPoint add-in (Office web add-in, content add-in in slideshow, task pane) | Later, with its own plan |
 

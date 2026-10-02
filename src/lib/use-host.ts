@@ -10,6 +10,7 @@ import type { PublicQuestion } from './engine/questions';
 import type { BoardEntry } from './engine/quiz';
 import { useLive } from './use-live';
 import { qaChannel, stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from './push/events';
+import type { PlanName } from './plans';
 import type { Interaction, QaSettings, SessionState, Tally } from './types';
 
 interface Shared {
@@ -30,6 +31,8 @@ interface Shared {
 
 export interface WallView extends Shared { active: ActiveForAudience | null }
 export interface HostView extends Shared {
+  /** The owner's plan, which sets what the session holds. */
+  plan: PlanName;
   closesAt: number;
   createdAt: string;
   displayKey: string;

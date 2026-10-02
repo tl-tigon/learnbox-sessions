@@ -3,7 +3,8 @@
    big screen with the display key; five phones join by code. Then Q&A (ask, upvote, review, reply,
    highlight, announcement, closing), each poll type (with a changed vote, locked voting and hidden
    results), a survey, a quiz to its final leaderboard, the results downloads, the ways around the
-   rules that must be refused, a duplicate, ending, and deleting the account.
+   rules that must be refused, a duplicate, ending, and deleting the account. The account starts on
+   Free: what Free refuses is tried, then Pro is paid for on the development payment page.
    Run with the dev server up: node scripts/walk.js */
 const fs = require('fs'), path = require('path');
 const { chromium } = require('C:/Users/tejas/OneDrive/Documents/Workspace/LMS/Trust Sim/capture-tool/node_modules/playwright-core');
@@ -99,8 +100,61 @@ const FIRST = { timeout: 120000 };
         { id: 'sopn0001', type: 'open', title: 'One thing to improve', maxEntries: 1 },
       ] },
     ];
+    // ---- Plans: what Free refuses, then paying for Pro on the development payment page
+    const sessionUrl = `${BASE}/app/sessions/${sessionId}`;
+    const planNow = async () => (await api('GET', '/api/account')).body.plan;
+    const eleven = Array.from({ length: 11 }, (_, i) => ({ id: `rate10${String(i).padStart(2, '0')}`, type: 'rating', title: `Poll ${i + 1}`, max: 5 }));
+    const refused = [
+      (await api('PUT', `/api/sessions/${sessionId}`, { interactions: [choice, ...more, quiz] })).status,
+      (await api('PUT', `/api/sessions/${sessionId}`, { interactions: eleven })).status,
+      (await api('GET', `/api/sessions/${sessionId}/results?format=csv`)).status,
+      (await api('GET', `/api/sessions/${sessionId}/results?format=xlsx`)).status,
+    ];
+    check('Free: a survey, an 11th poll and the downloads are refused, and nothing is saved',
+      refused.join() === '402,402,402,402' && (await api('GET', `/api/sessions/${sessionId}`)).body.interactions.length === 2 && (await planNow()) === 'free', refused.join());
+    /* An outcome nobody signed, posted the way the payment page posts one. */
+    const forgedPay = await p.evaluate(async () => {
+      const body = new URLSearchParams({ status: 'success', key: 'dev', txnid: 'x', amount: '588.00', udf1: 'dev-walk-example-com', hash: 'f'.repeat(128) });
+      const r = await fetch('/api/billing/return', { method: 'POST', body });
+      return r.url;
+    });
+    check('Free: a made-up payment outcome is not believed', /payment=failed/.test(forgedPay) && (await planNow()) === 'free', forgedPay);
+    await p.click('.hostlist button.primary:has-text("Add")');
+    await p.waitForSelector('button.typecard:has-text("Survey") .pill-pro', WAIT);
+    await p.screenshot({ path: path.join(OUT, '01b-host-add-free.png') });
+    await p.click('button.typecard:has-text("Survey")');
+    await p.waitForURL(/\/app\/account$/, FIRST);
+    await p.waitForSelector('#plan .pill-pro:has-text("Free")', FIRST);
+    check('Free: Survey is marked Pro on the types to add, and opens the account page', true);
+    await p.screenshot({ path: path.join(OUT, '01c-account-free.png') });
+    const payWith = async (button) => {
+      await p.fill('#plan label:has-text("Name") input', 'Walk Tester');
+      await p.fill('#plan label:has-text("Mobile number") input', '98765 43210');
+      await p.click('#plan button:has-text("Pay ₹588")');
+      await p.waitForSelector('h1:has-text("Development payment page")', FIRST);
+      const posted = await p.$$eval(`form:has(button:text-is("${button}")) input`, (els) => Object.fromEntries(els.map((e) => [e.name, e.value])));
+      await p.click(`button:text-is("${button}")`);
+      await p.waitForURL(/\/app\/account$/, FIRST);
+      return posted;
+    };
+    await payWith('Fail');
+    await p.waitForSelector('#plan [role="alert"]:has-text("Payment not completed")', WAIT);
+    check('a payment that fails leaves the account on Free', (await planNow()) === 'free');
+    const paid = await payWith('Pay');
+    await p.waitForSelector('#plan [role="status"]:has-text("Payment received")', WAIT);
+    await p.waitForSelector('#plan:has-text("Pro until")', WAIT);
+    const account = (await api('GET', '/api/account')).body;
+    const days = Math.round((account.proUntil * 1000 - Date.now()) / 86400000);
+    check('a payment that succeeds puts the account on Pro for 365 days', account.plan === 'pro' && days === 365, `${account.plan} ${days}`);
+    await p.screenshot({ path: path.join(OUT, '01d-account-pro.png') });
+    /* The same signed outcome posted a second time, as a reload of the return would. */
+    const paidAgain = await p.evaluate(async (fields) => (await fetch('/api/billing/return', { method: 'POST', body: new URLSearchParams(fields) })).url, paid);
+    check('the same payment reported again adds nothing', /payment=paid/.test(paidAgain) && (await api('GET', '/api/account')).body.proUntil === account.proUntil, paidAgain);
+    await p.goto(sessionUrl, FIRST);
+    await p.waitForSelector('input[aria-label="Session name"]', FIRST);
+
     const put = await api('PUT', `/api/sessions/${sessionId}`, { interactions: [choice, ...more, quiz] });
-    check('the API takes the remaining polls', put.status === 200 && put.body.interactions.length === 7, String(put.status));
+    check('on Pro the API takes the remaining polls, with the survey', put.status === 200 && put.body.interactions.length === 7, String(put.status));
     await p.reload();
     await p.waitForSelector('.icard:has-text("Session feedback")', WAIT);
     host = (await api('GET', `/api/sessions/${sessionId}`)).body;
@@ -480,8 +534,8 @@ const FIRST = { timeout: 120000 };
     await p.waitForSelector('text=Its sessions and all their answers are removed.');
     await p.click('section:has-text("Delete this account?") button.danger');
     await p.waitForURL(`${BASE}/`, FIRST);
-    const left = `${(await api('GET', '/api/sessions')).body.sessions.length},${(await api('GET', `/api/sessions/${sessionId}/results`)).status}`;
-    check('deleting the account removes its sessions and their results', left === '0,404', left);
+    const left = `${(await api('GET', '/api/sessions')).body.sessions.length},${(await api('GET', `/api/sessions/${sessionId}/results`)).status},${(await api('GET', '/api/account')).body.plan}`;
+    check('deleting the account removes its sessions, their results and its plan', left === '0,404,free', left);
     await p.screenshot({ path: path.join(OUT, '19-front-page.png') });
 
     // ---- The site: its menus, its pages and the working example on a product page
@@ -514,6 +568,14 @@ const FIRST = { timeout: 120000 };
     }
     const missing = (await api('GET', '/features/nope')).status;
     check('site: every page opens and fits a phone and a laptop; an unknown page is not found', bad.length === 0 && missing === 404, `${bad.join(' ')} ${missing}`);
+    await p.setViewportSize({ width: 1366, height: 800 });
+    await p.goto(`${BASE}/pricing`, FIRST);
+    const cards = await p.$$eval('.s-plan', (els) => els.map((e) => `${e.querySelector('h2').textContent} ${e.querySelector('.price b').textContent} ${e.querySelector('a.btn').getAttribute('href')}`).join(' | '));
+    const compared = await p.$$eval('.s-compare tbody tr:not(.group)', (rows) => rows.filter((r) => /^(People in a session|Surveys|Downloads)/.test(r.textContent)).map((r) => r.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
+    check('site: Pricing shows Free and Pro with the price, and what differs',
+      cards === 'Free ₹0 /sign-in?mode=up | Pro ₹49 /app/account' && /People in a session\s?200\s?1,000/.test(compared) && /Surveys.*not included.*included/.test(compared), `${cards} · ${compared}`);
+    await p.screenshot({ path: path.join(OUT, '20b-site-pricing.png'), fullPage: true });
+    await p.setViewportSize({ width: 390, height: 800 });
     await p.goto(`${BASE}/`, FIRST);
     await p.click('button[aria-label="Menu"]');
     await p.click('.s-drawer summary:has-text("Use cases")');

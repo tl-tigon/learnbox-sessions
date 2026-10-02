@@ -6,6 +6,15 @@ export interface SessionSummary { id: string; code: string; title: string; statu
 export interface StoredAnswer { pollId: string; token: string; entry: number; answer: Answer; at: string; points?: number }
 export interface Person { token: string; nickname: string; joinedAt: string }
 
+/** An account's plan: on Pro until this moment (epoch seconds). An account with nothing stored is on Free. */
+export interface Account { proUntil: number }
+/**
+ * One payment for Pro. `id` is the transaction id sent to the payment gateway, `amount` is in
+ * rupees as the gateway takes it ("588.00"), `days` is how long it buys and `ref` is the
+ * gateway's own id for the payment.
+ */
+export interface Order { id: string; sub: string; amount: string; days: number; status: 'pending' | 'paid' | 'failed'; createdAt: string; paidAt?: string; ref?: string }
+
 /** What the facilitator edits. The live state changes only through `setState`. */
 export type SessionEdit = Partial<Pick<Session, 'title' | 'interactions' | 'qa'>>;
 
@@ -16,7 +25,8 @@ export type SessionEdit = Partial<Pick<Session, 'title' | 'interactions' | 'qa'>
  * - a person's answer to a poll entry is written once, however many times it is sent;
  * - an answer is replaced only if it is still the one the change was made from;
  * - a state change applies only on top of the state it was made from (`seq`);
- * - a person's upvote on a question counts once, however many times it is sent.
+ * - a person's upvote on a question counts once, however many times it is sent;
+ * - a paid order adds its days to the account's Pro once, however many times the payment is reported.
  */
 export interface Store {
   /** Writes the session and claims its code. False if the code is taken by a live session. */
@@ -74,4 +84,20 @@ export interface Store {
   addScore(sessionId: string, quizId: string, token: string, nickname: string, questionId: string, points: number): Promise<Score>;
   /** Every player who has answered a question of the quiz. */
   listScores(sessionId: string, quizId: string): Promise<Score[]>;
+
+  /** The account's plan, or null if it has never paid. */
+  getAccount(sub: string): Promise<Account | null>;
+  addOrder(o: Order): Promise<void>;
+  getOrder(sub: string, id: string): Promise<Order | null>;
+  /** The account's orders, newest first. */
+  listOrders(sub: string): Promise<Order[]>;
+  /**
+   * Marks the order paid and adds its days to the account's Pro, together: from now, or from the
+   * end of the Pro it already has. Null if there is no such order or it is already paid.
+   */
+  settleOrder(sub: string, id: string, ref: string): Promise<Account | null>;
+  /** Marks a pending order failed. A paid order stays paid. */
+  failOrder(sub: string, id: string): Promise<void>;
+  /** Removes the account's plan and its orders. */
+  deleteAccount(sub: string): Promise<void>;
 }

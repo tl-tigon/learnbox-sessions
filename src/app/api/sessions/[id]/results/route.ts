@@ -1,17 +1,20 @@
 import { store } from '@/lib/store';
-import { json } from '@/lib/http';
+import { fail, json } from '@/lib/http';
 import { sessionResults } from '@/lib/live';
 import { ownedSession } from '@/lib/owner';
 import { resultsCsv, resultsXlsx } from '@/lib/export';
+import { planOf } from '@/lib/plans';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** A session's results: as JSON for the results page, or with `?format=` as a CSV or Excel file. */
+/** A session's results: as JSON for the results page, or with `?format=` as a CSV or Excel file, which is on Pro. */
 export async function GET(req: Request, ctx: Ctx) {
   const s = await ownedSession(req, (await ctx.params).id);
   if (s instanceof Response) return s;
-  const results = await sessionResults(store(), s);
   const format = new URL(req.url).searchParams.get('format');
+  const { downloads } = await planOf(store(), s.ownerSub);
+  if ((format === 'csv' || format === 'xlsx') && !downloads) return fail(402, 'Downloads are on Pro');
+  const results = await sessionResults(store(), s);
   const name = `${s.title.replace(/[^\w -]/g, '').trim() || 'results'} ${s.createdAt.slice(0, 10)}`;
   if (format === 'csv') {
     return new Response(resultsCsv(results), {
@@ -27,5 +30,5 @@ export async function GET(req: Request, ctx: Ctx) {
       },
     });
   }
-  return json(results);
+  return json({ ...results, downloads });
 }

@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [plan, setPlan] = useState<'free' | 'pro' | null>(null);
 
   const load = useCallback(async () => {
     const r = await authed('/api/sessions');
@@ -26,7 +27,9 @@ export default function Dashboard() {
     setSessions((await r.json()).sessions);
   }, []);
   useEffect(() => {
-    if (email) void load();
+    if (!email) return;
+    void load();
+    authed('/api/account').then(async (r) => { if (r.ok) setPlan((await r.json()).plan); }).catch(() => {});
   }, [email, load]);
 
   /** Makes a session, new or as a copy of another, and opens it. */
@@ -61,6 +64,7 @@ export default function Dashboard() {
       <header className="apphead">
         <a className="wordmark grow" href="/app">LearnBox Sessions</a>
         <span className="muted truncate wide-only">{email}</span>
+        {plan && <a className="pill-pro" href="/app/account" aria-label={`Plan: ${plan === 'pro' ? 'Pro' : 'Free'}`}>{plan === 'pro' ? 'Pro' : 'Free'}</a>}
         <a className="btn" href="/app/account">Account</a>
         <button onClick={async () => { await signOut(); router.push('/'); }}>Sign out</button>
       </header>

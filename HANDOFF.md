@@ -20,7 +20,15 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
     - Settings open in a panel down the right side: the session's links, the Q&A's two settings, a poll's settings. Ending or deleting a session, deleting a poll and closing the Q&A ask first in a dialog.
     - Edits save as they are typed.
   - Results page with CSV and Excel downloads.
-  - Account page: delete the account, which removes its sessions and all their answers.
+  - Account page: the plan (Free, or Pro and the date it runs to), paying for Pro, and deleting the account, which removes its sessions, all their answers, its plan and its orders.
+- **Plans** (2026-10-03): Free and Pro.
+  - Free: 200 people and 10 polls and quizzes in a session; no surveys; no CSV or Excel download. Pro: 1,000 people; 50 polls, quizzes and surveys; surveys; downloads. Everything else is the same on both.
+  - The server refuses what a plan does not hold (HTTP 402): saving an 11th poll or a survey, starting a survey, a download, the 201st person, copying a session that needs Pro.
+  - On Free the facilitator sees: "Polls 3 / 10"; Survey marked Pro on the types to add (it opens the account page); "Get Pro" in place of Add when the session is full; "Downloads are on Pro" on the results page; "Full · Get Pro" beside the people count at 200.
+  - Pro costs ₹49 a month, paid once as ₹588 for 12 months. It does not renew; a second payment adds 12 months to the end of the first.
+  - Paying: the account page asks for a name and a mobile number (PayU requires both; the number is not stored), then posts to PayU's payment page. PayU sends the browser back with a signed outcome. On each load of the account page the server also asks PayU about payments whose outcome never came back.
+  - When Pro ends the account is on Free again. Its sessions keep what they hold and can be edited; they take no more polls, their surveys do not start, and they cannot be copied.
+  - **Not yet run against PayU.** The code follows PayU's documentation and is tested against its formulas; in development a stand-in payment page signs as PayU does. It needs the owner's PayU key and salt to try on PayU's test site.
 - **Q&A, open for the whole session**
   - The audience asks from a sheet (with a name; left empty, the question is anonymous if that is allowed) and upvotes, one vote per person.
   - A person can withdraw their own question while it is live or waiting for review.
@@ -39,7 +47,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **The site** (2026-10-02), laid out as slido.com is, studied page by page:
   - A sticky top bar with Product and Use cases menus, Pricing, Sign in and Create account. On a phone the menus open as one page.
   - Front page: the code field in a pill; the heading and one button; a moving picture of the big screen and a phone playing a poll, the Q&A, a word cloud and a quiz; where a session runs; the five parts of a session, opening one at a time beside their picture; three cards; three steps; a working example (vote on the drawn phone, the drawn big screen follows); a band with one button; a footer of links.
-  - `/product` (the tour), `/features/polls`, `qa`, `word-cloud`, `quizzes`, `surveys`, `results`, `/use-cases`, `/pricing` (one free plan, its lines from `LIMITS`).
+  - `/product` (the tour), `/features/polls`, `qa`, `word-cloud`, `quizzes`, `surveys`, `results`, `/use-cases`, `/pricing` (Free and Pro as two cards, then a table comparing them; numbers from `LIMITS`, `PLANS` and `plans.ts`).
   - Every picture is a drawing of the product's own screens in code; nothing is a photograph or a video.
   - The picture under the front page's heading tells one session as a story, as slido.com's video does: a phone scans the code and joins, votes, types and upvotes a question, sends a word, plays a quiz. The big screen and the phone move between scenes and a touch mark shows each tap (`src/components/site/hero-demo.tsx`).
   - Every other picture plays once when it is scrolled to (`play.tsx`). The working examples have a made-up audience answering alongside, and say so.
@@ -48,11 +56,12 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 64 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads. Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
-- A browser walk passes 67 of 67 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 82 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- A browser walk passes 74 of 74 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
   - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.
+  - The walk account starts on Free: the refusals are tried, a payment is failed and then paid on the stand-in payment page, and the rest runs on Pro.
   - It empties the walk account at the start and deletes it at the end.
 
 **Reviewed for bugs and ways around the rules (2026-10-02).** Two independent reviews, one of the server and one of the screens, read the code after the rebuild. The rules held: ownership, no tokens or display key in anything sent out, quiz secrecy and timing, one vote per person. Everything they found is fixed, each with a test or a walk check:
@@ -72,6 +81,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 ## Decisions by the owner
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
+- **2026-10-03**: two plans, Free and Pro. Free is generous (200 people, 10 polls and quizzes); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹49 a month. Payments go through the owner's PayU (India) account.
 - **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
 - **2026-10-02**: switch to Slido's event model, and model the interface on Slido's.
   - The interface is built here in code from `design/slido-study/STUDY.md`. This replaces the earlier rule that a Claude Design handoff was the visual authority.
@@ -89,7 +99,8 @@ These are in `src/lib/limits.ts`.
 | A session's code works for | 7 days | 24 hours |
 | Live sessions per account at once | 5 | 3 |
 | Sessions per account, live and ended | 100 | (50 presentations) |
-| Polls, quizzes and surveys per session | 50 | (50 slides) |
+| Polls, quizzes and surveys per session | 50 on Pro, 10 on Free | (50 slides) |
+| People per session | 1,000 on Pro, 200 on Free | 1,000 |
 | Questions per person per session | 20 | 10 per slide |
 | Leaderboard rows on the big screen | 5 | 10 |
 
@@ -103,12 +114,18 @@ These are in `src/lib/limits.ts`.
    - Budgets alert.
 2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
 3. **OK to create a private GitHub repo** under `tl-tigon`.
-4. **The site's copy**: the draft is in `src/lib/site.ts` and the pages in `src/app/(site)/`. Also for the owner: whether the Pricing page should promise the limits it lists; the line "Zoom, Teams, Meet, Webex: share the big screen's browser tab"; the use cases chosen (training, team meetings, all-hands, events, classrooms).
+4. **PayU**, to switch payments on:
+   - the merchant key and salt from the PayU dashboard, test ones first. They go in `.env.local` as `PAYU_KEY` and `PAYU_SALT` (never in git), then one test payment is run end to end on PayU's test site before `PAYU_ENV=live`;
+   - whether the account takes international cards (the price is in rupees only);
+   - whether ₹588 includes GST, and who issues the invoice. Nothing here makes an invoice;
+   - how the price is charged: built as one payment of ₹588 for 12 months with no renewal (Slido's annual plan works the same way). A ₹49 one-month option is a small change; a card charged every month needs PayU's subscriptions product and is not built;
+   - a refund is made by hand in the PayU dashboard; Pro stays on the account until its date unless the row is changed.
+5. **The site's copy**: the draft is in `src/lib/site.ts` and the pages in `src/app/(site)/`. Also for the owner: whether the Pricing page should promise the limits it lists; the line "Zoom, Teams, Meet, Webex: share the big screen's browser tab"; the use cases chosen (training, team meetings, all-hands, events, classrooms).
    - Left out until real ones exist: customer quotes, customer logos, awards.
-5. **The simulations to show**, a name and one line each, for the LearnBox places (front page section, sessions list, results page).
-6. **Company name and contact** for the Terms and Privacy pages.
-7. **The test event in the owner's Slido account**, "Claude test - safe to delete" (#2650635), can be deleted.
-8. **Copy for the owner to confirm**: "Create a session" in the phone's menu; the strip "LearnBox Sessions is free to use at your own meetings." with its "Create a session" button (it leads to `/sign-in?mode=up`); the two lines under the Q&A settings.
+6. **The simulations to show**, a name and one line each, for the LearnBox places (front page section, sessions list, results page).
+7. **Company name and contact** for the Terms and Privacy pages.
+8. **The test event in the owner's Slido account**, "Claude test - safe to delete" (#2650635), can be deleted.
+9. **Copy for the owner to confirm**: "Create a session" in the phone's menu; the strip "LearnBox Sessions is free to use at your own meetings." with its "Create a session" button (it leads to `/sign-in?mode=up`); the two lines under the Q&A settings.
 
 ## Next steps
 1. **Provisioning**, on the owner's OK. Write scripts in `scripts/` (AWS CLI or SDK, in the same style as LearnBox's `scripts/create-dev-table.mjs`). Then run the store tests against the dev table, and a load test of about 500 simulated phones.

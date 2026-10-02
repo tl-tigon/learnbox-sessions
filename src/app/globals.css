@@ -138,6 +138,10 @@ button:focus-visible, .btn:focus-visible, a:focus-visible, input:focus-visible, 
 .tint-accent, button.tint-accent:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
 .solid-danger, button.solid-danger:hover:not(:disabled) { background: var(--danger); color: #fff; box-shadow: none; }
 .pill-danger { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: var(--radius-s); color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); font-size: 12px; font-weight: 500; }
+.pill-pro { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; border-radius: var(--radius-s); background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; text-decoration: none; }
+.ticks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ticks li { display: flex; gap: 8px; align-items: flex-start; }
+.ticks svg { color: var(--accent); flex: none; margin-top: 2px; }
 .row.end { justify-content: flex-end; }
 button.link, button.link:hover:not(:disabled) { min-height: 0; padding: 0; font-size: 12px; color: var(--text-2); background: transparent; justify-self: start; }
 

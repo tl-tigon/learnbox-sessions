@@ -1,9 +1,11 @@
 /**
  * The site's pages: what the menus list and what each product page says.
- * Draft copy, kept to plain statements; the owner edits the wording. Numbers come from LIMITS.
+ * Draft copy, kept to plain statements; the owner edits the wording. Numbers come from LIMITS,
+ * PLANS and the price in `plans.ts`. What is on Pro only says so.
  */
 import type { IconName } from '@/components/icons';
-import { LIMITS } from './limits';
+import { LIMITS, PLANS } from './limits';
+import { PRO_PRICE, PRO_RUPEES } from './plans';
 
 /** A drawing of the product's screens (`src/components/site/mock.tsx`). */
 export type VisualName =
@@ -69,7 +71,7 @@ export const FEATURES: FeaturePage[] = [
       { icon: 'swap', title: 'Change an answer', text: 'On multiple choice, rating and ranking polls, a person can edit their response while voting is open.' },
       { icon: 'list', title: 'Edit while live', text: 'Add or edit polls while the session runs.' },
       { icon: 'copy', title: 'Duplicate', text: 'Copy a poll, or a whole session, to use it again.' },
-      { icon: 'download', title: 'Export', text: 'Download every poll’s results as CSV or Excel.' },
+      { icon: 'download', title: 'Export', text: 'On Pro, download every poll’s results as CSV or Excel.' },
     ],
     closing: 'Run a poll at your next meeting',
   },
@@ -102,7 +104,7 @@ export const FEATURES: FeaturePage[] = [
       { icon: 'megaphone', title: 'Announcement', text: 'Put a note above the questions on every phone.' },
       { icon: 'check', title: 'Mark as answered', text: 'Answered questions move to their own list.' },
       { icon: 'moon', title: 'Dark mode', text: 'Each person can switch their phone’s screen to dark.' },
-      { icon: 'download', title: 'Export', text: 'Download all questions with their votes and replies as CSV or Excel.' },
+      { icon: 'download', title: 'Export', text: 'On Pro, download all questions with their votes and replies as CSV or Excel.' },
     ],
     closing: 'Take questions at your next meeting',
   },
@@ -128,7 +130,7 @@ export const FEATURES: FeaturePage[] = [
     more: [
       { icon: 'sliders', title: 'Words per person', text: `Set 1 to ${LIMITS.entriesPerPerson} words each.` },
       { icon: 'eyeoff', title: 'Hide results', text: 'Keep the cloud back while people answer, then show it.' },
-      { icon: 'download', title: 'Export', text: 'Download every word with its count as CSV or Excel.' },
+      { icon: 'download', title: 'Export', text: 'On Pro, download every word with its count as CSV or Excel.' },
     ],
     closing: 'Run a word cloud at your next meeting',
   },
@@ -155,7 +157,7 @@ export const FEATURES: FeaturePage[] = [
     more: [
       { icon: 'lock', title: 'Checked on the server', text: 'Answers are timed and scored on the server. A phone receives the correct option only after you reveal it.' },
       { icon: 'medal', title: 'Own place', text: 'Each phone shows its place, its points and the points from the last question.' },
-      { icon: 'download', title: 'Export', text: 'Download each question’s votes and the full leaderboard as CSV or Excel.' },
+      { icon: 'download', title: 'Export', text: 'On Pro, download each question’s votes and the full leaderboard as CSV or Excel.' },
     ],
     closing: 'Run a quiz at your next meeting',
   },
@@ -163,10 +165,10 @@ export const FEATURES: FeaturePage[] = [
     slug: 'surveys',
     nav: 'Surveys',
     icon: 'survey',
-    line: 'Several questions on one page, answered at each person’s own pace.',
+    line: 'Several questions on one page, answered at each person’s own pace. On Pro.',
     title: 'Surveys',
     tour: 'Feedback on one page',
-    lead: 'Several questions on one page. Each person answers at their own pace and sends them together.',
+    lead: 'Several questions on one page. Each person answers at their own pace and sends them together. Surveys are on Pro.',
     points: ['All five poll types', `Up to ${LIMITS.itemsPerGroup} questions`, 'Results for each question'],
     visual: 'survey',
     steps: [
@@ -192,20 +194,20 @@ export const FEATURES: FeaturePage[] = [
     line: 'Every answer and question, on one page and as a download.',
     title: 'Results',
     tour: 'Every answer, on one page and as a download',
-    lead: 'Every answer and question stays with its session. Read the results on one page or download them.',
-    points: ['One page for a whole session', 'CSV and Excel', `Kept for ${LIMITS.keepDays} days`],
+    lead: 'Every answer and question stays with its session. Read the results on one page, or download them on Pro.',
+    points: ['One page for a whole session', 'CSV and Excel on Pro', `Kept for ${LIMITS.keepDays} days`],
     visual: 'results',
     steps: [
       { title: '1. Run your session', text: 'Polls, quizzes, surveys and the Q&A are saved as they happen.', art: 'bars' },
       { title: '2. Open the results', text: 'One page lists every poll, each quiz’s leaderboard and all questions.', art: 'board' },
-      { title: '3. Download', text: 'The same results as a CSV file or an Excel workbook.', art: 'download' },
+      { title: '3. Download', text: 'On Pro, the same results as a CSV file or an Excel workbook.', art: 'download' },
     ],
     rows: [
       { label: 'While it runs', title: 'Each option’s result under the option', text: 'On the facilitator’s screen, the open poll shows each option’s share under it as the votes arrive.', visual: 'host' },
       { label: 'After', title: 'One page for the whole session', text: 'Poll counts, rating averages, written answers, leaderboards and the audience’s questions.', visual: 'results' },
     ],
     more: [
-      { icon: 'download', title: 'CSV and Excel', text: 'The Excel workbook has a sheet for the summary, each question, each leaderboard and the Q&A.' },
+      { icon: 'download', title: 'CSV and Excel', text: 'On Pro. The Excel workbook has a sheet for the summary, each question, each leaderboard and the Q&A.' },
       { icon: 'user', title: 'Names by choice', text: 'A name appears only where a person chose to give one.' },
       { icon: 'trash', title: 'Delete', text: 'Deleting a session deletes its answers and questions.' },
     ],
@@ -224,7 +226,7 @@ export const USE_CASES: UseCase[] = [
     id: 'training', nav: 'Training sessions', icon: 'quiz',
     line: 'Check what people took in, and take their questions.',
     title: 'Training sessions',
-    points: ['Run a quiz after each module to check what people took in.', 'Keep the Q&A open and answer the most upvoted questions at each break.', 'End with a survey and download the answers.'],
+    points: ['Run a quiz after each module to check what people took in.', 'Keep the Q&A open and answer the most upvoted questions at each break.', 'On Pro, end with a survey and download the answers.'],
     visual: 'quiz-open',
   },
   {
@@ -243,9 +245,9 @@ export const USE_CASES: UseCase[] = [
   },
   {
     id: 'events', nav: 'Conferences and events', icon: 'screen',
-    line: `Up to ${n(LIMITS.peoplePerSession)} people in a session.`,
+    line: `Up to ${n(PLANS.free.peoplePerSession)} people in a session, ${n(PLANS.pro.peoplePerSession)} on Pro.`,
     title: 'Conferences and events',
-    points: [`Up to ${n(LIMITS.peoplePerSession)} people can join one session.`, 'The big screen shows the code and a QR code.', 'Highlight the question the speaker is answering.'],
+    points: [`Up to ${n(PLANS.free.peoplePerSession)} people can join one session, and ${n(PLANS.pro.peoplePerSession)} on Pro.`, 'The big screen shows the code and a QR code.', 'Highlight the question the speaker is answering.'],
     visual: 'qa',
   },
   {
@@ -274,17 +276,71 @@ export const NAV: NavGroup[] = [
   },
 ];
 
-/** What the free product includes, as the pricing page lists it. */
-export const INCLUDED: string[] = [
-  `Up to ${n(LIMITS.peoplePerSession)} people in a session`,
-  `Up to ${LIMITS.interactionsPerSession} polls, quizzes and surveys in a session`,
-  'Q&A with upvotes, review and replies',
-  'Multiple choice, word cloud, rating, open text and ranking polls',
-  'Quizzes with a timer and a leaderboard',
-  'Surveys',
-  'The big screen, with the code and a QR code',
-  'Results as CSV and Excel',
-  `${LIMITS.liveSessionsPerAccount} sessions live at once, ${LIMITS.sessionsPerAccount} sessions in an account`,
-  `A session’s code works for ${LIMITS.sessionDays} days`,
-  `Results kept for ${LIMITS.keepDays} days`,
+export interface PlanCard { name: string; price: string; per: string; note: string; intro: string; lines: string[]; action: string; href: string; pro?: boolean }
+
+/** The two plans as the pricing page shows them. */
+export const PLAN_CARDS: PlanCard[] = [
+  {
+    name: 'Free', price: '₹0', per: 'Free forever', note: 'No card needed',
+    intro: 'Includes',
+    lines: [
+      `Up to ${n(PLANS.free.peoplePerSession)} people in a session`,
+      `Up to ${PLANS.free.interactionsPerSession} polls and quizzes in a session`,
+      'Q&A with upvotes, review and replies',
+      'All five poll types, and quizzes',
+      'The big screen, with the code and a QR code',
+      'Results on one page',
+    ],
+    action: 'Create free account', href: '/sign-in?mode=up',
+  },
+  {
+    name: 'Pro', price: `₹${PRO_PRICE.rupeesPerMonth}`, per: 'a month', note: `₹${PRO_RUPEES} paid once for ${PRO_PRICE.months} months. It does not renew.`,
+    intro: 'Everything in Free, and',
+    lines: [
+      `Up to ${n(PLANS.pro.peoplePerSession)} people in a session`,
+      `Up to ${PLANS.pro.interactionsPerSession} polls, quizzes and surveys in a session`,
+      'Surveys',
+      'Results as CSV and Excel',
+    ],
+    action: 'Get Pro', href: '/app/account', pro: true,
+  },
+];
+
+/** A cell of the comparison: a value, or true and false for included and not. */
+type Cell = string | boolean;
+export interface CompareGroup { title: string; rows: { label: string; free: Cell; pro: Cell }[] }
+const both = (label: string, value: Cell = true) => ({ label, free: value, pro: value });
+
+export const COMPARE: CompareGroup[] = [
+  {
+    title: 'Sessions',
+    rows: [
+      { label: 'People in a session', free: n(PLANS.free.peoplePerSession), pro: n(PLANS.pro.peoplePerSession) },
+      { label: 'Polls, quizzes and surveys in a session', free: String(PLANS.free.interactionsPerSession), pro: String(PLANS.pro.interactionsPerSession) },
+      both('Sessions in an account', String(LIMITS.sessionsPerAccount)),
+      both('Sessions live at once', String(LIMITS.liveSessionsPerAccount)),
+      both('A session’s code works for', `${LIMITS.sessionDays} days`),
+      both('The big screen, with the code and a QR code'),
+    ],
+  },
+  {
+    title: 'Q&A',
+    rows: [both('Questions and upvotes'), both('Review before a question shows'), both('Replies from the host'), both('Highlight, mark answered, announcement')],
+  },
+  {
+    title: 'Polls',
+    rows: [
+      both('Multiple choice, word cloud, rating, open text, ranking'),
+      both('Quizzes with a timer and a leaderboard'),
+      { label: 'Surveys', free: false, pro: true },
+    ],
+  },
+  {
+    title: 'Results',
+    rows: [
+      both('Results page for each session'),
+      { label: 'Downloads as CSV and Excel', free: false, pro: true },
+      both('Results kept for', `${LIMITS.keepDays} days`),
+    ],
+  },
 ];

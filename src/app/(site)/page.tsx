@@ -7,7 +7,7 @@ import { JoinBar } from '@/components/site/join';
 import { Switcher } from '@/components/site/switcher';
 import { TryIt } from '@/components/site/try-it';
 import { Visual } from '@/components/site/visuals';
-import { LIMITS } from '@/lib/limits';
+import { PLANS } from '@/lib/limits';
 import { feature, inSentence } from '@/lib/site';
 
 /* Draft copy, kept to plain statements; the owner edits the wording. */
@@ -50,7 +50,7 @@ export default function Home() {
           <ul className="s-cards">
             <li><Icon name="phone" size={40} /><h3>No app, no account</h3><p>The audience joins in a browser with the code or the QR code.</p></li>
             <li><Icon name="list" size={40} /><h3>5 poll types, quizzes and surveys</h3><p>Multiple choice, word cloud, rating, open text and ranking, beside the Q&A.</p></li>
-            <li><Icon name="users" size={40} /><h3>Free</h3><p>Up to {LIMITS.peoplePerSession.toLocaleString('en-US')} people in a session. <Link href="/pricing">What is included</Link></p></li>
+            <li><Icon name="users" size={40} /><h3>Free</h3><p>Up to {PLANS.free.peoplePerSession} people in a session, and {PLANS.pro.peoplePerSession.toLocaleString('en-US')} on Pro. <Link href="/pricing">Pricing</Link></p></li>
           </ul>
         </div>
       </section>

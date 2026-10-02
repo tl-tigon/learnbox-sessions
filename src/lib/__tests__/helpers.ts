@@ -3,6 +3,13 @@ import { createSession, editSession } from '../live';
 import type { Store } from '../store/types';
 import type { Session } from '../types';
 
+/** Puts an account on Pro the way a payment does: an order, settled. */
+export async function makePro(db: Store, sub: string, days = 365) {
+  const id = `order${Math.random().toString(36).slice(2)}`;
+  await db.addOrder({ id, sub, amount: '588.00', days, status: 'pending', createdAt: new Date().toISOString() });
+  await db.settleOrder(sub, id, 'test');
+}
+
 export const TOKEN = (n: number) => `tok-${String(n).padStart(16, '0')}`;
 
 /** One of each kind, with fixed ids so tests can name them. */
@@ -27,8 +34,9 @@ export const INTERACTIONS = [
   },
 ];
 
-/** A live session with the interactions above and some people joined. */
+/** A live session with the interactions above and some people joined. Its owner is on Pro, which the survey needs. */
 export async function running(people = 3, owner = 'u1', db: Store = memoryStore()): Promise<{ db: Store; s: Session }> {
+  await makePro(db, owner);
   const made = await createSession(db, owner, 'Team offsite');
   const s = await editSession(db, made, { interactions: INTERACTIONS });
   for (let i = 1; i <= people; i++) await db.join(s.id, TOKEN(i), `Person ${i}`, 1000);

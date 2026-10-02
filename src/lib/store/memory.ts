@@ -3,7 +3,7 @@
  * `globalThis` so Next's dev reloads do not wipe it.
  */
 import type { Question, Score, Session, SessionState, Tally } from '../types';
-import type { Person, Store, StoredAnswer } from './types';
+import type { Account, Order, Person, Store, StoredAnswer } from './types';
 
 interface Db {
   sessions: Map<string, Session>;
@@ -14,6 +14,8 @@ interface Db {
   questions: Map<string, Map<string, Question>>;
   upvotes: Map<string, Set<string>>;
   scores: Map<string, Map<string, Score>>;
+  accounts: Map<string, Account>;
+  orders: Map<string, Map<string, Order>>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -32,6 +34,7 @@ export function memoryStore(db: Db = freshDb()): Store {
   const questionsOf = (sid: string) => of(db.questions, sid, () => new Map<string, Question>());
   const upvotesOf = (sid: string) => of(db.upvotes, sid, () => new Set<string>());
   const scoresOf = (sid: string) => of(db.scores, sid, () => new Map<string, Score>());
+  const ordersOf = (sub: string) => of(db.orders, sub, () => new Map<string, Order>());
   const akey = (a: Pick<StoredAnswer, 'pollId' | 'token' | 'entry'>) => `${a.pollId}#${a.token}#${a.entry}`;
 
   return {
@@ -191,9 +194,43 @@ export function memoryStore(db: Db = freshDb()): Store {
       const prefix = `${quizId}#`;
       return [...scoresOf(sessionId)].filter(([k]) => k.startsWith(prefix)).map(([, s]) => clone(s));
     },
+
+    async getAccount(sub) {
+      const a = db.accounts.get(sub);
+      return a ? clone(a) : null;
+    },
+    async addOrder(o) {
+      ordersOf(o.sub).set(o.id, clone(o));
+    },
+    async getOrder(sub, id) {
+      const o = ordersOf(sub).get(id);
+      return o ? clone(o) : null;
+    },
+    async listOrders(sub) {
+      return [...ordersOf(sub).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(clone);
+    },
+    async settleOrder(sub, id, ref) {
+      const o = ordersOf(sub).get(id);
+      if (!o || o.status === 'paid') return null;
+      const now = Math.floor(Date.now() / 1000);
+      const account = { proUntil: Math.max(now, db.accounts.get(sub)?.proUntil ?? 0) + o.days * 86400 };
+      o.status = 'paid';
+      o.paidAt = new Date().toISOString();
+      o.ref = ref;
+      db.accounts.set(sub, account);
+      return clone(account);
+    },
+    async failOrder(sub, id) {
+      const o = ordersOf(sub).get(id);
+      if (o?.status === 'pending') o.status = 'failed';
+    },
+    async deleteAccount(sub) {
+      db.accounts.delete(sub);
+      db.orders.delete(sub);
+    },
   };
 }
 
 export function freshDb(): Db {
-  return { sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map() };
+  return { sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map(), accounts: new Map(), orders: new Map() };
 }

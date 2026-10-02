@@ -65,7 +65,7 @@ export default function Product() {
         { icon: 'eyeoff', title: 'Hide results, close voting', text: 'Keep results back until you are ready, or stop new answers.' },
         { icon: 'screen', title: 'The big screen', text: 'Open it from the Present button, or on another computer with its own link.' },
         { icon: 'copy', title: 'Duplicate', text: 'Copy a session with all its polls to run it again.' },
-        { icon: 'download', title: 'Results', text: 'One page per session, and downloads as CSV or Excel.' },
+        { icon: 'download', title: 'Results', text: 'One page per session. On Pro, downloads as CSV or Excel.' },
       ]} />
 
       <Cta title="Create your first session" />

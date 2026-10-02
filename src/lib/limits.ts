@@ -1,6 +1,7 @@
 /**
- * Fair-use limits. The product is free, so these are what keep one account from running up the bill.
- * Each is one number; raise it here.
+ * Fair-use limits: what keeps one account from running up the bill. Each is one number; raise it
+ * here. People and interactions per session are the most any plan holds; `PLANS` below sets them
+ * for each plan.
  */
 export const LIMITS = {
   peoplePerSession: 1000,
@@ -33,4 +34,13 @@ export const LIMITS = {
   sessionDays: 7,
   /** A session's rows (people, answers, questions, scores) are deleted this long after they are written. */
   keepDays: 365,
+} as const;
+
+/**
+ * What each plan holds. Every account is on Free until it pays for Pro (`src/lib/plans.ts`).
+ * Everything not listed here is the same on both.
+ */
+export const PLANS = {
+  free: { peoplePerSession: 200, interactionsPerSession: 10, surveys: false, downloads: false },
+  pro: { peoplePerSession: LIMITS.peoplePerSession, interactionsPerSession: LIMITS.interactionsPerSession, surveys: true, downloads: true },
 } as const;

@@ -20,6 +20,8 @@ interface Data {
   people: number;
   items: Item[];
   questions: PublicQuestion[];
+  /** Whether the account's plan has downloads. */
+  downloads: boolean;
 }
 
 const STATUS = { pending: 'Waiting', live: 'Approved', answered: 'Answered', hidden: 'Hidden' } as const;
@@ -54,8 +56,12 @@ export default function SessionResults({ params }: { params: Promise<{ id: strin
       <header className="apphead">
         <a className="btn round" href={`/app/sessions/${id}`} aria-label="Back to the session"><Icon name="left" /></a>
         <span className="headtitle grow truncate">{d.session.title}</span>
-        <button className="tall" onClick={() => download('xlsx')}><Icon name="download" />Download Excel</button>
-        <button className="primary tall" onClick={() => download('csv')}><Icon name="download" />Download CSV</button>
+        {d.downloads ? (
+          <>
+            <button className="tall" onClick={() => download('xlsx')}><Icon name="download" />Download Excel</button>
+            <button className="primary tall" onClick={() => download('csv')}><Icon name="download" />Download CSV</button>
+          </>
+        ) : <a className="btn tall" href="/app/account"><Icon name="download" />Downloads are on Pro</a>}
       </header>
       <main className="wrap stack" style={{ maxWidth: 760 }}>
         <span className="tag num">{new Date(d.session.createdAt).toLocaleString()} · # {d.session.code} · {d.people} joined · {d.session.status === 'live' ? 'Live' : 'Ended'}</span>

@@ -18,7 +18,7 @@ import { useSignedIn } from '@/components/use-signed-in';
 import { authed } from '@/lib/auth/client';
 import { blankInteraction, INTERACTION_TYPES, withNewIds } from '@/lib/engine/polls';
 import { quizPhase } from '@/lib/engine/quiz';
-import { LIMITS } from '@/lib/limits';
+import { LIMITS, PLANS } from '@/lib/limits';
 import { useHost, withQuestion, type HostView } from '@/lib/use-host';
 import type { Interaction, InteractionType, QaSettings, Quiz, Tally } from '@/lib/types';
 
@@ -198,7 +198,9 @@ function Host({ id }: { id: string }) {
   const item = draft.interactions.find((i) => i.id === selected) ?? null;
   /* An interaction that has been deleted leaves the Q&A in its place. */
   const showing = view === 'item' && !item ? 'qa' : view;
-  const room = draft.interactions.length < LIMITS.interactionsPerSession;
+  const plan = PLANS[v.plan];
+  const room = draft.interactions.length < plan.interactionsPerSession;
+  const full = v.people >= plan.peoplePerSession;
   const select = (itemId: string) => {
     setSelected(itemId);
     setView('item');
@@ -272,6 +274,9 @@ function Host({ id }: { id: string }) {
           : <span className={saved === 'error' ? 'tag error' : 'tag'} role="status">{saved === 'saving' ? 'Saving…' : saved === 'error' ? 'Not saved' : 'Saved'}</span>}
         <span className="grow gap" />
         <span className="row muted num" title="People joined"><Icon name="user" />{v.people}</span>
+        {full && !ended && (v.plan === 'free'
+          ? <a className="pill-danger" href="/app/account" title={`Free holds ${plan.peoplePerSession} people in a session`} onClick={leaveTo('/app/account')}>Full · Get Pro</a>
+          : <span className="pill-danger">Full</span>)}
         <button className="ghost code num" aria-label={`Copy join code ${v.code}`} title="Copy join code" onClick={() => copy('Code', v.code)}># {v.code.slice(0, 3)} {v.code.slice(3)}</button>
         {!ended && (
           <Menu label="Share" className="outline" trigger={<><Icon name="share" /><span className="wide-only">Share</span></>}>
@@ -319,6 +324,7 @@ function Host({ id }: { id: string }) {
         <section className="hostlist" aria-label="Polls">
           <h2>Interactions</h2>
           {!ended && room && <div><button className="primary tall" onClick={() => setView('add')}><Icon name="plus" />Add</button></div>}
+          {!ended && !room && v.plan === 'free' && <div><a className="btn tall" href="/app/account" onClick={leaveTo('/app/account')}>Get Pro · {PLANS.pro.interactionsPerSession} polls</a></div>}
 
           <h3>Q&A</h3>
           <div className={`icard qa ${showing === 'qa' ? 'selected' : ''}`} onClick={() => setView('qa')}>
@@ -329,7 +335,7 @@ function Host({ id }: { id: string }) {
             </button>
           </div>
 
-          <h3>Polls <span className="count num">{draft.interactions.length}</span></h3>
+          <h3>Polls <span className="count num">{draft.interactions.length} / {plan.interactionsPerSession}</span></h3>
           {draft.interactions.map((i, index) => {
             const active = v.state.active === i.id;
             const name = nameOf(i);
@@ -375,12 +381,16 @@ function Host({ id }: { id: string }) {
                   <button className="ghost" onClick={() => setView(item ? 'item' : 'qa')}>Close<Icon name="x" /></button>
                 </div>
                 <div className="typegrid">
-                  {INTERACTION_TYPES.map((t) => (
-                    <button key={t} type="button" className="typecard" onClick={() => add(t)}>
-                      <span className="thumb"><Sketch type={t} /></span>
-                      <span className="label"><Icon name={TYPE_ICON[t]} size={20} />{TYPE_LABEL[t]}</span>
-                    </button>
-                  ))}
+                  {INTERACTION_TYPES.map((t) => {
+                    /* A type the plan does not hold opens the account page, where Pro is bought. */
+                    const onPro = t === 'survey' && !plan.surveys;
+                    return (
+                      <button key={t} type="button" className="typecard" onClick={onPro ? leaveTo('/app/account') : () => add(t)}>
+                        <span className="thumb"><Sketch type={t} /></span>
+                        <span className="label"><Icon name={TYPE_ICON[t]} size={20} />{TYPE_LABEL[t]}{onPro && <span className="pill-pro">Pro</span>}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

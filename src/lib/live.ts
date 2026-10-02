@@ -10,6 +10,7 @@ import { finished, forAudience, isLastQuestion, lobby, openQuestion, publicBoard
 import { cleanText } from './engine/words';
 import { newCode, newId, newSecret } from './ids';
 import { LIMITS } from './limits';
+import { planName, planOf } from './plans';
 import { publish } from './push/server';
 import { stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from './push/events';
 import type { Store } from './store/types';
@@ -56,9 +57,20 @@ async function claimSession(db: Store, ownerSub: string, fields: Pick<Session, '
 export const createSession = (db: Store, ownerSub: string, rawTitle: unknown) =>
   claimSession(db, ownerSub, { title: title(rawTitle), interactions: [], qa: { moderation: false, anonymous: true } });
 
-/** A new session with the same polls, quizzes, surveys and Q&A settings, and none of the answers. */
-export const duplicateSession = (db: Store, ownerSub: string, source: Session) =>
-  claimSession(db, ownerSub, { title: `${source.title} copy`.slice(0, LIMITS.titleChars), interactions: withNewIds(source.interactions), qa: { ...source.qa } });
+/** A plan refuses with 402, which the facilitator's screens read as "this needs Pro". */
+const needsPro = (message: string) => new LiveError(402, message);
+
+/**
+ * A new session with the same polls, quizzes, surveys and Q&A settings, and none of the answers.
+ * The copy must fit the account's plan as it is now.
+ */
+export async function duplicateSession(db: Store, ownerSub: string, source: Session) {
+  const plan = await planOf(db, ownerSub);
+  if (source.interactions.length > plan.interactionsPerSession || (!plan.surveys && source.interactions.some((i) => i.type === 'survey'))) {
+    throw needsPro('A copy of this session needs Pro');
+  }
+  return claimSession(db, ownerSub, { title: `${source.title} copy`.slice(0, LIMITS.titleChars), interactions: withNewIds(source.interactions), qa: { ...source.qa } });
+}
 
 /** A quiz that has started keeps its questions: changing them would change what the scores mean. */
 const quizStarted = (s: Session, quizId: string) => s.state.played?.includes(quizId) || (s.state.quiz?.quizId === quizId && s.state.quiz.index >= 0);
@@ -70,6 +82,7 @@ const quizStarted = (s: Session, quizId: string) => s.state.played?.includes(qui
  */
 export async function editSession(db: Store, s: Session, raw: Record<string, unknown>): Promise<Session> {
   let cur = s;
+  const plan = Array.isArray(raw.interactions) ? await planOf(db, s.ownerSub) : null;
   for (let attempt = 0; attempt < 4; attempt++) {
     if (isClosed(cur)) throw new LiveError(409, 'This session has ended');
     /* An edit carries the revision it was made from. A session edited since, in another window, is not overwritten. */
@@ -82,6 +95,13 @@ export async function editSession(db: Store, s: Session, raw: Record<string, unk
         const stored = session.interactions.find((x) => x.id === i.id);
         return i.type === 'quiz' && stored?.type === 'quiz' && quizStarted(session, i.id) ? stored : i;
       });
+      /* What the plan holds. A session made on Pro keeps what it has after Pro ends, and takes no more. */
+      if (plan && edit.interactions.length > plan.interactionsPerSession && edit.interactions.length > session.interactions.length) {
+        throw needsPro(`Up to ${plan.interactionsPerSession} polls and quizzes in a session on Free`);
+      }
+      if (plan && !plan.surveys && edit.interactions.some((i) => i.type === 'survey' && !session.interactions.some((x) => x.id === i.id && x.type === 'survey'))) {
+        throw needsPro('Surveys are on Pro');
+      }
       /* One database row holds them all, and a row has a size limit. */
       if (JSON.stringify(edit.interactions).length > LIMITS.sessionBytes) throw new LiveError(413, 'This session holds too much. Remove a poll.');
     }
@@ -193,6 +213,9 @@ export function stateEvent(s: Session): PushEvent {
 /** Applies a control on top of the latest state, retrying if another control landed first. */
 export async function control(db: Store, s: Session, a: ControlAction): Promise<Session> {
   let cur = s;
+  if (a.action === 'activate' && s.interactions.find((i) => i.id === a.id)?.type === 'survey' && !(await planOf(db, s.ownerSub)).surveys) {
+    throw needsPro('Surveys are on Pro');
+  }
   for (let i = 0; i < 4; i++) {
     if (isClosed(cur)) throw new LiveError(409, 'This session has ended');
     const next = applyControl(cur, a);
@@ -216,6 +239,11 @@ export async function control(db: Store, s: Session, a: ControlAction): Promise<
 export async function endSession(db: Store, s: Session): Promise<void> {
   await db.endSession(s);
   await publish(stateChannel(s.id), stateEvent({ ...s, status: 'ended' }));
+}
+
+/** Adds a phone to the session, or finds it again. How many people a session holds is set by its owner's plan. */
+export async function joinSession(db: Store, s: Session, token: string, nickname: string) {
+  return db.join(s.id, token, nickname, (await planOf(db, s.ownerSub)).peoplePerSession);
 }
 
 /** A quiz question's counts while it is open: how many answered, and nothing about which option. */
@@ -488,8 +516,9 @@ async function shownResults(db: Store, s: Session, id: string | null, tallies: R
  */
 export async function hostView(db: Store, s: Session, show: string | null = null) {
   const now = Date.now();
-  const [people, results, questions, tallies] = await Promise.all([db.countPeople(s.id), activeResults(db, s, now), db.listQuestions(s.id), db.listTallies(s.id)]);
+  const [people, results, questions, tallies, account] = await Promise.all([db.countPeople(s.id), activeResults(db, s, now), db.listQuestions(s.id), db.listTallies(s.id), db.getAccount(s.ownerSub)]);
   return {
+    plan: planName(account),
     shown: await shownResults(db, s, show, tallies),
     id: s.id, code: s.code, title: s.title, status: isClosed(s) ? ('ended' as const) : ('live' as const),
     state: s.state, serverNow: now, people, closesAt: s.closesAt, createdAt: s.createdAt, displayKey: s.displayKey, rev: s.rev ?? 1,

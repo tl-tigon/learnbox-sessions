@@ -3,7 +3,9 @@
  * The DynamoDB store. One table, no indexes.
  *
  *   USER#<sub>      SESS#<id>               the owner's list entry for a session
- *   SESS#<id>       META                    the session (interactions, Q&A settings, state, seq)
+ *   USER#<sub>      ACCOUNT                 the account's plan: `proUntil`
+ *   USER#<sub>      ORDER#<id>              one payment for Pro
+ *   SESS#<id>       META                   the session (interactions, Q&A settings, state, seq)
  *   SESS#<id>       PEOPLE                  the headcount
  *   SESS#<id>       PART#<token>            one person
  *   SESS#<id>       ANS#<poll>#<token>#<n>  one answer entry
@@ -17,13 +19,14 @@
  * a nested map path has to exist before it can be added to.
  *
  * Every SESS# row and the owner's list entry carry `expiresAt` (epoch seconds), the table's TTL
- * attribute, set LIMITS.keepDays after the row is written.
+ * attribute, set LIMITS.keepDays after the row is written. The account row and paid orders are
+ * kept; an order that is never paid goes after 30 days.
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { LIMITS } from '../limits';
 import type { Question, Score, Session, SessionState, Tally } from '../types';
-import type { Person, Store, StoredAnswer } from './types';
+import type { Order, Person, Store, StoredAnswer } from './types';
 
 const isClash = (e: unknown) => (e as { name?: string })?.name === 'ConditionalCheckFailedException';
 /** A transaction that was called off because one of its conditions did not hold. */
@@ -74,6 +77,8 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     i ? { id: i.id, token: i.token, text: i.text, name: i.name ?? '', status: i.status, votes: Number(i.votes ?? 0), at: i.at, replies: i.replies ?? [] } : null;
   const scoreFrom = (i): Score => ({ token: i.token, nickname: i.nickname ?? '', total: Number(i.total ?? 0), last: Number(i.last ?? 0), lastId: i.lastId ?? '' });
   const answerFrom = (i): StoredAnswer => ({ pollId: i.pollId, token: i.token, entry: i.entry, answer: i.answer, at: i.at, ...(i.points === undefined ? {} : { points: Number(i.points) }) });
+  const orderFrom = (i): Order | null =>
+    i ? { id: i.id, sub: i.sub, amount: i.amount, days: Number(i.days), status: i.status, createdAt: i.createdAt, ...(i.paidAt ? { paidAt: i.paidAt } : {}), ...(i.ref ? { ref: i.ref } : {}) } : null;
   const listEntry = (s: Session) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: s.interactions.length });
 
   return {
@@ -479,6 +484,77 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     },
     async listScores(sessionId, quizId) {
       return (await queryAll(`SESS#${sessionId}`, `SCORE#${quizId}#`)).map(scoreFrom);
+    },
+
+    async getAccount(sub) {
+      const i = await get(`USER#${sub}`, 'ACCOUNT', true);
+      return i ? { proUntil: Number(i.proUntil ?? 0) } : null;
+    },
+    async addOrder(o) {
+      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `USER#${o.sub}`, SK: `ORDER#${o.id}`, ...o, expiresAt: Math.floor(Date.now() / 1000) + 30 * 86400 } }));
+    },
+    async getOrder(sub, id) {
+      return orderFrom(await get(`USER#${sub}`, `ORDER#${id}`, true));
+    },
+    async listOrders(sub) {
+      return (await queryAll(`USER#${sub}`, 'ORDER#')).map(orderFrom).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    async settleOrder(sub, id, ref) {
+      const orderKey = { PK: `USER#${sub}`, SK: `ORDER#${id}` };
+      /* The order and the account change together or not at all. The account's new end is worked
+         out from the one just read, and written only if that one still stands. */
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const order = orderFrom(await get(orderKey.PK, orderKey.SK, true));
+        if (!order || order.status === 'paid') return null;
+        const had = await get(`USER#${sub}`, 'ACCOUNT', true);
+        const now = Math.floor(Date.now() / 1000);
+        const proUntil = Math.max(now, Number(had?.proUntil ?? 0)) + order.days * 86400;
+        try {
+          await ddb.send(new TransactWriteCommand({
+            TransactItems: [
+              {
+                Update: {
+                  TableName: table, Key: orderKey,
+                  UpdateExpression: 'SET #status = :paid, paidAt = :at, #ref = :ref REMOVE expiresAt',
+                  ConditionExpression: 'attribute_exists(PK) AND #status <> :paid',
+                  ExpressionAttributeNames: { '#status': 'status', '#ref': 'ref' },
+                  ExpressionAttributeValues: { ':paid': 'paid', ':at': new Date().toISOString(), ':ref': ref },
+                },
+              },
+              {
+                Update: {
+                  TableName: table, Key: { PK: `USER#${sub}`, SK: 'ACCOUNT' },
+                  UpdateExpression: 'SET proUntil = :next',
+                  ConditionExpression: had ? 'proUntil = :prev' : 'attribute_not_exists(PK)',
+                  ExpressionAttributeValues: had ? { ':next': proUntil, ':prev': had.proUntil } : { ':next': proUntil },
+                },
+              },
+            ],
+          }));
+          return { proUntil };
+        } catch (e) {
+          if (!isCancelledByCondition(e)) throw e; // otherwise read both again: the order was paid meanwhile, or the account changed
+        }
+      }
+      throw new Error('Could not settle the order');
+    },
+    async failOrder(sub, id) {
+      try {
+        await ddb.send(new UpdateCommand({
+          TableName: table, Key: { PK: `USER#${sub}`, SK: `ORDER#${id}` },
+          UpdateExpression: 'SET #status = :failed',
+          ConditionExpression: '#status = :pending',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExpressionAttributeValues: { ':failed': 'failed', ':pending': 'pending' },
+        }));
+      } catch (e) {
+        if (!isClash(e)) throw e; // already paid or failed, or there is no such order
+      }
+    },
+    async deleteAccount(sub) {
+      const orders = await queryAll(`USER#${sub}`, 'ORDER#');
+      for (const o of orders) await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: o.PK, SK: o.SK } }));
+      await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${sub}`, SK: 'ACCOUNT' } }));
     },
   };
 }
