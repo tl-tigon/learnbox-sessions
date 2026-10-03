@@ -1,0 +1,19 @@
+# Amplify Hosting builds the pages from this repository on every push to main. The values the pages
+# need (the API's address, the user pool, the events API) are the app's environment variables, set
+# from the stack's outputs. The API itself (the Lambdas) is deployed by scripts/deploy.mjs.
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: out
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
