@@ -45,6 +45,8 @@ export interface SessionsStackProps extends cdk.StackProps {
   alertEmail?: string;
   /** The address sign-up codes come from, once SES has production access (e.g. no-reply@learnbox.one). Unset, Cognito's own sender is used: 50 a day. */
   sesFrom?: string;
+  /** The company line at the foot of the code email (legal name, city, support address). Left out until the owner gives it. */
+  companyLine?: string;
   /** Reserve each function's concurrency (its spending cap). Needs the account's Lambda limit to be at least 170. */
   reserve?: boolean;
   /** Read from the deploying shell's environment; never written to git. */
@@ -55,6 +57,10 @@ type Group = 'audience' | 'host' | 'billing';
 interface RouteEntry { path: string; methods: string[]; group: Group }
 
 const DIST = path.resolve(__dirname, '..', '..', 'dist', 'lambda');
+
+/** The code email, with the company line in its footer (or that line left out). Cognito fills {####}. */
+const codeEmail = (companyLine?: string) =>
+  fs.readFileSync(path.join(__dirname, 'email-code.html'), 'utf8').replace(/\s*\{\{COMPANY\}\}/, companyLine ? `\n  ${companyLine.replace(/&/g, '&amp;').replace(/</g, '&lt;')}` : '').replace(/\r?\n\s*/g, '\n');
 
 export class SessionsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SessionsStackProps) {
@@ -84,7 +90,9 @@ export class SessionsStack extends cdk.Stack {
       email: props.sesFrom
         ? cognito.UserPoolEmail.withSES({ fromEmail: props.sesFrom, fromName: 'LearnBox Sessions', sesRegion: this.region, sesVerifiedDomain: props.sesFrom.split('@')[1] })
         : cognito.UserPoolEmail.withCognito(),
-      userVerification: { emailSubject: 'Your LearnBox Sessions code', emailBody: 'Your code is {####}.', emailStyle: cognito.VerificationEmailStyle.CODE },
+      /* The branded code email (email-code.html): the mark from the site, the code large, the company line from .env.local. The same
+         template carries the sign-up and the forgotten-password code. */
+      userVerification: { emailSubject: 'Your LearnBox Sessions code', emailBody: codeEmail(props.companyLine), emailStyle: cognito.VerificationEmailStyle.CODE },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
     const client = pool.addClient('Web', {

@@ -24,6 +24,7 @@ new SessionsStack(app, 'LearnBoxSessions', {
   apiCertificateArn: ctx('apiCertificateArn'),
   alertEmail: ctx('alertEmail'),
   sesFrom: ctx('sesFrom'),
+  companyLine: ctx('companyLine'),
   reserve: ctx('reserve') === 'true',
   secrets: {
     PAYU_KEY: process.env.PAYU_KEY,
