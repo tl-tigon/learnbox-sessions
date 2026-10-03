@@ -5,8 +5,8 @@
  * - an AppSync Events API for the live push (the server publishes with its role, browsers subscribe with the API key);
  * - three Lambdas, one per route group (audience, host, billing), from `dist/lambda/`, behind an HTTP API whose
  *   routes come from `dist/lambda/routes.json`, throttled, each with a cap on how many may run at once;
- * - an Amplify Hosting app for the pages, as plain files uploaded by the deploy script, which proxies the join link
- *   `/j/<code>` to the HTTP API; browsers call the API at its own address (CORS names the site);
+ * - (the pages are an Amplify Hosting app connected to GitHub in the console, outside this stack; browsers call the API at
+ *   its own name, api.sessions.learnbox.one, and CORS names the site);
  * - alarms on errors, and a monthly budget alert.
  *
  * No managed compute for pages (owner's decision, 2026-10-03): nothing runs when a page is opened. Amplify Hosting for them
@@ -18,7 +18,6 @@ import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations
 import * as appsync from 'aws-cdk-lib/aws-appsync';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
-import * as amplify from 'aws-cdk-lib/aws-amplify';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as cw from 'aws-cdk-lib/aws-cloudwatch';
 import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
@@ -48,8 +47,6 @@ export interface SessionsStackProps extends cdk.StackProps {
   sesFrom?: string;
   /** Reserve each function's concurrency (its spending cap). Needs the account's Lambda limit to be at least 170. */
   reserve?: boolean;
-  /** The GitHub repository (owner/name) whose pushes to main may deploy the pages and the API's code, through a role it assumes with OIDC: no keys stored anywhere. */
-  githubRepo?: string;
   /** Read from the deploying shell's environment; never written to git. */
   secrets: { PAYU_KEY?: string; PAYU_SALT?: string; PAYU_ENV?: string; ANTHROPIC_API_KEY?: string; ANTHROPIC_MODEL?: string };
 }
@@ -182,20 +179,10 @@ export class SessionsStack extends cdk.Stack {
     stage.routeSettings = Object.fromEntries(routes.filter((r) => r.group === 'billing').flatMap((r) => r.methods.map((m) => [`${m} ${r.path}`, { ThrottlingRateLimit: 10, ThrottlingBurstLimit: 20 }])));
 
     /* ---- The site ---- */
-    /* Amplify Hosting serves the pages (owner's decision, 2026-10-03): plain files, uploaded by scripts/deploy.mjs as a manual
-       deployment of the branch `main`; no build runs in AWS. The browser calls the API at its own address; only the join link
-       /j/<code>, which people share, is proxied so it stays on the site's domain. */
-    const app = new amplify.CfnApp(this, 'Site', {
-      name: 'LearnBoxSessions',
-      platform: 'WEB',
-      /* A missing path gets Amplify's own empty 404: a true 404 status. (Its '404' rule type redirects to the page and answers 200, a soft 404.) */
-      customRules: [
-        { source: '/j/<*>', target: `${api.apiEndpoint}/j/<*>`, status: '200' },
-      ],
-    });
-    const branch = new amplify.CfnBranch(this, 'Main', { appId: app.attrAppId, branchName: 'main', stage: 'PRODUCTION', enableAutoBuild: false, framework: 'Web' });
-    /* The site's custom domain is added to the app by hand: CloudFormation would wait on the DNS records. */
-    void branch;
+    /* The pages are served by Amplify Hosting (owner's decision, 2026-10-03), as an app connected to the GitHub repository in the
+       Amplify console, built from amplify.yml on every push to main. It is not part of this stack: its environment variables are the
+       outputs below, its rewrite proxies /j/<code> to the API, and its custom domain is set in the console. The browser calls the API
+       at the API's own name. */
 
     /* The API's own name, so the browser is not seen calling an execute-api address (owner, 2026-10-03). */
     let apiTarget: string | undefined;
@@ -204,25 +191,6 @@ export class SessionsStack extends cdk.Stack {
       const dn = new apigw.DomainName(this, 'ApiDomain', { domainName: props.apiDomain, certificate: acm.Certificate.fromCertificateArn(this, 'ApiCert', props.apiCertificateArn) });
       new apigw.ApiMapping(this, 'ApiMapping', { api, domainName: dn });
       apiTarget = dn.regionalDomainName;
-    }
-
-    /* ---- Deploys from GitHub ---- */
-    /* A push to main runs scripts/deploy.mjs --code in GitHub Actions: the Lambda bundles and the pages, never the stack or a secret.
-       The role may do only that. */
-    if (props.githubRepo) {
-      const oidc = new iam.CfnOIDCProvider(this, 'GitHubOidc', { url: 'https://token.actions.githubusercontent.com', clientIdList: ['sts.amazonaws.com'] });
-      const deployer = new iam.Role(this, 'GitHubDeploy', {
-        roleName: 'LearnBoxSessions-github-deploy',
-        assumedBy: new iam.FederatedPrincipal(oidc.attrArn, {
-          StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
-          StringLike: { 'token.actions.githubusercontent.com:sub': `repo:${props.githubRepo}:ref:refs/heads/main` },
-        }, 'sts:AssumeRoleWithWebIdentity'),
-        maxSessionDuration: cdk.Duration.hours(1),
-      });
-      deployer.addToPolicy(new iam.PolicyStatement({ actions: ['lambda:UpdateFunctionCode', 'lambda:GetFunction'], resources: Object.values(fns).map((fn) => fn.functionArn) }));
-      deployer.addToPolicy(new iam.PolicyStatement({ actions: ['cloudformation:DescribeStacks'], resources: [this.stackId] }));
-      deployer.addToPolicy(new iam.PolicyStatement({ actions: ['amplify:CreateDeployment', 'amplify:StartDeployment', 'amplify:GetJob', 'amplify:ListJobs'], resources: [`${app.attrArn}/branches/main/*`, `${app.attrArn}/branches/main`] }));
-      new cdk.CfnOutput(this, 'GitHubDeployRoleArn', { value: deployer.roleArn });
     }
 
     /* ---- Watching it ---- */
@@ -257,9 +225,7 @@ export class SessionsStack extends cdk.Stack {
     }).addAlarmAction(new cwActions.SnsAction(alerts));
 
     /* ---- What the page build and the deploy script need ---- */
-    new cdk.CfnOutput(this, 'AmplifyAppId', { value: app.attrAppId });
-    new cdk.CfnOutput(this, 'AmplifyDomain', { value: `main.${app.attrDefaultDomain}` });
-    new cdk.CfnOutput(this, 'SiteUrl', { value: props.domain ? `https://${props.domain}` : `https://main.${app.attrDefaultDomain}` });
+    new cdk.CfnOutput(this, 'SiteUrl', { value: props.siteUrl ?? '' });
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.apiEndpoint });
     /* What the DNS record for the API's own name points at, once the domain is in. */
     new cdk.CfnOutput(this, 'ApiDomainTarget', { value: apiTarget ?? '' });
