@@ -149,15 +149,17 @@ export class SessionsStack extends cdk.Stack {
     }
 
     const api = new apigw.HttpApi(this, 'Http', { apiName: 'LearnBoxSessions', createDefaultStage: true });
+    const stage = api.defaultStage!.node.defaultChild as apigw.CfnStage;
     for (const r of routes) {
-      api.addRoutes({
+      const made = api.addRoutes({
         path: r.path,
         methods: r.methods.map((m) => apigw.HttpMethod[m as keyof typeof apigw.HttpMethod]),
         integration: new HttpLambdaIntegration(`${r.group}-${r.path.replace(/[^a-z0-9]+/gi, '-')}`, fns[r.group]),
       });
+      /* The stage names the billing routes in its settings, so it must be made after them. */
+      if (r.group === 'billing') for (const route of made) stage.addDependency(route.node.defaultChild as apigw.CfnRoute);
     }
     /* Throttling: a whole room answers in the same second, so the default is generous; billing is a trickle. */
-    const stage = api.defaultStage!.node.defaultChild as apigw.CfnStage;
     stage.defaultRouteSettings = { throttlingRateLimit: 500, throttlingBurstLimit: 1000 };
     /* routeSettings is a raw map (CloudFormation's own casing), unlike defaultRouteSettings. */
     stage.routeSettings = Object.fromEntries(routes.filter((r) => r.group === 'billing').flatMap((r) => r.methods.map((m) => [`${m} ${r.path}`, { ThrottlingRateLimit: 10, ThrottlingBurstLimit: 20 }])));
