@@ -456,6 +456,16 @@ select.inline { width: auto; padding: 0 2px; border-color: transparent; font-siz
 .switch input:checked::after { transform: translateX(16px); }
 .field-row { display: flex; gap: 8px; align-items: center; }
 .sub { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 12px; display: grid; gap: 10px; }
+/* The AI debrief and follow-up: two compact cards under the results, read in a few seconds. */
+.ai { padding-top: 8px; }
+.ai-card { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 16px; gap: 12px; }
+.ai-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
+.ai-head svg { color: var(--accent); }
+.ai-part { display: grid; gap: 4px; }
+.ai-part h4 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
+.ai-part p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.ai .chips button { min-height: 36px; padding: 0 12px; box-shadow: inset 0 0 0 1px var(--line); }
+.ai .chips button[aria-pressed='true'] { box-shadow: inset 0 0 0 1px var(--accent); }
 /* On a narrow screen the rail goes into the header's menu, and the list sits above the open card. */
 @media (max-width: 900px) {
   .hostpage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }

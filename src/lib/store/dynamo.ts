@@ -27,7 +27,7 @@ import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, P
 import { counted } from '../engine/polls';
 import { LIMITS } from '../limits';
 import type { Question, Score, Session, SessionState, Tally } from '../types';
-import type { Order, Person, Store, StoredAnswer } from './types';
+import type { AiUse, Order, Person, Store, StoredAnswer } from './types';
 
 const isClash = (e: unknown) => (e as { name?: string })?.name === 'ConditionalCheckFailedException';
 /** A transaction that was called off because one of its conditions did not hold. */
@@ -571,7 +571,26 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
     async deleteAccount(sub) {
       const orders = await queryAll(`USER#${sub}`, 'ORDER#');
       for (const o of orders) await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: o.PK, SK: o.SK } }));
+      await deleteKeys(await queryAll(`USER#${sub}`, 'AI#'));
       await ddb.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${sub}`, SK: 'ACCOUNT' } }));
+    },
+
+    /* The debrief sits under the session, so it goes with it; a usage record sits under the account, by month, so a month's can be counted in one query. */
+    async getDebrief(sessionId, interactionId) {
+      const i = await get(`SESS#${sessionId}`, `DEBRIEF#${interactionId}`, true);
+      if (!i) return null;
+      return { interactionId: i.interactionId, happened: i.happened, explore: i.explore, ask: i.ask, tip: i.tip, people: Number(i.people), model: i.model, at: i.at };
+    },
+    async putDebrief(sessionId, d) {
+      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `SESS#${sessionId}`, SK: `DEBRIEF#${d.interactionId}`, ...d, expiresAt: expiry() } }));
+    },
+    async addAiUse(u) {
+      await ddb.send(new PutCommand({ TableName: table, Item: { PK: `USER#${u.sub}`, SK: `AI#${u.at.slice(0, 7)}#${u.at}#${u.id}`, ...u, expiresAt: expiry() } }));
+    },
+    async countAiUses(sub, month) {
+      const n: Record<AiUse['feature'], number> = { debrief: 0, 'follow-up': 0 };
+      for (const r of await queryAll(`USER#${sub}`, `AI#${month}#`)) if (r.feature in n) n[r.feature as AiUse['feature']] += 1;
+      return n;
     },
   };
 }

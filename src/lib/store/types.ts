@@ -15,6 +15,34 @@ export interface Account { proUntil: number }
  */
 export interface Order { id: string; sub: string; amount: string; days: number; status: 'pending' | 'paid' | 'failed'; createdAt: string; paidAt?: string; ref?: string }
 
+/** The AI debrief of one interaction, as last generated. `people` is how many had answered then. */
+export interface Debrief {
+  interactionId: string;
+  happened: string;
+  explore: string;
+  ask: string[];
+  tip: string;
+  people: number;
+  model: string;
+  at: string;
+}
+
+export type AiFeature = 'debrief' | 'follow-up';
+
+/** One AI request, for measuring use and cost. Tokens and cost are what the API reported, when it did. */
+export interface AiUse {
+  id: string;
+  sub: string;
+  sessionId: string;
+  interactionId: string;
+  feature: AiFeature;
+  at: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 /** What the facilitator edits. The live state changes only through `setState`. */
 export type SessionEdit = Partial<Pick<Session, 'title' | 'interactions' | 'qa'>>;
 
@@ -103,6 +131,14 @@ export interface Store {
   settleOrder(sub: string, id: string, ref: string): Promise<Account | null>;
   /** Marks a pending order failed. A paid order stays paid. */
   failOrder(sub: string, id: string): Promise<void>;
-  /** Removes the account's plan and its orders. */
+  /** Removes the account's plan, its orders and its AI usage records. */
   deleteAccount(sub: string): Promise<void>;
+
+  /** The last debrief generated for an interaction, or null. */
+  getDebrief(sessionId: string, interactionId: string): Promise<Debrief | null>;
+  /** Keeps a debrief in place of any earlier one for that interaction. */
+  putDebrief(sessionId: string, d: Debrief): Promise<void>;
+  addAiUse(u: AiUse): Promise<void>;
+  /** How many AI requests of each kind the account made in a month (`YYYY-MM`, UTC). */
+  countAiUses(sub: string, month: string): Promise<Record<AiFeature, number>>;
 }

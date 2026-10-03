@@ -323,6 +323,42 @@ const FIRST = { timeout: 120000 };
     check('polls: the facilitator sees each option\'s share under it', true);
     await p.screenshot({ path: path.join(OUT, '07b-host-poll.png') });
 
+    // ---- AI: the debrief of the poll, a follow-up written from it and launched, then taken out again
+    await p.click('.ai button:has-text("Debrief")');
+    await p.waitForSelector('section[aria-label="LearnBox Debrief"]', WAIT);
+    const parts = await p.$$eval('.ai-part h4', (els) => els.map((e) => e.textContent));
+    const happened = await p.textContent('.ai-part p');
+    await p.click('button:has-text("Generate another")');
+    await p.waitForSelector('.ai-card:has-text("2 / ")', WAIT);
+    const cached = await api('GET', `/api/sessions/${sessionId}/ai?interaction=${choice.id}`);
+    check('AI: the debrief has its four parts, is written from the poll\'s numbers, and a second one is counted',
+      parts.join() === 'What happened,What to explore,Ask the room,Facilitator tip' && /5 people answered/.test(happened) && cached.body.debrief?.interactionId === choice.id && cached.body.usage.debrief.used === 2 && !/Never invent/.test(JSON.stringify(cached.body)),
+      `${parts.join()} | ${happened}`);
+    await p.screenshot({ path: path.join(OUT, '07c-host-debrief.png') });
+    const tooFew = await api('POST', `/api/sessions/${sessionId}/ai`, { feature: 'debrief', interactionId: 'cloud-not-yet' });
+    const noAnswers = await api('POST', `/api/sessions/${sessionId}/ai`, { feature: 'debrief', interactionId: host.interactions[1].id });
+    const failed = await api('POST', `/api/sessions/${sessionId}/ai`, { feature: 'debrief', interactionId: choice.id, again: true }, { ...AUTH, 'x-ai-test': 'fail' });
+    const otherAi = await api('POST', `/api/sessions/${sessionId}/ai`, { feature: 'debrief', interactionId: choice.id }, { authorization: 'Bearer dev:someone@else.com', 'content-type': 'application/json' });
+    check('AI: too few answers, a failed model call and another account are each refused in their own way',
+      tooFew.status === 404 && noAnswers.status === 409 && /Not enough responses yet/.test(noAnswers.body.error) && failed.status === 502 && /couldn.t generate this right now/.test(failed.body.error) && otherAi.status === 404,
+      `${tooFew.status},${noAnswers.status},${failed.status},${otherAi.status}`);
+    await p.click('.ai .chips button:has-text("Explore")');
+    await p.waitForSelector('button:has-text("Launch this interaction")', WAIT);
+    const proposed = await p.textContent('section[aria-label="Follow up with the room"] .sub .strong');
+    await p.click('button:has-text("Launch this interaction")');
+    await p.waitForSelector('.icard.selected.active', WAIT);
+    for (const ph of phones) await ph.waitForSelector(`.poll-title:has-text("${proposed.slice(0, 30)}")`, WAIT);
+    await phones[0].fill('textarea[aria-label="Your answer"]', 'Because it is close to the office');
+    await phones[0].click('button:has-text("Send"):visible');
+    await p.waitForSelector('.icard.selected:has-text("1 answered")', WAIT);
+    check('AI: the follow-up is launched into the session with one click and takes answers like any poll', true, proposed);
+    await p.screenshot({ path: path.join(OUT, '07d-host-followup.png') });
+    await p.click('.startbar button:has-text("Stop")');
+    await p.click('.icard.selected button[aria-label^="More for"]');
+    await p.click('[role="menu"] button:has-text("Delete")');
+    await p.click('[role="alertdialog"] button:has-text("Delete")');
+    await p.waitForFunction(() => document.querySelectorAll('.hostlist .icard').length === 8, null, WAIT);
+
     // ---- Word cloud, rating, open text, ranking
     await p.click('button[aria-label="Start One word for this year"]');
     for (const ph of phones) await ph.waitForSelector('.poll-title:has-text("One word for this year")', WAIT);

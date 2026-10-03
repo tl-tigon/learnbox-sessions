@@ -4,7 +4,7 @@
  */
 import { counted } from '../engine/polls';
 import type { Question, Score, Session, SessionState, Tally } from '../types';
-import type { Account, Order, Person, Store, StoredAnswer } from './types';
+import type { Account, AiUse, Debrief, Order, Person, Store, StoredAnswer } from './types';
 
 interface Db {
   sessions: Map<string, Session>;
@@ -17,6 +17,8 @@ interface Db {
   scores: Map<string, Map<string, Score>>;
   accounts: Map<string, Account>;
   orders: Map<string, Map<string, Order>>;
+  debriefs: Map<string, Map<string, Debrief>>;
+  aiUses: Map<string, AiUse[]>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -87,7 +89,7 @@ export function memoryStore(db: Db = freshDb()): Store {
     },
     async deleteSession(s) {
       if (db.codes.get(s.code) === s.id) db.codes.delete(s.code);
-      for (const all of [db.sessions, db.people, db.answers, db.tallies, db.questions, db.upvotes, db.scores]) all.delete(s.id);
+      for (const all of [db.sessions, db.people, db.answers, db.tallies, db.questions, db.upvotes, db.scores, db.debriefs]) all.delete(s.id);
     },
 
     async join(sessionId, token, nickname, cap) {
@@ -238,10 +240,27 @@ export function memoryStore(db: Db = freshDb()): Store {
     async deleteAccount(sub) {
       db.accounts.delete(sub);
       db.orders.delete(sub);
+      db.aiUses.delete(sub);
+    },
+
+    async getDebrief(sessionId, interactionId) {
+      const d = db.debriefs.get(sessionId)?.get(interactionId);
+      return d ? clone(d) : null;
+    },
+    async putDebrief(sessionId, d) {
+      of(db.debriefs, sessionId, () => new Map<string, Debrief>()).set(d.interactionId, clone(d));
+    },
+    async addAiUse(u) {
+      of(db.aiUses, u.sub, () => [] as AiUse[]).push(clone(u));
+    },
+    async countAiUses(sub, month) {
+      const n: Record<AiUse['feature'], number> = { debrief: 0, 'follow-up': 0 };
+      for (const u of db.aiUses.get(sub) ?? []) if (u.at.startsWith(month)) n[u.feature] += 1;
+      return n;
     },
   };
 }
 
 export function freshDb(): Db {
-  return { sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map(), accounts: new Map(), orders: new Map() };
+  return { sessions: new Map(), codes: new Map(), people: new Map(), answers: new Map(), tallies: new Map(), questions: new Map(), upvotes: new Map(), scores: new Map(), accounts: new Map(), orders: new Map(), debriefs: new Map(), aiUses: new Map() };
 }

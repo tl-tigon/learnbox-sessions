@@ -7,6 +7,7 @@
  */
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { AiPanel } from '@/components/debrief';
 import { Confirm, Panel, Toast, type Ask } from '@/components/dialog';
 import { FeedbackEditor, hasSettings, PollEditor, PollSettings, QuizEditor, SurveyEditor } from '@/components/editor';
 import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
@@ -257,6 +258,17 @@ function Host({ id }: { id: string }) {
     select(i.id);
     void act({ action: 'activate', id: i.id });
   };
+  /** A follow-up the AI wrote: added after the interaction it follows, saved like any edit, and started. */
+  const launch = (made: Interaction, after: string) => {
+    edit((d) => {
+      const at = d.interactions.findIndex((i) => i.id === after);
+      const polls = counted(d.interactions);
+      const rest = d.interactions.filter((i) => i.type === 'feedback');
+      const where = at < 0 ? polls.length : polls.findIndex((i) => i.id === after) + 1;
+      return { ...d, interactions: [...polls.slice(0, where), made, ...polls.slice(where), ...rest] };
+    });
+    start(made);
+  };
   const stop = () => act({ action: 'activate', id: null });
   const answeredOf = (i: Interaction) => (i.type === 'quiz' ? Math.max(0, ...i.questions.map((q) => v.answered[q.id] ?? 0)) : isGroup(i) ? Math.max(0, ...i.polls.map((p) => v.answered[p.id] ?? 0)) : v.answered[i.id] ?? 0);
 
@@ -448,7 +460,7 @@ function Host({ id }: { id: string }) {
 
             {showing === 'item' && item && (
               <ItemPanel v={v} item={item} now={now} ended={ended} answered={answeredOf(item)} onSettings={settingsPoll ? () => setPanel(panel === 'poll' ? null : 'poll') : undefined}
-                onChange={editInteraction} onDelete={() => remove(item)} />
+                onChange={editInteraction} onDelete={() => remove(item)} onLaunch={room ? launch : undefined} />
             )}
           </div>
 
@@ -534,7 +546,7 @@ function Sketch({ type }: { type: InteractionType }) {
 }
 
 /** The open interaction: what is running in it now, then its fields with the results under them. */
-function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDelete }: {
+function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDelete, onLaunch }: {
   v: HostView;
   item: Interaction;
   now: number;
@@ -544,6 +556,8 @@ function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDele
   onSettings?: () => void;
   onChange: (i: Interaction) => void;
   onDelete: () => void;
+  /** Adds and starts an AI follow-up; absent when the session has no room for another poll. */
+  onLaunch?: (i: Interaction, after: string) => void;
 }) {
   const active = v.state.active === item.id;
   const q = item.type === 'quiz' && v.state.quiz?.quizId === item.id ? v.state.quiz : null;
@@ -577,6 +591,9 @@ function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDele
         : item.type === 'feedback' ? <FeedbackEditor feedback={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} />
         : <PollEditor poll={item} onChange={onChange} disabled={ended} settings={false}
             tally={active ? v.tally ?? EMPTY : stored?.tallies[item.id] ?? EMPTY} texts={active ? v.texts : stored?.texts[item.id]} />}
+
+      {/* Under the results: the debrief, and the follow-up when there is room for one more poll. */}
+      <AiPanel sessionId={v.id} interactionId={item.id} answered={answered} canFollow={!ended && !!onLaunch} onLaunch={(i, after) => onLaunch?.(i, after)} />
     </div>
   );
 }

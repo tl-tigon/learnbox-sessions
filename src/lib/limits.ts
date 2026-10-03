@@ -34,13 +34,19 @@ export const LIMITS = {
   sessionDays: 7,
   /** A session's rows (people, answers, questions, scores) are deleted this long after they are written. */
   keepDays: 365,
+  /** AI debriefs: the fewest people who must have answered, the written answers sent to the model at most, and each one's length. */
+  aiMinPeople: 3,
+  aiTextAnswers: 40,
+  aiAnswerChars: 200,
+  /** AI requests one account may make in a minute. */
+  aiPerMinute: 6,
 } as const;
 
 /**
  * What each plan holds. Every account is on Free until it pays for Pro (`src/lib/plans.ts`).
- * Everything not listed here is the same on both.
+ * Everything not listed here is the same on both. The AI numbers are per calendar month.
  */
 export const PLANS = {
-  free: { peoplePerSession: 100, interactionsPerSession: 8, surveys: false, downloads: false },
-  pro: { peoplePerSession: LIMITS.peoplePerSession, interactionsPerSession: LIMITS.interactionsPerSession, surveys: true, downloads: true },
+  free: { peoplePerSession: 100, interactionsPerSession: 8, surveys: false, downloads: false, aiDebriefsPerMonth: 30, aiFollowUpsPerMonth: 15 },
+  pro: { peoplePerSession: LIMITS.peoplePerSession, interactionsPerSession: LIMITS.interactionsPerSession, surveys: true, downloads: true, aiDebriefsPerMonth: 300, aiFollowUpsPerMonth: 150 },
 } as const;

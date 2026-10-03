@@ -60,10 +60,12 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
   - `AUTH_MODE=dev` (with `NEXT_PUBLIC_AUTH_MODE=dev`) accepts `dev:<email>`, and is refused in production.
 - **Audience identity**: a random browser token (`src/lib/audience.ts`). Server routes validate it with `isToken`.
 - **Limits**: all fair-use numbers are in `src/lib/limits.ts`.
+- **AI** (`src/lib/ai/`): the debrief of an interaction's results and the follow-up interaction written from it, through the Anthropic API (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`; Claude Haiku by default) in `claude.ts`, with a stand-in in development when no key is set. `prompts.ts` holds the system prompts, which stay on the server; the browser imports only `modes.ts`. `index.ts` sums up the stored answers for the model (labels and counts, written answers capped and cut, never a name or a token), refuses too little data, applies the per-minute guard and the plan's monthly allowance, records every request (`AiUse`: tokens and estimated cost) and keeps the last debrief per interaction (`Debrief`). A follow-up comes back through `cleanInteractions`, like any saved interaction, and is launched through the ordinary edit-and-start path. One route: `/api/sessions/{id}/ai` (`src/api/session-ai.ts`).
 - **Plans** (owner's decision, 2026-10-03): Free and Pro.
   - `PLANS` in `limits.ts` holds what differs: Free has 100 people and 8 polls and quizzes in a session; Pro has 1,000 people, 50 polls, quizzes and surveys, surveys, and the CSV and Excel downloads. The feedback form is on both.
   - `src/lib/plans.ts`: the price in `PRO_OPTIONS` (₹79 for 1 month or ₹588 for 12 months, each paid once, no renewal) and `planOf`, which every check reads. An account is on Pro until `proUntil`; with nothing stored it is on Free.
   - A plan refuses with HTTP 402. When Pro ends, a session keeps what it holds and takes no more; its surveys do not start.
+  - AI debriefs and follow-ups are counted per calendar month in `PLANS` (`aiDebriefsPerMonth`, `aiFollowUpsPerMonth`); over the month's allowance Free gets 402 and Pro 429.
   - `src/lib/billing/`: PayU's hosted checkout. An order is written, the browser posts a signed form to PayU, and PayU's signed outcome comes back to `/api/billing/return`. With no `PAYU_KEY`, or with `PAYU_ENV=standin`, development uses a stand-in payment page (`/api/billing/dev-gateway`) and production has payments off.
 
 ## Rules
@@ -92,3 +94,4 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **The audience is sent only what it may see.** A quiz question goes out without its correct option, its votes stay back until time is up, a waiting or hidden question travels as id and status only, and no response carries another person's token or the display key.
 - **Every route that reads or changes a session checks ownership** through `ownedSession`. Someone else's session returns 404, not 403. The display key reads the big screen's view and nothing else.
 - **Audience text** (words, open answers, names, questions) goes through `cleanText` / `isProfane`, with length limits from `LIMITS`.
+- **The model is a tool, not a trusted party.** Its key and prompts never reach the browser; what it is sent is aggregate (no names, no tokens, written answers capped); what it returns is text, validated and clipped before it is shown or saved, and a generated interaction goes through the same cleaning as a typed one. Text from participants goes inside the data block, marked as data.
