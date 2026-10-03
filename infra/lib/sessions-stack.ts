@@ -39,7 +39,7 @@ export interface SessionsStackProps extends cdk.StackProps {
   /** The custom domain (sessions.learnbox.one) and its certificate, which must be in us-east-1. Both or neither. */
   domain?: string;
   certificateArn?: string;
-  /** Where the budget and the alarms write. */
+  /** Where the budget and the alarms write: one address, or several separated by commas. */
   alertEmail?: string;
   /** The address sign-up codes come from, once SES has production access (e.g. no-reply@learnbox.one). Unset, Cognito's own sender is used: 50 a day. */
   sesFrom?: string;
@@ -215,13 +215,15 @@ export class SessionsStack extends cdk.Stack {
 
     /* ---- Watching it ---- */
     const alerts = new sns.Topic(this, 'Alerts', { displayName: 'LearnBox Sessions alerts' });
-    if (props.alertEmail) {
-      alerts.addSubscription(new subs.EmailSubscription(props.alertEmail));
+    const emails = (props.alertEmail ?? '').split(',').map((e) => e.trim()).filter(Boolean);
+    if (emails.length) {
+      for (const e of emails) alerts.addSubscription(new subs.EmailSubscription(e));
+      const subscribers = emails.map((address) => ({ subscriptionType: 'EMAIL', address }));
       new budgets.CfnBudget(this, 'Budget', {
         budget: { budgetName: 'LearnBoxSessions', budgetType: 'COST', timeUnit: 'MONTHLY', budgetLimit: { amount: 10, unit: 'USD' } },
         notificationsWithSubscribers: [
-          { notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 80 }, subscribers: [{ subscriptionType: 'EMAIL', address: props.alertEmail }] },
-          { notification: { notificationType: 'FORECASTED', comparisonOperator: 'GREATER_THAN', threshold: 100 }, subscribers: [{ subscriptionType: 'EMAIL', address: props.alertEmail }] },
+          { notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 80 }, subscribers },
+          { notification: { notificationType: 'FORECASTED', comparisonOperator: 'GREATER_THAN', threshold: 100 }, subscribers },
         ],
       });
     }

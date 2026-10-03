@@ -41,7 +41,7 @@ const aws = (args) => {
   return r.stdout ? JSON.parse(r.stdout) : null;
 };
 const context = (siteUrl) => [
-  `-c alertEmail=${process.env.ALERT_EMAIL}`,
+  `-c "alertEmail=${process.env.ALERT_EMAIL}"`,
   siteUrl ? `-c siteUrl=${siteUrl}` : '',
   process.env.SES_FROM ? `-c sesFrom=${process.env.SES_FROM}` : '',
   process.env.SITE_DOMAIN ? `-c domain=${process.env.SITE_DOMAIN} -c certificateArn=${process.env.SITE_CERTIFICATE_ARN}` : '',
