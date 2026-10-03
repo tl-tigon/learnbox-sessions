@@ -24,8 +24,14 @@ const PROFILE = process.env.CI ? '' : process.env.AWS_PROFILE || 'personal';
 const REGION = 'ap-south-1';
 const STACK = 'LearnBoxSessions';
 const GROUPS = ['audience', 'host', 'billing'];
-/* Windows' own tar writes zips; Amplify and Lambda both take one. */
-const tar = process.platform === 'win32' ? 'C:\\Windows\\System32\\tar.exe' : 'tar';
+/* A zip of a folder's entries (paths with forward slashes, from the folder's root): Amplify and Lambda both take one.
+   Windows' own tar writes zips; elsewhere, zip. */
+const zipUp = (zip, dir, entries) => {
+  fs.rmSync(zip, { force: true });
+  const quoted = entries.map((e) => `"${e}"`).join(' ');
+  if (process.platform === 'win32') run(`"C:\\Windows\\System32\\tar.exe" -a -cf "${zip}" -C "${dir}" ${quoted}`);
+  else run(`zip -qr "${zip}" ${quoted}`, { cwd: dir });
+};
 const mode = process.argv[2] ?? '';
 const stackToo = mode === '' || mode === '--stack-only';
 const pagesToo = mode !== '--stack-only';
@@ -93,8 +99,7 @@ if (mode === '--code') {
   for (const group of GROUPS) {
     const name = `${STACK}-${group}`;
     const zip = path.join(ROOT, 'dist', 'lambda', `${group}.zip`);
-    fs.rmSync(zip, { force: true });
-    run(`"${tar}" -a -cf "${zip}" -C dist/lambda ${group}.js`);
+    zipUp(zip, path.join(ROOT, 'dist', 'lambda'), [`${group}.js`]);
     aws(['lambda', 'update-function-code', '--function-name', name, '--zip-file', `fileb://${zip}`]);
     aws(['lambda', 'wait', 'function-updated', '--function-name', name]);
     console.log(`${name}: code updated`);
@@ -125,8 +130,7 @@ if (pagesToo) {
   /* Amplify takes the files as one zip (paths with forward slashes, from the root of the site). */
   const zip = path.join(ROOT, 'dist', 'site.zip');
   fs.mkdirSync(path.dirname(zip), { recursive: true });
-  fs.rmSync(zip, { force: true });
-  run(`"${tar}" -a -cf "${zip}" -C out ${fs.readdirSync(path.join(ROOT, 'out')).map((f) => `"${f}"`).join(' ')}`);
+  zipUp(zip, path.join(ROOT, 'out'), fs.readdirSync(path.join(ROOT, 'out')));
 
   const d = aws(['amplify', 'create-deployment', '--app-id', o.AmplifyAppId, '--branch-name', 'main']);
   const put = await fetch(d.zipUploadUrl, { method: 'PUT', body: fs.readFileSync(zip), headers: { 'content-type': 'application/zip' } });
