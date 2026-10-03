@@ -456,6 +456,12 @@ select.inline { width: auto; padding: 0 2px; border-color: transparent; font-siz
 .switch input:checked::after { transform: translateX(16px); }
 .field-row { display: flex; gap: 8px; align-items: center; }
 .sub { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 12px; display: grid; gap: 10px; }
+/* Everyone's feedback as a table: a row per person, a column per question. */
+.rtable-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.rtable { border-collapse: collapse; width: 100%; font-size: 14px; }
+.rtable th, .rtable td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; min-width: 120px; overflow-wrap: anywhere; }
+.rtable th { font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--softer); white-space: nowrap; }
+.rtable tr:last-child td { border-bottom: 0; }
 /* The AI debrief and follow-up: two compact cards under the results, read in a few seconds. */
 .ai { padding-top: 8px; }
 .ai-card { border: 1px solid var(--line); border-radius: var(--radius-s); padding: 16px; gap: 12px; }

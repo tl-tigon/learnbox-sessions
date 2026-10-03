@@ -54,7 +54,7 @@ const fixedPolls = (ids: [string, string]): Poll[] => [{ id: ids[0], ...FEEDBACK
 export function blankInteraction(type: InteractionType): Interaction {
   if (type === 'quiz') return { id: shortId(), type, title: '', questions: [blankQuizQuestion()] };
   if (type === 'survey') return { id: shortId(), type, title: '', polls: [blankPoll('choice')] };
-  if (type === 'feedback') return { id: shortId(), type, title: FEEDBACK_TITLE, polls: fixedPolls([shortId(), shortId()]) };
+  if (type === 'feedback') return { id: shortId(), type, title: FEEDBACK_TITLE, polls: fixedPolls([shortId(), shortId()]), names: false };
   return blankPoll(type);
 }
 
@@ -131,7 +131,7 @@ function cleanInteraction(raw: unknown, seen: Seen): Interaction | null {
     const inPlace = FEEDBACK_FIXED.map((f, n) => sent[n]?.type === f.type);
     const ids = FEEDBACK_FIXED.map((_, n) => fresh(seen, inPlace[n] ? sent[n].id : null)) as [string, string];
     const own = sent.filter((_, n) => !inPlace[n]).slice(0, LIMITS.itemsPerGroup - FEEDBACK_FIXED.length).map((p) => cleanPoll(p, seen)).filter((p): p is Poll => !!p);
-    return { id, type: 'feedback', title: FEEDBACK_TITLE, polls: [...fixedPolls(ids), ...own] };
+    return { id, type: 'feedback', title: FEEDBACK_TITLE, polls: [...fixedPolls(ids), ...own], names: r.names === true };
   }
   return cleanPoll(raw, seen);
 }

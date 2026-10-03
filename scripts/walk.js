@@ -565,10 +565,11 @@ const FIRST = { timeout: 120000 };
     await p.selectOption('label:has-text("Add question") select', 'open');
     await p.fill('.dcard textarea[aria-label="Question"]', 'One thing to keep');
     await p.selectOption('label:has-text("Add question") select', 'rating');
-    await p.fill('.dcard .sub:nth-of-type(4) textarea[aria-label="Question"]', 'Rate the trainer');
+    await (await p.$$('.dcard textarea[aria-label="Question"]'))[1].fill('Rate the trainer');
     await p.click('button[aria-label="Move question 4 up"]');
-    await p.waitForSelector('.dcard .sub:nth-of-type(3):has-text("Rate the trainer")', WAIT);
+    await p.waitForFunction(() => /Rate the trainer/.test(document.querySelectorAll('.dcard .sub')[2]?.textContent ?? ''), null, WAIT);
     await p.click('button[aria-label="Remove question 4"]');
+    await p.check('label.switch:has-text("Ask for names") input');
     await p.click('button:has-text("Start feedback")');
     await p.waitForSelector('button[aria-label="Stop Feedback"]', WAIT);
     const copyForm = (await api('GET', `/api/sessions/${copyId}`)).body.interactions.find((i) => i.type === 'feedback');
@@ -580,6 +581,9 @@ const FIRST = { timeout: 120000 };
     await (await scales[0].$('button:text-is("5")')).click();
     await phones[1].fill('textarea[aria-label="Your answer"]', 'Good pace');
     await (await scales[1].$('button:text-is("4")')).click();
+    /* Names are asked for: Send stays off until one is given. */
+    const sendOff = await phones[1].$eval('button:has-text("Send"):visible', (b) => b.disabled);
+    await phones[1].fill('label:has-text("Your name") input', 'Asha');
     await phones[1].click('button:has-text("Send"):visible');
     await phones[1].waitForSelector('text=Sent', WAIT);
     await phones[1].screenshot({ path: path.join(OUT, '17a-phone-feedback.png') });
@@ -591,6 +595,8 @@ const FIRST = { timeout: 120000 };
     await phones[2].waitForSelector('text=Session ended', FIRST);
     await phones[2].waitForSelector('.poll-label:has-text("Feedback")', WAIT);
     await (await (await phones[2].$$('.scale'))[0].$('button:text-is("3")')).click();
+    const nameless = await phoneApi(phones[2], 'POST', `/api/live/${copyId}/answer`, { surveyId: copyForm.id, answers: { [copyForm.polls[0].id]: { value: 3 } } });
+    await phones[2].fill('label:has-text("Your name") input', 'Dev');
     await phones[2].click('button:has-text("Send"):visible');
     await phones[2].waitForSelector('text=Sent', WAIT);
     const lateQuestion = await phoneApi(phones[2], 'POST', `/api/live/${copyId}/qa`, { text: 'After the end?', anonymous: true });
@@ -603,6 +609,10 @@ const FIRST = { timeout: 120000 };
     await p.screenshot({ path: path.join(OUT, '17b-host-feedback.png') });
     const copyResults = (await api('GET', `/api/sessions/${copyId}/results`)).body;
     const feedbackItems = copyResults.items.filter((i) => i.group === 'Feedback');
+    const table = copyResults.items.find((i) => i.kind === 'responses');
+    const rowsShown = await p.$$eval('.dcard .rtable tbody tr', (trs) => trs.map((tr) => [...tr.children].map((td) => td.textContent).join('|')));
+    check('feedback: with names asked for, a nameless answer is refused and each person\'s row shows their name and answers',
+      sendOff && nameless.status === 400 && rowsShown.join(';') === 'Asha|5|Good pace|4;Dev|3||' && table.rows.map((r) => r.name).join() === 'Asha,Dev', `${sendOff} ${nameless.status} ${rowsShown.join(';')}`);
     check('feedback: the facilitator sees the average and the comments; the big screen and phones see no results',
       feedbackItems.length === 3 && feedbackItems[0].tally.people === 2 && feedbackItems[1].answers.some((a) => a.answer.text === 'Good pace')
       && (await api('GET', `/api/sessions/${copyId}?view=wall`)).body.tally === null && !/tally|counts|Good pace/.test(JSON.stringify((await phoneApi(phones[2], 'GET', `/api/live/${copyId}?t={t}`)).body)),

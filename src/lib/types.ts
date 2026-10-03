@@ -88,7 +88,12 @@ export interface Feedback {
   type: 'feedback';
   title: string;
   polls: Poll[];
+  /** People give their name before sending, and it shows with their answers. Off: the answers are anonymous. */
+  names: boolean;
 }
+
+/** One person's feedback, as the facilitator reads it: their name (or "Anonymous") and each answer as text, by poll id. */
+export interface FeedbackRow { name: string; at: string; answers: Record<string, string> }
 
 /** What a facilitator can start: one poll, a quiz, a survey or the feedback form. */
 export type Interaction = Poll | Quiz | Survey | Feedback;

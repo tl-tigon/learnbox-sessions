@@ -20,6 +20,11 @@ export function resultBlocks(r: Results): Block[] {
   let n = 0;
   let boards = 0;
   for (const item of r.items) {
+    if (item.kind === 'responses') {
+      /* The feedback form, one row per person: their name, then each question's answer. */
+      blocks.push({ name: `${item.title} responses`, rows: [['Name', ...item.polls.map((p) => p.title), 'Time'], ...item.rows.map((row): Cell[] => [row.name, ...item.polls.map((p) => row.answers[p.id] ?? ''), row.at])] });
+      continue;
+    }
     if (item.kind === 'board') {
       if (!item.board.length) continue;
       boards += 1;

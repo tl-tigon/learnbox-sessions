@@ -593,7 +593,7 @@ function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDele
 
       {item.type === 'quiz' ? <QuizEditor quiz={item} onChange={onChange} disabled={ended || started} tallies={stored?.tallies} />
         : item.type === 'survey' ? <SurveyEditor survey={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} />
-        : item.type === 'feedback' ? <FeedbackEditor feedback={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} />
+        : item.type === 'feedback' ? <FeedbackEditor feedback={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} rows={stored?.rows} />
         : <PollEditor poll={item} onChange={onChange} disabled={ended} settings={false}
             tally={active ? v.tally ?? EMPTY : stored?.tallies[item.id] ?? EMPTY} texts={active ? v.texts : stored?.texts[item.id]} />}
 

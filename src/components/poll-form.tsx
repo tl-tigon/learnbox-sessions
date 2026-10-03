@@ -194,19 +194,26 @@ export function PollForm({ poll, mine, locked, name, people, results, hidden, on
   );
 }
 
-/** A survey: every poll on one page, sent with one button. It can be sent again to change the answers that allow it. */
-export function SurveyForm({ survey, mine, locked, name, onSend }: {
+/**
+ * A survey or the feedback form: every poll on one page, sent with one button. It can be sent
+ * again to change the answers that allow it. A feedback form that asks for names takes the
+ * person's name with the first send, through `onName`.
+ */
+export function SurveyForm({ survey, mine, locked, name, onSend, onName }: {
   survey: PollGroup;
   mine: Record<string, Answer[]>;
   locked: boolean;
   name: string;
   onSend: (answers: Record<string, unknown>) => Promise<string | null>;
+  onName?: (name: string) => Promise<string | null>;
 }) {
   const answered = Object.keys(mine).length > 0;
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries(survey.polls.map((p) => [p.id, startDraft(p, mine[p.id]?.[0])])));
   const [editing, setEditing] = useState(!answered);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const needName = survey.type === 'feedback' && survey.names && !name;
+  const [nameDraft, setNameDraft] = useState('');
   useEffect(() => {
     if (answered && !busy) setEditing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -222,7 +229,7 @@ export function SurveyForm({ survey, mine, locked, name, onSend }: {
   const send = async () => {
     setBusy(true);
     setErr(null);
-    const e = await onSend(toSend);
+    const e = (needName && onName ? await onName(nameDraft.trim()) : null) ?? await onSend(toSend);
     setBusy(false);
     if (e) setErr(e);
     else setEditing(false);
@@ -253,8 +260,10 @@ export function SurveyForm({ survey, mine, locked, name, onSend }: {
         </div>
       ) : (
         <>
-          <div className="voting-as">Voting as <b>{name || 'Anonymous'}</b></div>
-          <button type="submit" className="primary wide" disabled={busy || !Object.keys(toSend).length}>Send</button>
+          {needName
+            ? <label>Your name<input value={nameDraft} maxLength={LIMITS.nicknameChars} disabled={busy} autoComplete="name" onChange={(e) => setNameDraft(e.target.value)} /></label>
+            : <div className="voting-as">{survey.type === 'feedback' ? 'Sending as' : 'Voting as'} <b>{name || 'Anonymous'}</b></div>}
+          <button type="submit" className="primary wide" disabled={busy || !Object.keys(toSend).length || (needName && !nameDraft.trim())}>Send</button>
         </>
       )}
     </form>

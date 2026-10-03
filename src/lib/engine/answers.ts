@@ -82,6 +82,20 @@ export function added(answer: Answer): Record<string, number> {
 /** What taking an answer back removes from the counts: the opposite of what it added. */
 export const undo = (answer: Answer): Record<string, number> => Object.fromEntries(Object.entries(added(answer)).map(([k, n]) => [k, -n]));
 
+/** One person's answers to a poll as a line of text, for a table: the option labels, the rating, the order, or what they wrote. */
+export function answerText(poll: Poll, answers: Answer[]): string {
+  const label = (id: string) => ('options' in poll ? poll.options.find((o) => o.id === id)?.label ?? '' : '');
+  return answers.map((a) => {
+    switch (a.type) {
+      case 'choice': return a.optionIds.map(label).join(', ');
+      case 'rating': return String(a.value);
+      case 'ranking': return a.order.map((id, i) => `${i + 1}. ${label(id)}`).join(', ');
+      case 'wordcloud': case 'open': return a.text;
+      case 'quiz': return label(a.optionId);
+    }
+  }).filter(Boolean).join('; ');
+}
+
 /** Counts worked out afresh from the stored answers, which are the truth; the running counts are only a fast copy. */
 export function recount(answers: { token: string; answer: Answer }[]): Tally {
   const counts: Record<string, number> = {};

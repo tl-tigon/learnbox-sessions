@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FEEDBACK_FIXED, blankInteraction } from '../engine/polls';
 import { PLANS } from '../limits';
 import { activeForAudience, audienceView, canJoin, control, createSession, duplicateSession, editSession, endSession, hostView, joinSession, resetInteraction, respondSurvey, sessionResults, wallView } from '../live';
+import { resultsCsv } from '../export';
 import { memoryStore } from '../store/memory';
 import type { Feedback } from '../types';
 import { INTERACTIONS, TOKEN } from './helpers';
@@ -149,6 +150,39 @@ describe('the feedback form', () => {
     const locked = (await db2.getSession(t.id))!;
     expect(canJoin(locked)).toBe(true);
     expect(await refusal(respondSurvey(db2, locked, TOKEN(1), 'feed1', { frate: { value: 4 } }))).toBe('409: Voting is closed');
+  });
+
+  it('is read per person: a row each with their name or Anonymous, and with names required when the facilitator asks', async () => {
+    const { db, s: made } = await withForm(3);
+    const s = await control(db, made, { action: 'activate', id: 'feed1' });
+    await db.join(s.id, TOKEN(1), 'Asha', 1000);
+    await respondSurvey(db, s, TOKEN(1), 'feed1', { frate: { value: 5 }, fnote: { text: 'Good pace' }, fown1: { optionIds: ['fyes'] } });
+    await db.join(s.id, TOKEN(8), '', 1000);
+    await respondSurvey(db, s, TOKEN(8), 'feed1', { frate: { value: 3 } });
+    const rows = (await hostView(db, s, 'feed1')).shown?.rows;
+    expect(rows).toEqual([
+      { name: 'Asha', at: expect.any(String), answers: { frate: '5', fnote: 'Good pace', fown1: 'Yes' } },
+      { name: 'Anonymous', at: expect.any(String), answers: { frate: '3' } },
+    ]);
+    const results = await sessionResults(db, s);
+    const table = results.items.find((i) => i.kind === 'responses');
+    expect(table).toMatchObject({ kind: 'responses', title: 'Feedback', rows });
+    const csv = resultsCsv(results);
+    expect(csv).toContain('"Name","How would you rate this session?","Comments","Would you come again?","Time"');
+    expect(csv).toContain('"Asha","5","Good pace","Yes"');
+    expect(csv).toContain('"Anonymous","3","",""');
+    expect(JSON.stringify(results)).not.toContain('tok-');
+
+    /* With names asked for, a nameless phone is refused until it gives one. */
+    const named = await editSession(db, s, { interactions: s.interactions.map((i) => (i.type === 'feedback' ? { ...i, names: true } : i)) });
+    expect((named.interactions.find((i) => i.type === 'feedback') as Feedback).names).toBe(true);
+    await db.join(s.id, TOKEN(9), '', 1000);
+    expect(await refusal(respondSurvey(db, named, TOKEN(9), 'feed1', { frate: { value: 4 } }))).toBe('400: Enter your name');
+    await db.join(s.id, TOKEN(9), 'Dev', 1000);
+    expect(await respondSurvey(db, named, TOKEN(9), 'feed1', { frate: { value: 4 } })).toEqual({ answered: 1 });
+    expect((await hostView(db, named, 'feed1')).shown?.rows?.map((r) => r.name)).toEqual(['Asha', 'Anonymous', 'Dev']);
+    /* A phone that opens the form sees whether a name is wanted, and nothing of anyone else. */
+    expect((await audienceView(db, named, TOKEN(9))).active).toMatchObject({ kind: 'feedback', feedback: { names: true } });
   });
 
   it('can be reset like a survey, and a survey still needs Pro where the form does not', async () => {

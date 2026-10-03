@@ -3,7 +3,7 @@
  * screen sees. Routes call these; the store keeps the data; push carries changes to screens as
  * they happen.
  */
-import { canChange, checkAnswer, checkQuizAnswer, mergeDelta, recount, undo } from './engine/answers';
+import { answerText, canChange, checkAnswer, checkQuizAnswer, mergeDelta, recount, undo } from './engine/answers';
 import { cleanInteractions, counted, findPoll, isGroup, pollIdsOf, withNewIds } from './engine/polls';
 import { isShown, publicQuestion } from './engine/questions';
 import { finished, forAudience, isLastQuestion, lobby, openQuestion, publicBoard, quizInPlay, quizPhase, quizPoints, rankBoard, reveal } from './engine/quiz';
@@ -14,7 +14,7 @@ import { planName, planOf } from './plans';
 import { publish } from './push/server';
 import { stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from './push/events';
 import type { Store } from './store/types';
-import type { Answer, Feedback, Interaction, Poll, Quiz, Score, Session, SessionState, Tally } from './types';
+import type { Answer, Feedback, FeedbackRow, Interaction, Poll, Quiz, Score, Session, SessionState, Tally } from './types';
 
 export class LiveError extends Error {
   constructor(public status: number, message: string) {
@@ -377,7 +377,8 @@ export async function respondSurvey(db: Store, s: Session, token: string, survey
   if (!survey || !isGroup(survey) || s.state.active !== surveyId) throw new LiveError(409, survey?.type === 'feedback' ? 'Feedback is not open' : 'This survey is not open');
   if (survey.type === 'feedback' ? !takingFeedback(s) : isClosed(s)) throw new LiveError(409, 'This session has ended');
   if (s.state.locked) throw new LiveError(409, 'Voting is closed');
-  await joined(db, s, token);
+  const person = await joined(db, s, token);
+  if (survey.type === 'feedback' && survey.names && !person.nickname) throw new LiveError(400, 'Enter your name');
 
   const answers = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const filled = survey.polls.filter((p) => answers[p.id] !== undefined && answers[p.id] !== null);
@@ -533,6 +534,29 @@ export async function wallView(db: Store, s: Session) {
 }
 
 /**
+ * The feedback form as the facilitator reads it: one row per person who answered any of it, with
+ * each answer as text, oldest first. The name is the one the person gave on their phone, or
+ * "Anonymous". Tokens stay here.
+ */
+export async function feedbackRows(db: Store, s: Session, f: Feedback): Promise<FeedbackRow[]> {
+  const byToken = new Map<string, { at: string; answers: Record<string, Answer[]> }>();
+  for (const p of f.polls) {
+    for (const a of await db.pollAnswers(s.id, p.id)) {
+      const row = byToken.get(a.token) ?? { at: a.at, answers: {} };
+      row.at = a.at < row.at ? a.at : row.at;
+      (row.answers[p.id] ??= []).push(a.answer);
+      byToken.set(a.token, row);
+    }
+  }
+  const rows = await Promise.all([...byToken].map(async ([token, r]) => ({
+    name: (await db.getPerson(s.id, token))?.nickname || 'Anonymous',
+    at: r.at,
+    answers: Object.fromEntries(f.polls.filter((p) => r.answers[p.id]).map((p) => [p.id, answerText(p, r.answers[p.id])])),
+  })));
+  return rows.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/**
  * The stored counts of an interaction the facilitator has open: a poll's own, or those of each
  * question of a quiz, survey or feedback form. A running poll or quiz is left out; its counts
  * come with the view, held back where the audience's are. A running survey or feedback form is
@@ -546,7 +570,13 @@ async function shownResults(db: Store, s: Session, id: string | null, tallies: R
   await Promise.all(polls.filter((p) => p.open).map(async (p) => {
     texts[p.id] = (await db.pollAnswers(s.id, p.id, 500)).map((r) => ({ text: r.answer.type === 'open' ? r.answer.text : '', at: r.at }));
   }));
-  return { id: i.id, tallies: Object.fromEntries(polls.map((p) => [p.id, tallies[p.id] ?? { people: 0, counts: {} }])), texts };
+  return {
+    id: i.id,
+    tallies: Object.fromEntries(polls.map((p) => [p.id, tallies[p.id] ?? { people: 0, counts: {} }])),
+    texts,
+    /* The feedback form is read per person as well. */
+    rows: i.type === 'feedback' ? await feedbackRows(db, s, i) : undefined,
+  };
 }
 
 /**
@@ -595,7 +625,11 @@ export async function sessionResults(db: Store, s: Session) {
     return [...questions, { kind: 'board' as const, quiz: quiz.title || 'Quiz', board: publicBoard(rankBoard(scores, null), LIMITS.peoplePerSession) }];
   };
   const items = (await Promise.all(s.interactions.map(async (i) => {
-    if (isGroup(i)) return Promise.all(i.polls.map((p) => pollResult(p, i.type === 'feedback' ? i.title : i.title || 'Survey')));
+    if (i.type === 'feedback') {
+      /* Each question's counts, then everyone's answers side by side. */
+      return [...(await Promise.all(i.polls.map((p) => pollResult(p, i.title)))), { kind: 'responses' as const, title: i.title, polls: i.polls, rows: await feedbackRows(db, s, i) }];
+    }
+    if (isGroup(i)) return Promise.all(i.polls.map((p) => pollResult(p, i.title || 'Survey')));
     if (i.type !== 'quiz') return [await pollResult(i, null)];
     return quizResult(i);
   }))).flat();

@@ -266,7 +266,7 @@ function Joined({ id }: { id: string }) {
           <section className="stack" hidden={tab !== 'polls'}>
             {!a && <div className="none"><Icon name="bars" size={40} />No active poll</div>}
             {a?.kind === 'feedback' && (
-              <SurveyForm key={a.feedback.id} survey={a.feedback} mine={a.mine} locked={v.state.locked} name={v.nickname}
+              <SurveyForm key={a.feedback.id} survey={a.feedback} mine={a.mine} locked={v.state.locked} name={v.nickname} onName={setName}
                 onSend={(answers) => answer({ surveyId: a.feedback.id, answers })} />
             )}
             {a?.kind === 'poll' && (

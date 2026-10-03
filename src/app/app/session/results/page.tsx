@@ -10,12 +10,14 @@ import { authed } from '@/lib/auth/client';
 import { sortQuestions, type PublicQuestion } from '@/lib/engine/questions';
 import type { BoardEntry } from '@/lib/engine/quiz';
 import { sessionPath } from '@/lib/links';
-import type { Poll, QuizQuestion, Tally } from '@/lib/types';
+import type { FeedbackRow, Poll, QuizQuestion, Tally } from '@/lib/types';
+import { FeedbackTable } from '@/components/editor';
 
 type Item =
   | { kind: 'poll'; group: string | null; poll: Poll; tally: Tally; answers: { answer: { type: string; text?: string }; at: string }[] }
   | { kind: 'quiz-question'; quiz: string; question: QuizQuestion; tally: Tally }
-  | { kind: 'board'; quiz: string; board: BoardEntry[] };
+  | { kind: 'board'; quiz: string; board: BoardEntry[] }
+  | { kind: 'responses'; title: string; polls: Poll[]; rows: FeedbackRow[] };
 
 interface Data {
   session: { id: string; code: string; title: string; createdAt: string; status: string };
@@ -75,6 +77,14 @@ function SessionResults() {
         {err && <p className="error">{err}</p>}
 
         {d.items.map((item, i) => {
+          if (item.kind === 'responses') {
+            return item.rows.length === 0 ? null : (
+              <section key={i} className="card stack">
+                <div className="spread"><h2>{item.title} · each person</h2><span className="tag num">{item.rows.length} people</span></div>
+                <FeedbackTable polls={item.polls} rows={item.rows} />
+              </section>
+            );
+          }
           if (item.kind === 'board') {
             return item.board.length === 0 ? null : (
               <section key={i} className="card stack">

@@ -8,7 +8,7 @@ import { Icon, TYPE_ICON, TYPE_LABEL } from './icons';
 import { PollResults } from './results';
 import { blankPoll, blankQuizQuestion, FEEDBACK_FIXED, ownPolls, POLL_TYPES, QUIZ_SECONDS, shortId } from '@/lib/engine/polls';
 import { LIMITS } from '@/lib/limits';
-import type { ChoiceOption, Feedback, Poll, PollType, Quiz, QuizQuestion, Survey, Tally } from '@/lib/types';
+import type { ChoiceOption, Feedback, FeedbackRow, Poll, PollType, Quiz, QuizQuestion, Survey, Tally } from '@/lib/types';
 
 type Texts = { text: string }[];
 
@@ -247,12 +247,30 @@ export function SurveyEditor({ survey, onChange, disabled, tallies, texts }: { s
   );
 }
 
-/** The feedback form: its two fixed questions, read-only with their results, then the facilitator's own. */
-export function FeedbackEditor({ feedback, onChange, disabled, tallies, texts }: { feedback: Feedback; onChange: (f: Feedback) => void; disabled?: boolean; tallies?: Record<string, Tally>; texts?: Record<string, Texts> }) {
+/** Everyone's feedback side by side: a row per person, a column per question. */
+export function FeedbackTable({ polls, rows }: { polls: Poll[]; rows: FeedbackRow[] }) {
+  return (
+    <div className="rtable-wrap">
+      <table className="rtable">
+        <thead><tr><th>Name</th>{polls.map((p) => <th key={p.id}>{p.title || 'Untitled'}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => <tr key={i}><td className="strong">{r.name}</td>{polls.map((p) => <td key={p.id} className={p.type === 'rating' ? 'num' : ''}>{r.answers[p.id] ?? ''}</td>)}</tr>)}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** The feedback form: its setting, its two fixed questions, read-only with their results, the facilitator's own, then each person's answers. */
+export function FeedbackEditor({ feedback, onChange, disabled, tallies, texts, rows }: { feedback: Feedback; onChange: (f: Feedback) => void; disabled?: boolean; tallies?: Record<string, Tally>; texts?: Record<string, Texts>; rows?: FeedbackRow[] }) {
   const fixed = feedback.polls.slice(0, FEEDBACK_FIXED.length);
   const own = ownPolls(feedback);
   return (
     <div className="stack">
+      <div className="setting">
+        <label className="switch strong">Ask for names<input type="checkbox" checked={feedback.names} disabled={disabled} onChange={(e) => onChange({ ...feedback, names: e.target.checked })} /></label>
+        <p className="muted">{feedback.names ? 'People give their name before sending. It shows with their answers.' : 'Answers are anonymous.'}</p>
+      </div>
       {fixed.map((p, i) => (
         <div key={p.id} className="sub">
           <span className="row strong"><Icon name={TYPE_ICON[p.type]} />{TYPE_LABEL[p.type]} <span className="num faint">{i + 1}</span>{tallies?.[p.id] && <span className="count num">· {tallies[p.id].people} answered</span>}</span>
@@ -268,6 +286,12 @@ export function FeedbackEditor({ feedback, onChange, disabled, tallies, texts }:
           onRemove={() => onChange({ ...feedback, polls: feedback.polls.filter((x) => x.id !== p.id) })} />
       ))}
       {feedback.polls.length < LIMITS.itemsPerGroup && <AddPoll disabled={disabled} onAdd={(p) => onChange({ ...feedback, polls: [...feedback.polls, p] })} />}
+      {!!rows?.length && (
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="row strong">Each person <span className="count num">· {rows.length}</span></span>
+          <FeedbackTable polls={feedback.polls} rows={rows} />
+        </div>
+      )}
     </div>
   );
 }

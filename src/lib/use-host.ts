@@ -11,7 +11,7 @@ import type { BoardEntry } from './engine/quiz';
 import { useLive } from './use-live';
 import { qaChannel, stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from './push/events';
 import type { PlanName } from './plans';
-import type { Interaction, QaSettings, SessionState, Tally } from './types';
+import type { FeedbackRow, Interaction, QaSettings, SessionState, Tally } from './types';
 
 interface Shared {
   id: string;
@@ -43,7 +43,7 @@ export interface HostView extends Shared {
   /** How many have answered each poll and quiz question. */
   answered: Record<string, number>;
   /** Stored results of the interaction open on this screen, when it is not the running one: by poll or quiz question. */
-  shown: { id: string; tallies: Record<string, Tally>; texts: Record<string, { text: string; at: string }[]> } | null;
+  shown: { id: string; tallies: Record<string, Tally>; texts: Record<string, { text: string; at: string }[]>; rows?: FeedbackRow[] } | null;
 }
 
 /** A question as it now is, put into a list: replaced, added, or taken out once hidden. */
