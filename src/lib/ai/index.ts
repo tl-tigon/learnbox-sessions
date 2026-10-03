@@ -94,7 +94,14 @@ async function allow(db: Store, sub: string, feature: AiFeature) {
   }
 }
 
-const tidy = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '');
+/** The model's text as one clean line. Over `max`, it is cut at a word and marked, not chopped mid-word. */
+function tidy(v: unknown, max: number): string {
+  if (typeof v !== 'string') return '';
+  const s = v.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max - 1);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 20)).trimEnd()}…`;
+}
 
 async function record(db: Store, sub: string, s: Session, interactionId: string, feature: AiFeature, c: { model: string; inputTokens: number; outputTokens: number; costUsd: number }) {
   await db.addAiUse({ id: shortId(), sub, sessionId: s.id, interactionId, feature, at: new Date().toISOString(), model: c.model, inputTokens: c.inputTokens, outputTokens: c.outputTokens, costUsd: c.costUsd });
