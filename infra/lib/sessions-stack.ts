@@ -48,6 +48,8 @@ export interface SessionsStackProps extends cdk.StackProps {
   sesFrom?: string;
   /** Reserve each function's concurrency (its spending cap). Needs the account's Lambda limit to be at least 170. */
   reserve?: boolean;
+  /** The GitHub repository (owner/name) whose pushes to main may deploy the pages and the API's code, through a role it assumes with OIDC: no keys stored anywhere. */
+  githubRepo?: string;
   /** Read from the deploying shell's environment; never written to git. */
   secrets: { PAYU_KEY?: string; PAYU_SALT?: string; PAYU_ENV?: string; ANTHROPIC_API_KEY?: string; ANTHROPIC_MODEL?: string };
 }
@@ -202,6 +204,25 @@ export class SessionsStack extends cdk.Stack {
       const dn = new apigw.DomainName(this, 'ApiDomain', { domainName: props.apiDomain, certificate: acm.Certificate.fromCertificateArn(this, 'ApiCert', props.apiCertificateArn) });
       new apigw.ApiMapping(this, 'ApiMapping', { api, domainName: dn });
       apiTarget = dn.regionalDomainName;
+    }
+
+    /* ---- Deploys from GitHub ---- */
+    /* A push to main runs scripts/deploy.mjs --code in GitHub Actions: the Lambda bundles and the pages, never the stack or a secret.
+       The role may do only that. */
+    if (props.githubRepo) {
+      const oidc = new iam.CfnOIDCProvider(this, 'GitHubOidc', { url: 'https://token.actions.githubusercontent.com', clientIdList: ['sts.amazonaws.com'] });
+      const deployer = new iam.Role(this, 'GitHubDeploy', {
+        roleName: 'LearnBoxSessions-github-deploy',
+        assumedBy: new iam.FederatedPrincipal(oidc.attrArn, {
+          StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
+          StringLike: { 'token.actions.githubusercontent.com:sub': `repo:${props.githubRepo}:ref:refs/heads/main` },
+        }, 'sts:AssumeRoleWithWebIdentity'),
+        maxSessionDuration: cdk.Duration.hours(1),
+      });
+      deployer.addToPolicy(new iam.PolicyStatement({ actions: ['lambda:UpdateFunctionCode', 'lambda:GetFunction'], resources: Object.values(fns).map((fn) => fn.functionArn) }));
+      deployer.addToPolicy(new iam.PolicyStatement({ actions: ['cloudformation:DescribeStacks'], resources: [this.stackId] }));
+      deployer.addToPolicy(new iam.PolicyStatement({ actions: ['amplify:CreateDeployment', 'amplify:StartDeployment', 'amplify:GetJob', 'amplify:ListJobs'], resources: [`${app.attrArn}/branches/main/*`, `${app.attrArn}/branches/main`] }));
+      new cdk.CfnOutput(this, 'GitHubDeployRoleArn', { value: deployer.roleArn });
     }
 
     /* ---- Watching it ---- */

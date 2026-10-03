@@ -25,6 +25,7 @@ new SessionsStack(app, 'LearnBoxSessions', {
   alertEmail: ctx('alertEmail'),
   sesFrom: ctx('sesFrom'),
   reserve: ctx('reserve') === 'true',
+  githubRepo: ctx('githubRepo'),
   secrets: {
     PAYU_KEY: process.env.PAYU_KEY,
     PAYU_SALT: process.env.PAYU_SALT,

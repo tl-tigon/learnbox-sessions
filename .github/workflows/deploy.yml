@@ -1,0 +1,31 @@
+# A push to main deploys the pages and the API's code (scripts/deploy.mjs --code), after the tests.
+# The role it assumes is made by the stack (infra/lib/sessions-stack.ts, GitHubDeploy) and may do only that:
+# no secret is stored here, and the stack itself is deployed from the owner's machine.
+name: Deploy
+on:
+  push:
+    branches: [main]
+concurrency: deploy
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      API_DOMAIN: api.sessions.learnbox.one
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::281627750083:role/LearnBoxSessions-github-deploy
+          aws-region: ap-south-1
+      - run: node scripts/deploy.mjs --code
