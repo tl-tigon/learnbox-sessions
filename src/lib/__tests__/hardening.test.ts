@@ -173,14 +173,15 @@ describe('the results of an interaction opened on the screen of the facilitator'
     expect((await hostView(db, cur, 'quiz1')).shown?.tallies).toEqual({ ques1: { people: 1, counts: { qopb: 1 } }, ques2: { people: 0, counts: {} } });
   });
 
-  it('a survey that has stopped comes with the counts of each of its questions', async () => {
+  it('a survey comes with the counts of each of its questions, running or stopped, as they are the facilitator\'s alone', async () => {
     const { db, s } = await running();
     let cur = await control(db, s, { action: 'activate', id: 'survey1' });
     await respondSurvey(db, cur, TOKEN(1), 'survey1', { srate: { value: 4 }, sopen: { text: 'Shorter' }, spick: { optionIds: ['syes'] } });
-    expect((await hostView(db, cur, 'survey1')).shown).toBeNull();
+    const tallies = { srate: { people: 1, counts: { '4': 1 } }, sopen: { people: 1, counts: {} }, spick: { people: 1, counts: { syes: 1 } } };
+    expect((await hostView(db, cur, 'survey1')).shown?.tallies).toEqual(tallies);
     cur = await control(db, cur, { action: 'activate', id: null });
     const shown = (await hostView(db, cur, 'survey1')).shown;
-    expect(shown?.tallies).toEqual({ srate: { people: 1, counts: { '4': 1 } }, sopen: { people: 1, counts: {} }, spick: { people: 1, counts: { syes: 1 } } });
+    expect(shown?.tallies).toEqual(tallies);
     expect(shown?.texts.sopen.map((t) => t.text)).toEqual(['Shorter']);
   });
 });

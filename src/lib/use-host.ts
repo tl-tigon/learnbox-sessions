@@ -125,7 +125,7 @@ export function useHost(id: string, show: string | null = null) {
   }, [id, show]);
   const countsIdOf = useCallback((v: HostView) => {
     const a = v.interactions.find((i) => i.id === v.state.active);
-    if (!a || a.type === 'survey') return null;
+    if (!a || a.type === 'survey' || a.type === 'feedback') return null;
     if (a.type !== 'quiz') return a.id;
     const q = v.state.quiz;
     return q && q.quizId === a.id ? a.questions[q.index]?.id ?? null : null;

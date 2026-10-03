@@ -1,13 +1,14 @@
 'use client';
 /**
  * What a person fills in on their phone. `PollField` is one poll's inputs; `PollForm` is a poll
- * on its own with its Send button; `SurveyForm` is several polls sent together.
+ * on its own with its Send button; `SurveyForm` is several polls sent together, a survey or the
+ * feedback form.
  */
 import { useEffect, useState } from 'react';
 import { Icon, TYPE_ICON, TYPE_LABEL } from './icons';
 import { canChange } from '@/lib/engine/answers';
 import { LIMITS } from '@/lib/limits';
-import type { Answer, Poll, Survey } from '@/lib/types';
+import type { Answer, Poll, PollGroup } from '@/lib/types';
 
 /** An answer being filled in, in the shape the server takes. */
 export type Draft = { optionIds: string[] } | { value: number } | { order: string[] } | { text: string } | null;
@@ -195,7 +196,7 @@ export function PollForm({ poll, mine, locked, name, people, results, hidden, on
 
 /** A survey: every poll on one page, sent with one button. It can be sent again to change the answers that allow it. */
 export function SurveyForm({ survey, mine, locked, name, onSend }: {
-  survey: Survey;
+  survey: PollGroup;
   mine: Record<string, Answer[]>;
   locked: boolean;
   name: string;
@@ -229,8 +230,8 @@ export function SurveyForm({ survey, mine, locked, name, onSend }: {
 
   return (
     <form className="stack" style={{ gap: 20 }} onSubmit={(e) => { e.preventDefault(); void send(); }}>
-      <div className="poll-label"><span><Icon name="survey" />Survey</span><span className="num">{survey.polls.length} questions</span></div>
-      {survey.title && <div className="poll-title">{survey.title}</div>}
+      <div className="poll-label"><span><Icon name={TYPE_ICON[survey.type]} />{TYPE_LABEL[survey.type]}</span><span className="num">{survey.polls.length} questions</span></div>
+      {survey.type === 'survey' && survey.title && <div className="poll-title">{survey.title}</div>}
       {survey.polls.map((p, i) => {
         const sentText = fixed(p) ? mine[p.id].map((a) => (a.type === 'open' || a.type === 'wordcloud' ? a.text : '')).join(', ') : null;
         return (

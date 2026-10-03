@@ -2,6 +2,7 @@
  * The in-memory store, for local development and tests. Same guarantees as DynamoDB, kept on
  * `globalThis` so Next's dev reloads do not wipe it.
  */
+import { counted } from '../engine/polls';
 import type { Question, Score, Session, SessionState, Tally } from '../types';
 import type { Account, Order, Person, Store, StoredAnswer } from './types';
 
@@ -39,9 +40,9 @@ export function memoryStore(db: Db = freshDb()): Store {
 
   return {
     async createSession(s) {
-      /* A code is free once its session has ended or passed its close time. */
+      /* A code is free once its session has let go of it (ended, deleted) or passed its close time. */
       const holder = db.sessions.get(db.codes.get(s.code) ?? '');
-      if (holder && holder.status === 'live' && holder.closesAt * 1000 > Date.now()) return false;
+      if (holder && holder.closesAt * 1000 > Date.now()) return false;
       db.codes.set(s.code, s.id);
       db.sessions.set(s.id, clone(s));
       return true;
@@ -59,7 +60,7 @@ export function memoryStore(db: Db = freshDb()): Store {
       return [...db.sessions.values()]
         .filter((s) => s.ownerSub === ownerSub)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map((s) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: s.interactions.length }));
+        .map((s) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: counted(s.interactions).length }));
     },
     async updateSession(id, edit, fromSeq) {
       const s = db.sessions.get(id);
@@ -76,13 +77,13 @@ export function memoryStore(db: Db = freshDb()): Store {
       s.state = clone(next);
       return clone(s);
     },
-    async endSession(s) {
+    async endSession(s, keepCode = false) {
       const cur = db.sessions.get(s.id);
       if (cur) {
         cur.status = 'ended';
         cur.endedAt = new Date().toISOString();
       }
-      if (db.codes.get(s.code) === s.id) db.codes.delete(s.code);
+      if (!keepCode && db.codes.get(s.code) === s.id) db.codes.delete(s.code);
     },
     async deleteSession(s) {
       if (db.codes.get(s.code) === s.id) db.codes.delete(s.code);

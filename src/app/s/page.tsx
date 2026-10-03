@@ -23,6 +23,7 @@ import type { Answer, QaSettings, SessionState, Tally } from '@/lib/types';
 type Active =
   | (Extract<ActiveForAudience, { kind: 'poll' }> & { mine: Answer[]; tally: Tally | null })
   | (Extract<ActiveForAudience, { kind: 'survey' }> & { mine: Record<string, Answer[]> })
+  | (Extract<ActiveForAudience, { kind: 'feedback' }> & { mine: Record<string, Answer[]> })
   | (Extract<ActiveForAudience, { kind: 'quiz' }> & { mine: Answer[]; people?: number; me?: Me; top?: BoardEntry[] });
 
 interface View {
@@ -38,7 +39,7 @@ interface View {
   active: Active | null;
 }
 
-const activeId = (a: ActiveForAudience | null) => (!a ? null : a.kind === 'poll' ? a.poll.id : a.kind === 'survey' ? a.survey.id : a.id);
+const activeId = (a: ActiveForAudience | null) => (!a ? null : a.kind === 'poll' ? a.poll.id : a.kind === 'survey' ? a.survey.id : a.kind === 'feedback' ? a.feedback.id : a.id);
 
 /** The code comes in the address as `?c=`; without one, the front page has the field for it. */
 export default function AudiencePage() {
@@ -108,6 +109,8 @@ function Joined({ id }: { id: string }) {
         active = { ...e.active, mine: same ? had.mine : [], tally: same && e.state.showResults ? had.tally : null };
       } else if (e.active?.kind === 'survey') {
         active = { ...e.active, mine: had?.kind === 'survey' && had.survey.id === e.active.survey.id ? had.mine : {} };
+      } else if (e.active?.kind === 'feedback') {
+        active = { ...e.active, mine: had?.kind === 'feedback' && had.feedback.id === e.active.feedback.id ? had.mine : {} };
       } else if (e.active?.kind === 'quiz') {
         const same = had?.kind === 'quiz' && had.id === e.active.id && had.question?.id === e.active.question?.id;
         active = { ...e.active, mine: same ? had.mine : [], people: had?.kind === 'quiz' ? had.people : undefined, me: same ? had.me : undefined, top: same ? had.top : undefined };
@@ -212,6 +215,8 @@ function Joined({ id }: { id: string }) {
   if (!v) return <main className="narrow"><p className="muted">{error ?? 'Joining…'}</p></main>;
   const ended = v.status === 'ended';
   const a = v.active;
+  /* After the session has ended, the feedback form is the one thing still open. */
+  const polls = !ended || a?.kind === 'feedback';
 
   return (
     <>
@@ -223,7 +228,7 @@ function Joined({ id }: { id: string }) {
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'qa'} onClick={() => setTab('qa')}><Icon name="chat" />Q&A</button>
           <button role="tab" aria-selected={tab === 'polls'} onClick={() => setTab('polls')}>
-            <Icon name="bars" />Polls{a && tab !== 'polls' && !ended && <span className="badge" aria-label="A poll is open" />}
+            <Icon name="bars" />Polls{a && tab !== 'polls' && polls && <span className="badge" aria-label="A poll is open" />}
           </button>
         </div>
         <button className="avatar end" aria-label={v.nickname ? `Name: ${v.nickname}` : 'Add your name'} onClick={() => setNaming(true)}>
@@ -257,9 +262,13 @@ function Joined({ id }: { id: string }) {
           <QaPhone sessionId={id} token={token} state={v.state} settings={v.qa} nickname={v.nickname} ended={ended} onEngage={engaged} />
         </div>
 
-        {!ended && (
+        {polls && (
           <section className="stack" hidden={tab !== 'polls'}>
             {!a && <div className="none"><Icon name="bars" size={40} />No active poll</div>}
+            {a?.kind === 'feedback' && (
+              <SurveyForm key={a.feedback.id} survey={a.feedback} mine={a.mine} locked={v.state.locked} name={v.nickname}
+                onSend={(answers) => answer({ surveyId: a.feedback.id, answers })} />
+            )}
             {a?.kind === 'poll' && (
               /* Written answers are for the big screen; a phone shows the counts of the other kinds. */
               <PollForm key={a.poll.id} poll={a.poll} mine={a.mine} locked={v.state.locked} name={v.nickname} people={a.tally?.people}

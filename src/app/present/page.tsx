@@ -50,13 +50,15 @@ function Wall({ id, displayKey }: { id: string; displayKey: string | null }) {
   const host = origin.replace(/^https?:\/\//, '');
   const a = v.active;
   const ended = v.status === 'ended';
+  /* After the end, the feedback form is still open: the join code stays up for it. */
+  const feedback = a?.kind === 'feedback' ? a.feedback : null;
   const shownQuestions = v.questions.filter((x) => x.status === 'live').length;
 
   return (
     <div className="wall">
       <aside>
         <span className="wordmark">LearnBox Sessions</span>
-        {!ended && (
+        {(!ended || feedback) && (
           <div className="joinbox">
             <span>Join at</span>
             <b>{host}</b>
@@ -68,7 +70,12 @@ function Wall({ id, displayKey }: { id: string; displayKey: string | null }) {
       </aside>
 
       <main>
-        {ended ? (
+        {feedback ? (
+          <>
+            <div className="bar-head"><span><Icon name="feedback" size={22} />Feedback</span></div>
+            <div className="panel"><h1>{ended ? 'Session ended' : feedback.title}</h1><span className="muted num" style={{ fontSize: 'clamp(16px, 1.4vw, 26px)' }}>{ended ? 'Feedback is open' : `${feedback.polls.length} questions`}</span></div>
+          </>
+        ) : ended ? (
           <>
             <div className="bar-head"><span>{v.title}</span></div>
             <div className="panel"><h1>Session ended</h1></div>

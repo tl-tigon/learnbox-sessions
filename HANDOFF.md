@@ -13,7 +13,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - The session screen, laid out as Slido's host screen:
     - Header: back, the session's name, people joined, the code (a click copies it), Share (join link, projector link), Present, and a menu (Duplicate session, End session, Delete session).
     - Rail: the session, its results page, its settings (the two links and the Q&A settings).
-    - Left: an Add button, the Q&A card, then a card for each poll, quiz and survey. Each card has a round Start button and a menu (Move up, Move down, Duplicate, Reset results, Delete). The running card also has Hide results and Close voting.
+    - Left: an Add button, the Q&A card, then a card for each poll, quiz and survey, then the Feedback card (or "Add feedback"). Each card has a round Start button and a menu (Move up, Move down, Duplicate, Reset results, Delete; the feedback card has no Move or Duplicate). The running card also has Hide results and Close voting.
     - Right: the open card. Add shows the seven types to pick from. A poll shows its question and options, with each option's result under it: live for the running poll, stored for any other.
     - The Q&A shows the announcement field, chips for In review, Live and Answered, and the questions as plain rows. A row's actions are round buttons that show on it: Highlight, Mark answered, Reply, and Hide under More. Reply opens the question and its replies in a panel at the side.
     - Under it, a bar: Start; or Stop with Prev, hide results, close voting and Next (Prev and Next start the neighbouring poll); the quiz's next step; for the Q&A, "Close Q&A" (asks first) or "Open Q&A". "Participant view" opens the phone's screen.
@@ -24,7 +24,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Results page with CSV and Excel downloads.
   - Account page: the plan (Free, or Pro and the date it runs to), paying for Pro, and deleting the account, which removes its sessions, all their answers, its plan and its orders.
 - **Plans** (2026-10-03): Free and Pro.
-  - Free: 100 people and 8 polls and quizzes in a session; no surveys; no CSV or Excel download. Pro: 1,000 people; 50 polls, quizzes and surveys; surveys; downloads. Everything else is the same on both.
+  - Free: 100 people and 8 polls and quizzes in a session; no surveys; no CSV or Excel download. Pro: 1,000 people; 50 polls, quizzes and surveys; surveys; downloads. Everything else, the feedback form included, is the same on both.
   - The server refuses what a plan does not hold (HTTP 402): saving a 9th poll or a survey, starting a survey, a download, the 101st person, copying a session that needs Pro.
   - On Free the facilitator sees: "Polls 3 / 8"; Survey marked Pro on the types to add (it opens the account page); "Get Pro" in place of Add when the session is full; "Downloads are on Pro" on the results page; "Full · Get Pro" beside the people count at 100.
   - Pro costs ₹79 for 1 month (30 days) or ₹588 for 12 months (₹49 a month). Each is paid once and does not renew; a second payment adds its time to the end of the first. The amount is set on the server from the period chosen.
@@ -44,6 +44,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
   - Multiple choice (1 to N picks), word cloud (1–3 words), rating (1 to 3/4/5/7/10 with end labels), open text (1–3 answers), ranking.
   - A choice, rating or ranking can be changed while voting is open. The facilitator can lock voting and hide results.
 - **Survey**: several polls on one page, sent with one button, changeable while open.
+- **Feedback** (2026-10-03, owner's choices): one form per session, on Free as on Pro, outside the count of polls. Two fixed questions, a 1–5 rating of the session ("Poor" to "Excellent") and "Comments", then any questions the facilitator adds. It is started like a poll and, once started, stays open after the session ends until the session's close time (7 days after it was made): the code and the join link keep working for it, a phone that opens them sees "Session ended" and the form, and nothing else is open. The answers are the facilitator's alone: the big screen shows only that feedback is open, and phones get no counts. The facilitator sees the average and the comments on the card, running or not, and on the results page. Ending the session with the form running keeps the session's code until the close time; to close the form, stop it before ending the session.
 - **Quiz**: a run of timed questions (2–4 options, one correct, 10/20/30/60 seconds).
   - Players give a name in the lobby.
   - Steps: Start quiz, Reveal answer, Leaderboard, Next question. When time is up the screen shows how people voted; Reveal marks the correct answer.
@@ -61,9 +62,9 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 92 vitest tests: answers, cleaning, sessions, vote changes, surveys, views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
-- The same walk passes 75 of 75 against the production shape: the built files served as a CDN would and the API running through the Lambda bundles (`npm run preview`, then `BASE=http://localhost:3300 node scripts/walk.js`).
-- A browser walk passes 75 of 75 checks: `node scripts/walk.js`, with `npm run dev` running.
+- `npm test` runs 98 vitest tests: answers, cleaning, sessions, vote changes, surveys, the feedback form (`feedback.test.ts`: its fixed questions, Free, answers after the end, the code kept, the close time), views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- The same walk passes 78 of 78 against the production shape: the built files served as a CDN would and the API running through the Lambda bundles (`npm run preview`, then `BASE=http://localhost:3300 node scripts/walk.js`).
+- A browser walk passes 78 of 78 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
   - It runs a facilitator, the big screen (a signed-out projector with the display key) and 5 phones through the whole flow, then tries the ways around the rules: another account, the display key, a made-up phone, late and repeated answers.

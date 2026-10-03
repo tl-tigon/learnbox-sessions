@@ -1,4 +1,4 @@
-import type { Poll, QuestionStatus, QuizQuestion, Reply, Session, SessionState, Survey, Tally } from '../types';
+import type { Feedback, Poll, QuestionStatus, QuizQuestion, Reply, Session, SessionState, Survey, Tally } from '../types';
 
 /** The AppSync Events namespace every channel lives under. */
 export const NAMESPACE = 'live';
@@ -14,6 +14,7 @@ export const qaChannel = (sessionId: string) => `/${NAMESPACE}/${sessionId}/qa`;
 export type ActiveForAudience =
   | { kind: 'poll'; poll: Poll }
   | { kind: 'survey'; survey: Survey }
+  | { kind: 'feedback'; feedback: Feedback }
   | { kind: 'quiz'; id: string; title: string; count: number; question: QuizQuestion | null };
 
 /**

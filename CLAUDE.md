@@ -35,7 +35,8 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
   - `/j/<code>` is the join link people share: the API answers with a page carrying the session's name for chat previews, and sends the phone on to `/s?c=<code>`.
 - **Model** (`src/lib/types.ts`):
   - Session = an event with a code, Q&A settings, a list of interactions, a `state` and a display key.
-  - Interaction = a poll (`choice`, `wordcloud`, `rating`, `open`, `ranking`), a quiz (a run of timed questions) or a survey (several polls sent together). Interactions are edited in place while the session runs.
+  - Interaction = a poll (`choice`, `wordcloud`, `rating`, `open`, `ranking`), a quiz (a run of timed questions), a survey (several polls sent together) or the feedback form (`feedback`: a survey with two fixed questions first, `FEEDBACK_FIXED` in `engine/polls.ts`, then the facilitator's own). Interactions are edited in place while the session runs.
+  - **The feedback form** (owner's decision, 2026-10-03) is on every plan, one per session, outside the plan's count of polls (`counted()`). Once started it takes answers until the session's close time even after the session has ended (`takingFeedback`, `canJoin` in `live.ts`; `endSession` keeps the code for it), and its answers are the facilitator's only: the big screen and phones get no counts.
   - `state {active, showResults, locked, qaOpen, announcement, highlight, quiz, played, seq}`: everything that changes live. `active` is the interaction the facilitator has started.
 - **Rules**, pure and tested:
   - `src/lib/engine/`: cleaning interactions (`polls.ts`), answer checks and vote changes (`answers.ts`), words and profanity, Q&A rules (`questions.ts`), quiz phases, points and ranking (`quiz.ts`).
@@ -60,7 +61,7 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - **Audience identity**: a random browser token (`src/lib/audience.ts`). Server routes validate it with `isToken`.
 - **Limits**: all fair-use numbers are in `src/lib/limits.ts`.
 - **Plans** (owner's decision, 2026-10-03): Free and Pro.
-  - `PLANS` in `limits.ts` holds what differs: Free has 100 people and 8 polls and quizzes in a session; Pro has 1,000 people, 50 polls, quizzes and surveys, surveys, and the CSV and Excel downloads.
+  - `PLANS` in `limits.ts` holds what differs: Free has 100 people and 8 polls and quizzes in a session; Pro has 1,000 people, 50 polls, quizzes and surveys, surveys, and the CSV and Excel downloads. The feedback form is on both.
   - `src/lib/plans.ts`: the price in `PRO_OPTIONS` (₹79 for 1 month or ₹588 for 12 months, each paid once, no renewal) and `planOf`, which every check reads. An account is on Pro until `proUntil`; with nothing stored it is on Free.
   - A plan refuses with HTTP 402. When Pro ends, a session keeps what it holds and takes no more; its surveys do not start.
   - `src/lib/billing/`: PayU's hosted checkout. An order is written, the browser posts a signed form to PayU, and PayU's signed outcome comes back to `/api/billing/return`. With no `PAYU_KEY`, or with `PAYU_ENV=standin`, development uses a stand-in payment page (`/api/billing/dev-gateway`) and production has payments off.

@@ -288,6 +288,7 @@ export const PLAN_CARDS: PlanCard[] = [
       `Up to ${PLANS.free.interactionsPerSession} polls and quizzes in a session`,
       'Q&A with upvotes, review and replies',
       'All five poll types, and quizzes',
+      'A feedback form, open after the session ends',
       'The big screen, with the code and a QR code',
       'Results on one page',
     ],
@@ -332,6 +333,7 @@ export const COMPARE: CompareGroup[] = [
     rows: [
       both('Multiple choice, word cloud, rating, open text, ranking'),
       both('Quizzes with a timer and a leaderboard'),
+      both('A feedback form, with questions of your own'),
       { label: 'Surveys', free: false, pro: true },
     ],
   },

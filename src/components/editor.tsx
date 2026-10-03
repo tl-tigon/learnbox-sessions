@@ -6,9 +6,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon, TYPE_ICON, TYPE_LABEL } from './icons';
 import { PollResults } from './results';
-import { blankPoll, blankQuizQuestion, POLL_TYPES, QUIZ_SECONDS, shortId } from '@/lib/engine/polls';
+import { blankPoll, blankQuizQuestion, FEEDBACK_FIXED, ownPolls, POLL_TYPES, QUIZ_SECONDS, shortId } from '@/lib/engine/polls';
 import { LIMITS } from '@/lib/limits';
-import type { ChoiceOption, Poll, PollType, Quiz, QuizQuestion, Survey, Tally } from '@/lib/types';
+import type { ChoiceOption, Feedback, Poll, PollType, Quiz, QuizQuestion, Survey, Tally } from '@/lib/types';
 
 type Texts = { text: string }[];
 
@@ -194,29 +194,65 @@ export function QuizEditor({ quiz, onChange, disabled, tallies }: { quiz: Quiz; 
 }
 
 /** `tallies` and `texts` are the results of each poll in the survey, by its id. */
+/** One poll of a survey or the feedback form, numbered, with its results and a Remove button. */
+function GroupPoll({ poll, index, onChange, onRemove, disabled, tally, texts }: { poll: Poll; index: number; onChange: (p: Poll) => void; onRemove: () => void; disabled?: boolean; tally?: Tally; texts?: Texts }) {
+  return (
+    <div className="sub">
+      <div className="spread">
+        <span className="row strong"><Icon name={TYPE_ICON[poll.type]} />{TYPE_LABEL[poll.type]} <span className="num faint">{index + 1}</span>{tally && <span className="count num">· {tally.people} answered</span>}</span>
+        <button type="button" className="icon-btn ghost" aria-label={`Remove question ${index + 1}`} disabled={disabled} onClick={onRemove}><Icon name="trash" /></button>
+      </div>
+      <PollEditor poll={poll} disabled={disabled} tally={tally?.people ? tally : undefined} texts={texts} onChange={onChange} />
+    </div>
+  );
+}
+
+/** The select that adds a poll of a chosen type to a group. */
+function AddPoll({ onAdd, disabled }: { onAdd: (p: Poll) => void; disabled?: boolean }) {
+  return (
+    <label>Add question
+      <select value="" disabled={disabled} onChange={(e) => { if (e.target.value) onAdd(blankPoll(e.target.value as PollType)); }}>
+        <option value="">Choose a type</option>
+        {POLL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+      </select>
+    </label>
+  );
+}
+
 export function SurveyEditor({ survey, onChange, disabled, tallies, texts }: { survey: Survey; onChange: (s: Survey) => void; disabled?: boolean; tallies?: Record<string, Tally>; texts?: Record<string, Texts> }) {
   return (
     <div className="stack">
       <TitleField label="Survey name" value={survey.title} disabled={disabled} onChange={(title) => onChange({ ...survey, title })} />
       {survey.polls.map((p, i) => (
+        <GroupPoll key={p.id} poll={p} index={i} disabled={disabled} tally={tallies?.[p.id]} texts={texts?.[p.id]}
+          onChange={(next) => onChange({ ...survey, polls: survey.polls.map((x) => (x.id === p.id ? next : x)) })}
+          onRemove={() => onChange({ ...survey, polls: survey.polls.filter((x) => x.id !== p.id) })} />
+      ))}
+      {survey.polls.length < LIMITS.itemsPerGroup && <AddPoll disabled={disabled} onAdd={(p) => onChange({ ...survey, polls: [...survey.polls, p] })} />}
+    </div>
+  );
+}
+
+/** The feedback form: its two fixed questions, read-only with their results, then the facilitator's own. */
+export function FeedbackEditor({ feedback, onChange, disabled, tallies, texts }: { feedback: Feedback; onChange: (f: Feedback) => void; disabled?: boolean; tallies?: Record<string, Tally>; texts?: Record<string, Texts> }) {
+  const fixed = feedback.polls.slice(0, FEEDBACK_FIXED.length);
+  const own = ownPolls(feedback);
+  return (
+    <div className="stack">
+      {fixed.map((p, i) => (
         <div key={p.id} className="sub">
-          <div className="spread">
-            <span className="row strong"><Icon name={TYPE_ICON[p.type]} />{TYPE_LABEL[p.type]} <span className="num faint">{i + 1}</span>{tallies?.[p.id] && <span className="count num">· {tallies[p.id].people} answered</span>}</span>
-            <button type="button" className="icon-btn ghost" aria-label={`Remove question ${i + 1}`} disabled={disabled}
-              onClick={() => onChange({ ...survey, polls: survey.polls.filter((x) => x.id !== p.id) })}><Icon name="trash" /></button>
-          </div>
-          <PollEditor poll={p} disabled={disabled} tally={tallies?.[p.id]?.people ? tallies[p.id] : undefined} texts={texts?.[p.id]}
-            onChange={(next) => onChange({ ...survey, polls: survey.polls.map((x) => (x.id === p.id ? next : x)) })} />
+          <span className="row strong"><Icon name={TYPE_ICON[p.type]} />{TYPE_LABEL[p.type]} <span className="num faint">{i + 1}</span>{tallies?.[p.id] && <span className="count num">· {tallies[p.id].people} answered</span>}</span>
+          <div className="strong">{p.title}</div>
+          {p.type === 'rating' && <span className="small muted">1 = {p.lowLabel}, {p.max} = {p.highLabel}</span>}
+          {!!tallies?.[p.id]?.people && <PollResults poll={p} tally={tallies[p.id]} texts={texts?.[p.id]} />}
         </div>
       ))}
-      {survey.polls.length < LIMITS.itemsPerGroup && (
-        <label>Add question
-          <select value="" disabled={disabled} onChange={(e) => { if (e.target.value) onChange({ ...survey, polls: [...survey.polls, blankPoll(e.target.value as PollType)] }); }}>
-            <option value="">Choose a type</option>
-            {POLL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
-          </select>
-        </label>
-      )}
+      {own.map((p, i) => (
+        <GroupPoll key={p.id} poll={p} index={fixed.length + i} disabled={disabled} tally={tallies?.[p.id]} texts={texts?.[p.id]}
+          onChange={(next) => onChange({ ...feedback, polls: feedback.polls.map((x) => (x.id === p.id ? next : x)) })}
+          onRemove={() => onChange({ ...feedback, polls: feedback.polls.filter((x) => x.id !== p.id) })} />
+      ))}
+      {feedback.polls.length < LIMITS.itemsPerGroup && <AddPoll disabled={disabled} onAdd={(p) => onChange({ ...feedback, polls: [...feedback.polls, p] })} />}
     </div>
   );
 }

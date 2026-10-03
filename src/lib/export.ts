@@ -35,7 +35,7 @@ export function resultBlocks(r: Results): Block[] {
     } else {
       const { poll, tally, answers } = item;
       rows.push([`Question ${n}`, poll.title]);
-      if (item.group) rows.push(['Survey', item.group]);
+      if (item.group) rows.push(['Part of', item.group]);
       rows.push(['Answered', tally.people]);
       if (poll.type === 'choice') {
         rows.push(['Option', 'Picks']);

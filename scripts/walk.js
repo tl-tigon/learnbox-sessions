@@ -488,7 +488,7 @@ const FIRST = { timeout: 120000 };
     await p.screenshot({ path: path.join(OUT, '17-results.png'), fullPage: true });
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Download CSV")')]);
     const csv = fs.readFileSync(await dl.path(), 'utf8');
-    check('CSV has every poll', /"Goa","2"/.test(csv) && /"Coorg","2"/.test(csv) && /"growth","3"/.test(csv) && /"Idea number 2"/.test(csv) && /"5","2"/.test(csv) && /"Quality","13"/.test(csv) && /"Survey","Session feedback"/.test(csv), csv.split('\r\n').slice(0, 4).join(' | '));
+    check('CSV has every poll', /"Goa","2"/.test(csv) && /"Coorg","2"/.test(csv) && /"growth","3"/.test(csv) && /"Idea number 2"/.test(csv) && /"5","2"/.test(csv) && /"Quality","13"/.test(csv) && /"Part of","Session feedback"/.test(csv), csv.split('\r\n').slice(0, 4).join(' | '));
     check('CSV has the quiz, the leaderboard and the questions with their replies',
       csv.includes('"Jupiter","3","Yes"') && /"Leaderboard","Planets"\r\n"Rank","Name","Points"\r\n"1","Rohan","\d+"/.test(csv)
       && csv.includes(`"${Q1}","Asha","3","Answered","Targets stay as set in April."`) && csv.includes(`"${Q2}","Anonymous","1","Approved"`));
@@ -521,6 +521,51 @@ const FIRST = { timeout: 120000 };
     check('Reset results clears a stopped poll\'s answers; it is refused while the poll runs, and for another account',
       copyVote.status === 200 && whileRunning.status === 409 && notMineReset.status === 404 && cleared === 0, `${copyVote.status},${whileRunning.status},${notMineReset.status},${cleared}`);
 
+    // ---- Feedback: the fixed questions plus one of the facilitator's own, answered during the session and after it has ended
+    await p.click('button:has-text("Add feedback")');
+    await p.waitForSelector('.dtitle:has-text("Feedback")', WAIT);
+    const fixedShown = await p.$$eval('.dcard .sub .strong', (els) => els.map((e) => e.textContent));
+    await p.selectOption('label:has-text("Add question") select', 'rating');
+    await p.fill('.dcard textarea[aria-label="Question"]', 'Rate the trainer');
+    await p.click('button:has-text("Start feedback")');
+    await p.waitForSelector('button[aria-label="Stop Feedback"]', WAIT);
+    const copyForm = (await api('GET', `/api/sessions/${copyId}`)).body.interactions.find((i) => i.type === 'feedback');
+    check('feedback: the form opens with its two fixed questions and takes a question of the facilitator\'s own',
+      fixedShown.some((t) => /rate this session/.test(t)) && fixedShown.some((t) => /^Comments/.test(t)) && copyForm.polls.map((q) => q.type).join() === 'rating,open,rating' && copyForm.polls[2].title === 'Rate the trainer', `${fixedShown.join('|')} ${JSON.stringify(copyForm.polls.map((q) => q.type))}`);
+    await phones[1].goto(`${BASE}/s?c=${copied.code}`);
+    await phones[1].waitForSelector('.poll-label:has-text("Feedback")', FIRST);
+    const scales = await phones[1].$$('.scale');
+    await (await scales[0].$('button:text-is("5")')).click();
+    await phones[1].fill('textarea[aria-label="Your answer"]', 'Good pace');
+    await (await scales[1].$('button:text-is("4")')).click();
+    await phones[1].click('button:has-text("Send"):visible');
+    await phones[1].waitForSelector('text=Sent', WAIT);
+    await phones[1].screenshot({ path: path.join(OUT, '17a-phone-feedback.png') });
+    await api('PATCH', `/api/sessions/${copyId}`, { action: 'end' });
+    /* Someone who left early opens the link after the end. */
+    const joinAfter = await api('GET', `/api/join/${copied.code}`);
+    const previewAfter = await (await fetch(`${BASE}/j/${copied.code}`)).text();
+    await phones[2].goto(`${BASE}/s?c=${copied.code}`);
+    await phones[2].waitForSelector('text=Session ended', FIRST);
+    await phones[2].waitForSelector('.poll-label:has-text("Feedback")', WAIT);
+    await (await (await phones[2].$$('.scale'))[0].$('button:text-is("3")')).click();
+    await phones[2].click('button:has-text("Send"):visible');
+    await phones[2].waitForSelector('text=Sent', WAIT);
+    const lateQuestion = await phoneApi(phones[2], 'POST', `/api/live/${copyId}/qa`, { text: 'After the end?', anonymous: true });
+    check('feedback: after the session ends the code still opens it, a late phone joins and answers, and nothing else is open',
+      joinAfter.status === 200 && /Feedback on Team offsite copy/.test(previewAfter) && lateQuestion.status === 409, `${joinAfter.status} ${lateQuestion.status}`);
+    await p.reload();
+    await p.waitForSelector('.icard:has(.title span:text-is("Feedback")):has-text("2 answered"):has-text("Open until")', FIRST);
+    await p.click('.icard:has(.title span:text-is("Feedback"))');
+    await p.waitForSelector('.dcard .average:has-text("4.0")', WAIT);
+    await p.screenshot({ path: path.join(OUT, '17b-host-feedback.png') });
+    const copyResults = (await api('GET', `/api/sessions/${copyId}/results`)).body;
+    const feedbackItems = copyResults.items.filter((i) => i.group === 'Feedback');
+    check('feedback: the facilitator sees the average and the comments; the big screen and phones see no results',
+      feedbackItems.length === 3 && feedbackItems[0].tally.people === 2 && feedbackItems[1].answers.some((a) => a.answer.text === 'Good pace')
+      && (await api('GET', `/api/sessions/${copyId}?view=wall`)).body.tally === null && !/tally|counts|Good pace/.test(JSON.stringify((await phoneApi(phones[2], 'GET', `/api/live/${copyId}?t={t}`)).body)),
+      JSON.stringify(feedbackItems.map((i) => i.tally)));
+
     await p.goto(sessionUrl);
     await p.waitForSelector('input[aria-label="Session name"]', WAIT);
     await p.click('button[aria-label="More"]');
@@ -549,7 +594,7 @@ const FIRST = { timeout: 120000 };
     await p.waitForSelector('.srow', WAIT);
     await p.click('.chips button:has-text("Ended")');
     const endedRows = await p.$$eval('.srow', (els) => els.map((e) => e.textContent).join(' | '));
-    check('the sessions list filters to the ended session', (await p.$$('.srow')).length === 1 && /Team offsite/.test(endedRows), endedRows);
+    check('the sessions list filters to the ended sessions, counting polls without the feedback form', (await p.$$('.srow')).length === 2 && /copy.*7 polls.*Team offsite.*7 polls/.test(endedRows), endedRows);
     await p.click('.chips button:has-text("All")');
     await p.screenshot({ path: path.join(OUT, '18-dashboard.png') });
     await p.goto(`${BASE}/app/account`, FIRST);

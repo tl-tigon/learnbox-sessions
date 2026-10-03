@@ -2,7 +2,7 @@ import { store } from '@/lib/store';
 import { clientIp, fail, json, limited, readJson } from '@/lib/http';
 import { isToken } from '@/lib/ids';
 import { LIMITS } from '@/lib/limits';
-import { audienceView, isClosed, joinSession } from '@/lib/live';
+import { audienceView, canJoin, joinSession } from '@/lib/live';
 import { cleanText, isProfane } from '@/lib/engine/words';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -24,7 +24,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const db = store();
   const s = await db.getSession((await ctx.params).id);
   if (!s) return fail(404, 'Not found');
-  if (isClosed(s)) return fail(409, 'This session has ended');
+  if (!canJoin(s)) return fail(409, 'This session has ended');
   const body = await readJson(req);
   if (!isToken(body.token)) return fail(400, 'Bad token');
   if (limited(`join:${body.token}`, 30)) return fail(429, 'Too many tries. Wait a minute.');

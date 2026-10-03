@@ -1,11 +1,11 @@
 import { store } from '@/lib/store';
 import { blocked, clientIp, fail, json, limited } from '@/lib/http';
 import { isCode } from '@/lib/ids';
-import { isClosed } from '@/lib/live';
+import { canJoin } from '@/lib/live';
 
 type Ctx = { params: Promise<{ code: string }> };
 
-/** Which live session a code belongs to. */
+/** Which session a code belongs to: a live one, or an ended one whose feedback form is still open. */
 export async function GET(req: Request, ctx: Ctx) {
   /* Codes are only six digits, so guessing is throttled hard per address. Only wrong codes count:
      a whole room behind one address, all entering the right code, is never held back. */
@@ -20,6 +20,6 @@ export async function GET(req: Request, ctx: Ctx) {
   const db = store();
   const id = await db.sessionIdForCode(code);
   const s = id ? await db.getSession(id) : null;
-  if (!s || isClosed(s)) return miss();
+  if (!s || !canJoin(s)) return miss();
   return json({ id: s.id, title: s.title });
 }

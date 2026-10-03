@@ -2,7 +2,7 @@ import { store } from '@/lib/store';
 import { blocked, clientIp, limited } from '@/lib/http';
 import { isCode } from '@/lib/ids';
 import { joinPath } from '@/lib/links';
-import { isClosed } from '@/lib/live';
+import { canJoin, isClosed } from '@/lib/live';
 
 type Ctx = { params: Promise<{ code: string }> };
 
@@ -21,14 +21,15 @@ export async function GET(req: Request, ctx: Ctx) {
     const db = store();
     const id = await db.sessionIdForCode(code);
     s = id ? await db.getSession(id) : null;
-    if (!s || isClosed(s)) {
+    if (!s || !canJoin(s)) {
       limited(key, 30);
       s = null;
     }
   }
   const to = s ? joinPath(code) : '/';
-  const title = s ? `Join ${s.title}` : 'LearnBox Sessions';
-  const text = s ? `Enter code ${code.slice(0, 3)} ${code.slice(3)} to ask questions and vote.` : 'Live polls, Q&A, quizzes and surveys.';
+  /* After the session has ended, the link is the one shared for its feedback form. */
+  const title = s ? (isClosed(s) ? `Feedback on ${s.title}` : `Join ${s.title}`) : 'LearnBox Sessions';
+  const text = s ? (isClosed(s) ? `Enter code ${code.slice(0, 3)} ${code.slice(3)} to give your feedback.` : `Enter code ${code.slice(0, 3)} ${code.slice(3)} to ask questions and vote.`) : 'Live polls, Q&A, quizzes and surveys.';
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(s ? `${title} · LearnBox Sessions` : title)}</title><meta name="robots" content="noindex">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(text)}"><meta property="og:site_name" content="LearnBox Sessions"><meta name="description" content="${esc(text)}">

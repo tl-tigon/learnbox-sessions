@@ -77,9 +77,24 @@ export interface Survey {
   polls: Poll[];
 }
 
-/** What a facilitator can start: one poll, a quiz or a survey. */
-export type Interaction = Poll | Quiz | Survey;
+/**
+ * Feedback on the session, answered like a survey. Its first two polls are fixed (a rating of the
+ * session and a comment); the facilitator may add polls of their own after them. A session holds
+ * one, on any plan; once started it takes answers until the session's close time, even after the
+ * session has ended, and its answers are for the facilitator only.
+ */
+export interface Feedback {
+  id: string;
+  type: 'feedback';
+  title: string;
+  polls: Poll[];
+}
+
+/** What a facilitator can start: one poll, a quiz, a survey or the feedback form. */
+export type Interaction = Poll | Quiz | Survey | Feedback;
 export type InteractionType = Interaction['type'];
+/** The two kinds that are several polls answered together. */
+export type PollGroup = Survey | Feedback;
 
 export interface QaSettings {
   /** Questions wait for the facilitator's approval before anyone else sees them. */

@@ -24,6 +24,7 @@
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { counted } from '../engine/polls';
 import { LIMITS } from '../limits';
 import type { Question, Score, Session, SessionState, Tally } from '../types';
 import type { Order, Person, Store, StoredAnswer } from './types';
@@ -96,7 +97,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
   const answerFrom = (i): StoredAnswer => ({ pollId: i.pollId, token: i.token, entry: i.entry, answer: i.answer, at: i.at, ...(i.points === undefined ? {} : { points: Number(i.points) }) });
   const orderFrom = (i): Order | null =>
     i ? { id: i.id, sub: i.sub, amount: i.amount, days: Number(i.days), status: i.status, createdAt: i.createdAt, ...(i.paidAt ? { paidAt: i.paidAt } : {}), ...(i.ref ? { ref: i.ref } : {}) } : null;
-  const listEntry = (s: Session) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: s.interactions.length });
+  const listEntry = (s: Session) => ({ id: s.id, code: s.code, title: s.title, status: s.status, createdAt: s.createdAt, closesAt: s.closesAt, interactions: counted(s.interactions).length });
 
   return {
     async createSession(s) {
@@ -171,7 +172,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
           Key: { PK: `USER#${saved.ownerSub}`, SK: `SESS#${id}` },
           UpdateExpression: 'SET title = :t, interactions = :n',
           ConditionExpression: 'attribute_exists(PK)',
-          ExpressionAttributeValues: { ':t': saved.title, ':n': saved.interactions.length },
+          ExpressionAttributeValues: { ':t': saved.title, ':n': counted(saved.interactions).length },
         }));
       } catch (e) {
         if (!isClash(e)) throw e; // the session was deleted meanwhile; there is no list entry to update
@@ -195,7 +196,7 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         throw e;
       }
     },
-    async endSession(s) {
+    async endSession(s, keepCode = false) {
       const endedAt = new Date().toISOString();
       /* Each update applies only to a row that is still there, so a session deleted meanwhile is not brought back as an empty row. */
       const ifThere = async (command) => {
@@ -221,6 +222,8 @@ export function dynamoStore(table = process.env.DYNAMODB_TABLE_NAME!): Store {
         ExpressionAttributeNames: { '#status': 'status' },
         ExpressionAttributeValues: { ':e': 'ended' },
       }));
+      /* The code row's expiresAt is the close time, so a kept code is taken until then and no longer. */
+      if (keepCode) return;
       try {
         await ddb.send(new DeleteCommand({
           TableName: table,

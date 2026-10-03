@@ -1,6 +1,6 @@
 import type { Answer, Question, QuestionStatus, Reply, Score, Session, SessionState, Tally } from '../types';
 
-export interface SessionSummary { id: string; code: string; title: string; status: Session['status']; createdAt: string; closesAt: number; interactions: number }
+export interface SessionSummary { id: string; code: string; title: string; status: Session['status']; createdAt: string; closesAt: number; /** Polls, quizzes and surveys; the feedback form is not counted. */ interactions: number }
 
 /** `points` is set on quiz answers: what the answer earned, worked out on the server when it arrived. */
 export interface StoredAnswer { pollId: string; token: string; entry: number; answer: Answer; at: string; points?: number }
@@ -42,8 +42,8 @@ export interface Store {
   updateSession(id: string, edit: SessionEdit, fromSeq: number): Promise<Session | null>;
   /** Applies `next` only if the stored state is still at `fromSeq`. Returns the session, or null on a clash. */
   setState(id: string, next: SessionState, fromSeq: number): Promise<Session | null>;
-  /** Marks the session ended and frees its code. */
-  endSession(s: Session): Promise<void>;
+  /** Marks the session ended and frees its code. With `keepCode` the code stays its own until the close time (the feedback form is still taking answers). */
+  endSession(s: Session, keepCode?: boolean): Promise<void>;
   /** Removes the session and everything recorded in it, and frees its code. */
   deleteSession(s: Session): Promise<void>;
 

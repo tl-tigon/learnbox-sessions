@@ -8,7 +8,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Confirm, Panel, Toast, type Ask } from '@/components/dialog';
-import { hasSettings, PollEditor, PollSettings, QuizEditor, SurveyEditor } from '@/components/editor';
+import { FeedbackEditor, hasSettings, PollEditor, PollSettings, QuizEditor, SurveyEditor } from '@/components/editor';
 import { Icon, TYPE_ICON, TYPE_LABEL } from '@/components/icons';
 import { Menu } from '@/components/menu';
 import { QaHost } from '@/components/qa';
@@ -16,7 +16,7 @@ import { Leaderboard, secondsLeft, useServerClock } from '@/components/quiz';
 import { QuizResults } from '@/components/results';
 import { useSignedIn } from '@/components/use-signed-in';
 import { authed } from '@/lib/auth/client';
-import { blankInteraction, INTERACTION_TYPES, withNewIds } from '@/lib/engine/polls';
+import { blankInteraction, counted, INTERACTION_TYPES, isGroup, withNewIds } from '@/lib/engine/polls';
 import { quizPhase } from '@/lib/engine/quiz';
 import { LIMITS, PLANS } from '@/lib/limits';
 import { joinPath, presentPath, resultsPath, sessionPath, shareLink } from '@/lib/links';
@@ -40,7 +40,8 @@ function SignedInHost() {
 
 const nameOf = (i: Interaction) => i.title || 'Untitled';
 const EMPTY: Tally = { people: 0, counts: {} };
-const START: Record<InteractionType, string> = { choice: 'Start poll', wordcloud: 'Start poll', rating: 'Start poll', open: 'Start poll', ranking: 'Start poll', quiz: 'Start quiz', survey: 'Start survey' };
+const START: Record<InteractionType, string> = { choice: 'Start poll', wordcloud: 'Start poll', rating: 'Start poll', open: 'Start poll', ranking: 'Start poll', quiz: 'Start quiz', survey: 'Start survey', feedback: 'Start feedback' };
+const dateOf = (epochSeconds: number) => new Date(epochSeconds * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 function Host({ id }: { id: string }) {
   const router = useRouter();
@@ -205,8 +206,13 @@ function Host({ id }: { id: string }) {
   /* An interaction that has been deleted leaves the Q&A in its place. */
   const showing = view === 'item' && !item ? 'qa' : view;
   const plan = PLANS[v.plan];
-  const room = draft.interactions.length < plan.interactionsPerSession;
+  /* The polls, quizzes and surveys, which the plan counts, and the feedback form, which has its own place in the list. */
+  const polls = counted(draft.interactions);
+  const feedback = draft.interactions.find((i) => i.type === 'feedback') ?? null;
+  const room = polls.length < plan.interactionsPerSession;
   const full = v.people >= plan.peoplePerSession;
+  /* After the end, the feedback form keeps taking answers until the session's close time. */
+  const feedbackOpen = !!feedback && v.state.active === feedback.id && v.closesAt * 1000 > now;
   const select = (itemId: string) => {
     setSelected(itemId);
     setView('item');
@@ -241,27 +247,28 @@ function Host({ id }: { id: string }) {
     danger: true,
     run: () => void act({ action: 'reset', id: target.id }),
   });
+  /* Moves a poll among the polls; the feedback form keeps its own place, after them. */
   const reorder = (index: number, by: number) => edit((d) => {
-    const next = [...d.interactions];
+    const next = counted(d.interactions);
     [next[index], next[index + by]] = [next[index + by], next[index]];
-    return { ...d, interactions: next };
+    return { ...d, interactions: [...next, ...d.interactions.filter((i) => i.type === 'feedback')] };
   });
   const start = (i: Interaction) => {
     select(i.id);
     void act({ action: 'activate', id: i.id });
   };
   const stop = () => act({ action: 'activate', id: null });
-  const answeredOf = (i: Interaction) => (i.type === 'quiz' ? Math.max(0, ...i.questions.map((q) => v.answered[q.id] ?? 0)) : i.type === 'survey' ? Math.max(0, ...i.polls.map((p) => v.answered[p.id] ?? 0)) : v.answered[i.id] ?? 0);
+  const answeredOf = (i: Interaction) => (i.type === 'quiz' ? Math.max(0, ...i.questions.map((q) => v.answered[q.id] ?? 0)) : isGroup(i) ? Math.max(0, ...i.polls.map((p) => v.answered[p.id] ?? 0)) : v.answered[i.id] ?? 0);
 
   const joinLink = shareLink(origin, v.code);
   const projector = `${origin}${presentPath(id, v.displayKey)}`;
   const resultsHref = resultsPath(id);
   const pendingCount = v.questions.filter((q) => q.status === 'pending').length;
   const itemActive = !!item && v.state.active === item.id;
-  const itemIndex = item ? draft.interactions.findIndex((i) => i.id === item.id) : -1;
-  /* The interaction before or after the open one; Prev and Next start it in place of the running one. */
-  const neighbour = (by: number) => draft.interactions[itemIndex + by] ?? null;
-  const settingsPoll = item && item.type !== 'quiz' && item.type !== 'survey' && hasSettings(item) ? item : null;
+  const itemIndex = item ? polls.findIndex((i) => i.id === item.id) : -1;
+  /* The poll before or after the open one; Prev and Next start it in place of the running one. The feedback form has no neighbours. */
+  const neighbour = (by: number) => (itemIndex < 0 ? null : polls[itemIndex + by] ?? null);
+  const settingsPoll = item && item.type !== 'quiz' && !isGroup(item) && hasSettings(item) ? item : null;
   const qaSwitches = (
     <>
       <div className="setting">
@@ -274,6 +281,48 @@ function Host({ id }: { id: string }) {
       </div>
     </>
   );
+
+  /** One card in the list. `index` is the poll's place among the polls; null for the feedback form, which is not moved or duplicated. */
+  const card = (i: Interaction, index: number | null) => {
+    const active = v.state.active === i.id;
+    const name = nameOf(i);
+    const open = i.type === 'feedback' && feedbackOpen;
+    return (
+      <div key={i.id} className={`icard ${showing === 'item' && selected === i.id ? 'selected' : ''} ${active && !ended ? 'active' : ''}`} onClick={() => select(i.id)}>
+        <button type="button" className="title"><span>{name}</span></button>
+        <div className="meta">
+          <span className="kind" title={TYPE_LABEL[i.type]}><Icon name={TYPE_ICON[i.type]} size={20} /></span>
+          <span className={`small num grow ${(active && !ended) || open ? 'live-dot' : 'muted'}`}>{answeredOf(i)} answered{ended && open && ` · Open until ${dateOf(v.closesAt)}`}</span>
+          {!ended && (
+            <div className="acts" onClick={(e) => e.stopPropagation()}>
+              {active && i.type !== 'quiz' && !isGroup(i) && (
+                <button className="icon-btn ghost sm" aria-label={v.state.showResults ? 'Hide results' : 'Show results'} title={v.state.showResults ? 'Hide results' : 'Show results'} aria-pressed={!v.state.showResults} disabled={busy}
+                  onClick={() => act({ action: 'results', on: !v.state.showResults })}><Icon name={v.state.showResults ? 'eye' : 'eyeoff'} /></button>
+              )}
+              {active && i.type !== 'quiz' && (
+                <button className="icon-btn ghost sm" aria-label={v.state.locked ? 'Open voting' : 'Close voting'} title={v.state.locked ? 'Open voting' : 'Close voting'} aria-pressed={v.state.locked} disabled={busy}
+                  onClick={() => act({ action: 'lock', on: !v.state.locked })}><Icon name={v.state.locked ? 'lock' : 'unlock'} /></button>
+              )}
+              {active
+                ? <button className="go stop" aria-label={`Stop ${name}`} title="Stop" disabled={busy} onClick={stop}><Icon name="stop" /></button>
+                : <button className="go" aria-label={`Start ${name}`} title="Start" disabled={busy} onClick={() => start(i)}><Icon name="play" /></button>}
+              <Menu label={`More for ${name}`} className="icon-btn ghost sm" trigger={<Icon name="morev" />}>
+                {index !== null && (
+                  <>
+                    <button disabled={index === 0} onClick={() => reorder(index, -1)}><Icon name="up" />Move up</button>
+                    <button disabled={index === polls.length - 1} onClick={() => reorder(index, 1)}><Icon name="down" />Move down</button>
+                    {room && <button onClick={() => duplicate(i)}><Icon name="copy" />Duplicate</button>}
+                  </>
+                )}
+                <button disabled={active || (answeredOf(i) === 0 && !(i.type === 'quiz' && v.state.played?.includes(i.id)))} onClick={() => reset(i)}><Icon name="restore" />Reset results</button>
+                <button className="danger" onClick={() => remove(i)}><Icon name="trash" />Delete</button>
+              </Menu>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="hostpage">
@@ -348,42 +397,11 @@ function Host({ id }: { id: string }) {
             </button>
           </div>
 
-          <h3>Polls <span className="count num">{draft.interactions.length} / {plan.interactionsPerSession}</span></h3>
-          {draft.interactions.map((i, index) => {
-            const active = v.state.active === i.id;
-            const name = nameOf(i);
-            return (
-              <div key={i.id} className={`icard ${showing === 'item' && selected === i.id ? 'selected' : ''} ${active ? 'active' : ''}`} onClick={() => select(i.id)}>
-                <button type="button" className="title"><span>{name}</span></button>
-                <div className="meta">
-                  <span className="kind" title={TYPE_LABEL[i.type]}><Icon name={TYPE_ICON[i.type]} size={20} /></span>
-                  <span className={`small num grow ${active ? 'live-dot' : 'muted'}`}>{answeredOf(i)} answered</span>
-                  {!ended && (
-                    <div className="acts" onClick={(e) => e.stopPropagation()}>
-                      {active && i.type !== 'quiz' && i.type !== 'survey' && (
-                        <button className="icon-btn ghost sm" aria-label={v.state.showResults ? 'Hide results' : 'Show results'} title={v.state.showResults ? 'Hide results' : 'Show results'} aria-pressed={!v.state.showResults} disabled={busy}
-                          onClick={() => act({ action: 'results', on: !v.state.showResults })}><Icon name={v.state.showResults ? 'eye' : 'eyeoff'} /></button>
-                      )}
-                      {active && i.type !== 'quiz' && (
-                        <button className="icon-btn ghost sm" aria-label={v.state.locked ? 'Open voting' : 'Close voting'} title={v.state.locked ? 'Open voting' : 'Close voting'} aria-pressed={v.state.locked} disabled={busy}
-                          onClick={() => act({ action: 'lock', on: !v.state.locked })}><Icon name={v.state.locked ? 'lock' : 'unlock'} /></button>
-                      )}
-                      {active
-                        ? <button className="go stop" aria-label={`Stop ${name}`} title="Stop" disabled={busy} onClick={stop}><Icon name="stop" /></button>
-                        : <button className="go" aria-label={`Start ${name}`} title="Start" disabled={busy} onClick={() => start(i)}><Icon name="play" /></button>}
-                      <Menu label={`More for ${name}`} className="icon-btn ghost sm" trigger={<Icon name="morev" />}>
-                        <button disabled={index === 0} onClick={() => reorder(index, -1)}><Icon name="up" />Move up</button>
-                        <button disabled={index === draft.interactions.length - 1} onClick={() => reorder(index, 1)}><Icon name="down" />Move down</button>
-                        {room && <button onClick={() => duplicate(i)}><Icon name="copy" />Duplicate</button>}
-                        <button disabled={active || (answeredOf(i) === 0 && !(i.type === 'quiz' && v.state.played?.includes(i.id)))} onClick={() => reset(i)}><Icon name="restore" />Reset results</button>
-                        <button className="danger" onClick={() => remove(i)}><Icon name="trash" />Delete</button>
-                      </Menu>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          <h3>Polls <span className="count num">{polls.length} / {plan.interactionsPerSession}</span></h3>
+          {polls.map((i, index) => card(i, index))}
+
+          <h3>Feedback</h3>
+          {feedback ? card(feedback, null) : !ended && <div><button className="tall" onClick={() => add('feedback')}><Icon name="plus" />Add feedback</button></div>}
         </section>
 
         <section className="hostdetail">
@@ -436,7 +454,7 @@ function Host({ id }: { id: string }) {
 
           {showing !== 'add' && (
             <div className="startbar">
-              {ended && <span className="tag">Ended</span>}
+              {ended && <span className="tag">{showing === 'item' && item?.type === 'feedback' && feedbackOpen ? `Feedback open until ${dateOf(v.closesAt)}` : 'Ended'}</span>}
               {!ended && showing === 'qa' && (v.state.qaOpen
                 ? <button className="tint-danger tall" disabled={busy} onClick={() => setConfirm({ title: 'Close Q&A', text: 'People can no longer send questions. Upvotes stay open.', action: 'Close Q&A', danger: true, run: () => void act({ action: 'qa-open', on: false }) })}><Icon name="lock" />Close Q&A</button>
                 : <button className="tint-accent tall" disabled={busy} onClick={() => act({ action: 'qa-open', on: true })}><Icon name="unlock" />Open Q&A</button>)}
@@ -449,7 +467,7 @@ function Host({ id }: { id: string }) {
                   {item.type === 'quiz' ? playing && <QuizBar quiz={item} v={v} now={now} busy={busy} act={act} /> : (
                     <>
                       <button className="ghost tall" disabled={busy || !neighbour(-1)} onClick={() => { const to = neighbour(-1); if (to) start(to); }}><Icon name="left" />Prev</button>
-                      {item.type !== 'survey' && (
+                      {!isGroup(item) && (
                         <button className={`icon-btn ghost tall ${v.state.showResults ? '' : 'on'}`} aria-label={v.state.showResults ? 'Hide results' : 'Show results'} title={v.state.showResults ? 'Hide results' : 'Show results'} aria-pressed={!v.state.showResults} disabled={busy}
                           onClick={() => act({ action: 'results', on: !v.state.showResults })}><Icon name={v.state.showResults ? 'eye' : 'eyeoff'} /></button>
                       )}
@@ -504,6 +522,7 @@ const SKETCH: Record<InteractionType, { kind: string; parts: number[] }> = {
   ranking: { kind: 'bars', parts: [92, 70, 48, 28] },
   quiz: { kind: 'blocks', parts: [100, 100, 100] },
   survey: { kind: 'tiles', parts: [100, 100, 100, 100] },
+  feedback: { kind: 'cols', parts: [100, 24, 44, 60, 60] },
 };
 function Sketch({ type }: { type: InteractionType }) {
   const { kind, parts } = SKETCH[type];
@@ -530,8 +549,8 @@ function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDele
   const q = item.type === 'quiz' && v.state.quiz?.quizId === item.id ? v.state.quiz : null;
   /* A quiz that has started keeps its questions, so its fields are read-only from then on. */
   const started = item.type === 'quiz' && (!!v.state.played?.includes(item.id) || (!!q && q.index >= 0));
-  /* The running interaction's counts arrive live. Any other's are the stored ones, loaded when it is opened. */
-  const stored = !active && v.shown?.id === item.id ? v.shown : null;
+  /* A running poll's or quiz's counts arrive live. Any other's are the stored ones, loaded when it is opened (a running survey's or feedback form's too). */
+  const stored = v.shown?.id === item.id ? v.shown : null;
 
   return (
     <div className="stack">
@@ -547,7 +566,7 @@ function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDele
       </div>
 
       {active && item.type === 'quiz' && q && <QuizStage quiz={item} v={v} now={now} />}
-      {active && item.type === 'survey' && (
+      {active && isGroup(item) && (
         <div className="list">
           {item.polls.map((p, i) => <div key={p.id} className="spread"><span className="truncate"><span className="num faint">{i + 1}.</span> {p.title || 'Untitled'}</span><span className="muted num">{v.answered[p.id] ?? 0} answered</span></div>)}
         </div>
@@ -555,6 +574,7 @@ function ItemPanel({ v, item, now, ended, answered, onSettings, onChange, onDele
 
       {item.type === 'quiz' ? <QuizEditor quiz={item} onChange={onChange} disabled={ended || started} tallies={stored?.tallies} />
         : item.type === 'survey' ? <SurveyEditor survey={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} />
+        : item.type === 'feedback' ? <FeedbackEditor feedback={item} onChange={onChange} disabled={ended} tallies={stored?.tallies} texts={stored?.texts} />
         : <PollEditor poll={item} onChange={onChange} disabled={ended} settings={false}
             tally={active ? v.tally ?? EMPTY : stored?.tallies[item.id] ?? EMPTY} texts={active ? v.texts : stored?.texts[item.id]} />}
     </div>

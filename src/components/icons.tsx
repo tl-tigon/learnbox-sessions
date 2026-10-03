@@ -51,6 +51,7 @@ const PATHS = {
   ranking: 'M4 4.500h8M4 10h12M4 15.500h5',
   quiz: 'M6.500 3.500h7v4a3.500 3.500 0 0 1-7 0zM6.500 5H4v1a2.500 2.500 0 0 0 2.500 2.500M13.500 5H16v1a2.500 2.500 0 0 1-2.500 2.500M10 11v3M7 16.500h6',
   survey: 'M3.500 6h5l1.500 1.500h6.500v8.500h-13zM6.500 11h7M6.500 13.500h4',
+  feedback: 'M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9l-3 2.500V14H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM7.500 9.200l1.700 1.700 3.300-3.400',
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -64,5 +65,5 @@ export function Icon({ name, size = 16, label }: { name: IconName; size?: number
   );
 }
 
-export const TYPE_ICON: Record<InteractionType, IconName> = { choice: 'choice', wordcloud: 'cloud', rating: 'star', open: 'text', ranking: 'ranking', quiz: 'quiz', survey: 'survey' };
-export const TYPE_LABEL: Record<InteractionType, string> = { choice: 'Multiple choice', wordcloud: 'Word cloud', rating: 'Rating', open: 'Open text', ranking: 'Ranking', quiz: 'Quiz', survey: 'Survey' };
+export const TYPE_ICON: Record<InteractionType, IconName> = { choice: 'choice', wordcloud: 'cloud', rating: 'star', open: 'text', ranking: 'ranking', quiz: 'quiz', survey: 'survey', feedback: 'feedback' };
+export const TYPE_LABEL: Record<InteractionType, string> = { choice: 'Multiple choice', wordcloud: 'Word cloud', rating: 'Rating', open: 'Open text', ranking: 'Ranking', quiz: 'Quiz', survey: 'Survey', feedback: 'Feedback' };

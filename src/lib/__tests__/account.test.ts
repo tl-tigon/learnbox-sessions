@@ -57,7 +57,7 @@ describe('downloads', () => {
 
     const csv = resultsCsv(r);
     expect(csv).toContain(`"'=SUM(A1)","1"`);
-    expect(csv).toContain('"Survey","Feedback"');
+    expect(csv).toContain('"Part of","Feedback"');
     expect(csv).toContain('"Good pace"');
     expect(csv).toContain('"Jupiter","1","Yes"');
     expect(csv).toMatch(/"Leaderboard","Planets"\r\n"Rank","Name","Points"\r\n"1","Person 1","\d+"/);

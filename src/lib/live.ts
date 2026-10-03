@@ -4,7 +4,7 @@
  * they happen.
  */
 import { canChange, checkAnswer, checkQuizAnswer, mergeDelta, recount, undo } from './engine/answers';
-import { cleanInteractions, findPoll, withNewIds } from './engine/polls';
+import { cleanInteractions, counted, findPoll, isGroup, pollIdsOf, withNewIds } from './engine/polls';
 import { isShown, publicQuestion } from './engine/questions';
 import { finished, forAudience, isLastQuestion, lobby, openQuestion, publicBoard, quizInPlay, quizPhase, quizPoints, rankBoard, reveal } from './engine/quiz';
 import { cleanText } from './engine/words';
@@ -14,7 +14,7 @@ import { planName, planOf } from './plans';
 import { publish } from './push/server';
 import { stateChannel, tallyChannel, type ActiveForAudience, type PushEvent } from './push/events';
 import type { Store } from './store/types';
-import type { Answer, Interaction, Poll, Quiz, Score, Session, SessionState, Tally } from './types';
+import type { Answer, Feedback, Interaction, Poll, Quiz, Score, Session, SessionState, Tally } from './types';
 
 export class LiveError extends Error {
   constructor(public status: number, message: string) {
@@ -24,6 +24,20 @@ export class LiveError extends Error {
 
 /** True once a session has been ended or has passed its close time. */
 export const isClosed = (s: Session) => s.status !== 'live' || s.closesAt * 1000 < Date.now();
+
+const activeOf = (s: Session): Interaction | null => s.interactions.find((i) => i.id === s.state.active) ?? null;
+
+/**
+ * The feedback form while it takes answers: started, and the session not yet past its close time.
+ * Ending the session does not close it, so people who left early can still answer that week.
+ */
+export function takingFeedback(s: Session): Feedback | null {
+  const a = activeOf(s);
+  return a?.type === 'feedback' && s.closesAt * 1000 > Date.now() ? a : null;
+}
+
+/** A phone may join a live session, or an ended one whose feedback form is still taking answers. */
+export const canJoin = (s: Session) => !isClosed(s) || !!takingFeedback(s);
 
 const title = (raw: unknown) => cleanText(typeof raw === 'string' ? raw : '').slice(0, LIMITS.titleChars) || 'Untitled';
 
@@ -66,7 +80,7 @@ const needsPro = (message: string) => new LiveError(402, message);
  */
 export async function duplicateSession(db: Store, ownerSub: string, source: Session) {
   const plan = await planOf(db, ownerSub);
-  if (source.interactions.length > plan.interactionsPerSession || (!plan.surveys && source.interactions.some((i) => i.type === 'survey'))) {
+  if (counted(source.interactions).length > plan.interactionsPerSession || (!plan.surveys && source.interactions.some((i) => i.type === 'survey'))) {
     throw needsPro('A copy of this session needs Pro');
   }
   return claimSession(db, ownerSub, { title: `${source.title} copy`.slice(0, LIMITS.titleChars), interactions: withNewIds(source.interactions), qa: { ...source.qa } });
@@ -95,8 +109,8 @@ export async function editSession(db: Store, s: Session, raw: Record<string, unk
         const stored = session.interactions.find((x) => x.id === i.id);
         return i.type === 'quiz' && stored?.type === 'quiz' && quizStarted(session, i.id) ? stored : i;
       });
-      /* What the plan holds. A session made on Pro keeps what it has after Pro ends, and takes no more. */
-      if (plan && edit.interactions.length > plan.interactionsPerSession && edit.interactions.length > session.interactions.length) {
+      /* What the plan holds. A session made on Pro keeps what it has after Pro ends, and takes no more. The feedback form is outside the count. */
+      if (plan && counted(edit.interactions).length > plan.interactionsPerSession && counted(edit.interactions).length > counted(session.interactions).length) {
         throw needsPro(`Up to ${plan.interactionsPerSession} polls and quizzes in a session on Free`);
       }
       if (plan && !plan.surveys && edit.interactions.some((i) => i.type === 'survey' && !session.interactions.some((x) => x.id === i.id && x.type === 'survey'))) {
@@ -133,8 +147,6 @@ export type ControlAction =
   | { action: 'forget-quiz'; id: string };
 
 export const CONTROL_ACTIONS = ['activate', 'results', 'lock', 'qa-open', 'announce', 'quiz-next', 'quiz-reveal', 'quiz-board'];
-
-const activeOf = (s: Session): Interaction | null => s.interactions.find((i) => i.id === s.state.active) ?? null;
 
 /** The state after a control. `now` is the server's clock, which times quiz questions. */
 export function applyControl(s: Session, a: ControlAction, now = Date.now()): SessionState {
@@ -199,11 +211,15 @@ export function applyControl(s: Session, a: ControlAction, now = Date.now()): Se
   }
 }
 
-/** The active interaction as phones and the big screen receive it: a quiz question without its answer. */
+/**
+ * The active interaction as phones and the big screen receive it: a quiz question without its
+ * answer. Once the session is closed, only a feedback form still taking answers is active.
+ */
 export function activeForAudience(s: Session): ActiveForAudience | null {
-  const a = activeOf(s);
+  const a = isClosed(s) ? takingFeedback(s) : activeOf(s);
   if (!a) return null;
   if (a.type === 'survey') return { kind: 'survey', survey: a };
+  if (a.type === 'feedback') return { kind: 'feedback', feedback: a };
   if (a.type !== 'quiz') return { kind: 'poll', poll: a };
   const inPlay = quizInPlay(s.state, a);
   return { kind: 'quiz', id: a.id, title: a.title, count: a.questions.length, question: inPlay?.question ? forAudience(inPlay.question) : null };
@@ -249,15 +265,15 @@ export async function resetInteraction(db: Store, s: Session, id: unknown): Prom
   const i = s.interactions.find((x) => x.id === id);
   if (!i) throw new LiveError(404, 'Not found');
   if (s.state.active === i.id) throw new LiveError(409, 'Stop it first');
-  const pollIds = i.type === 'quiz' ? i.questions.map((q) => q.id) : i.type === 'survey' ? i.polls.map((p) => p.id) : [i.id];
   const after = i.type === 'quiz' ? await control(db, s, { action: 'forget-quiz', id: i.id }) : s;
-  await db.clearAnswers(s.id, pollIds);
+  await db.clearAnswers(s.id, pollIdsOf(i));
   if (i.type === 'quiz') await db.clearScores(s.id, i.id);
   return after;
 }
 
+/** Ends the session. Its code is freed, unless the feedback form is still taking answers: then the code keeps working for it until the close time. */
 export async function endSession(db: Store, s: Session): Promise<void> {
-  await db.endSession(s);
+  await db.endSession(s, !!takingFeedback(s));
   await publish(stateChannel(s.id), stateEvent({ ...s, status: 'ended' }));
 }
 
@@ -332,8 +348,8 @@ async function record(db: Store, s: Session, token: string, poll: Poll, raw: unk
     tally = await surely(() => db.bumpTally(s.id, poll.id, c.delta, first));
   }
 
-  /* Every phone can listen to this channel. While results are hidden, and for a survey, only the
-     number who answered goes out; the facilitator's screen reloads to get the rest. */
+  /* Every phone can listen to this channel. While results are hidden, and for a survey or the
+     feedback form, only the number who answered goes out; the facilitator's screen reloads to get the rest. */
   const withheld = inSurvey || !s.state.showResults;
   const shown = withheld ? answeredOnly(tally) : tally;
   const text = !withheld && c.answer.type === 'open' ? c.answer.text : undefined;
@@ -348,17 +364,18 @@ export async function respond(db: Store, s: Session, token: string, pollId: stri
   if (!found || found.parent.id !== s.state.active) throw new LiveError(409, 'This poll is not open');
   if (s.state.locked) throw new LiveError(409, 'Voting is closed');
   await joined(db, s, token);
-  return record(db, s, token, found.poll, raw, found.parent.type === 'survey');
+  return record(db, s, token, found.poll, raw, isGroup(found.parent));
 }
 
 /**
- * A survey sent in one go: an answer for each poll the person filled in. Everything is checked
- * before anything is stored, so a survey is never half saved because of one bad answer.
+ * A survey or the feedback form sent in one go: an answer for each poll the person filled in.
+ * Everything is checked before anything is stored, so it is never half saved because of one bad
+ * answer. The feedback form takes answers after the session has ended, until its close time.
  */
 export async function respondSurvey(db: Store, s: Session, token: string, surveyId: string, raw: unknown): Promise<{ answered: number }> {
-  if (isClosed(s)) throw new LiveError(409, 'This session has ended');
   const survey = s.interactions.find((i) => i.id === surveyId);
-  if (survey?.type !== 'survey' || s.state.active !== surveyId) throw new LiveError(409, 'This survey is not open');
+  if (!survey || !isGroup(survey) || s.state.active !== surveyId) throw new LiveError(409, survey?.type === 'feedback' ? 'Feedback is not open' : 'This survey is not open');
+  if (survey.type === 'feedback' ? !takingFeedback(s) : isClosed(s)) throw new LiveError(409, 'This session has ended');
   if (s.state.locked) throw new LiveError(409, 'Voting is closed');
   await joined(db, s, token);
 
@@ -443,10 +460,11 @@ export async function audienceView(db: Store, s: Session, token: string | null) 
     const tally = s.state.showResults ? await db.getTally(s.id, active.poll.id) : null;
     return { ...base, active: { ...active, mine: mine.map((m) => m.answer), tally } };
   }
-  if (active.kind === 'survey') {
+  if (active.kind === 'survey' || active.kind === 'feedback') {
     const mine: Record<string, Answer[]> = {};
+    const polls = active.kind === 'survey' ? active.survey.polls : active.feedback.polls;
     if (person) {
-      await Promise.all(active.survey.polls.map(async (p) => {
+      await Promise.all(polls.map(async (p) => {
         const got = await db.myAnswers(s.id, p.id, token!);
         if (got.length) mine[p.id] = got.map((m) => m.answer);
       }));
@@ -478,7 +496,7 @@ export async function audienceView(db: Store, s: Session, token: string | null) 
 /** The counts and answers the big screen may show for the active interaction right now. */
 async function activeResults(db: Store, s: Session, now: number) {
   const a = activeOf(s);
-  if (!a || a.type === 'survey') return { tally: null, texts: [], board: null };
+  if (!a || isGroup(a)) return { tally: null, texts: [], board: null };
   if (a.type === 'quiz') {
     const inPlay = quizInPlay(s.state, a);
     if (!inPlay) return { tally: null, texts: [], board: null };
@@ -515,14 +533,15 @@ export async function wallView(db: Store, s: Session) {
 }
 
 /**
- * The stored counts of an interaction the facilitator has open and that is not running: a poll's
- * own, or those of each question of a quiz or survey. The running one is left out; its counts
- * come with the view, held back where the audience's are.
+ * The stored counts of an interaction the facilitator has open: a poll's own, or those of each
+ * question of a quiz, survey or feedback form. A running poll or quiz is left out; its counts
+ * come with the view, held back where the audience's are. A running survey or feedback form is
+ * included: its results are the facilitator's alone, and the feedback form may never stop.
  */
 async function shownResults(db: Store, s: Session, id: string | null, tallies: Record<string, Tally>) {
-  const i = id && id !== s.state.active ? s.interactions.find((x) => x.id === id) : undefined;
-  if (!i) return null;
-  const polls = i.type === 'quiz' ? i.questions.map((q) => ({ id: q.id, open: false })) : (i.type === 'survey' ? i.polls : [i]).map((p) => ({ id: p.id, open: p.type === 'open' }));
+  const i = id ? s.interactions.find((x) => x.id === id) : undefined;
+  if (!i || (i.id === s.state.active && !isGroup(i))) return null;
+  const polls = i.type === 'quiz' ? i.questions.map((q) => ({ id: q.id, open: false })) : (isGroup(i) ? i.polls : [i]).map((p) => ({ id: p.id, open: p.type === 'open' }));
   const texts: Record<string, { text: string; at: string }[]> = {};
   await Promise.all(polls.filter((p) => p.open).map(async (p) => {
     texts[p.id] = (await db.pollAnswers(s.id, p.id, 500)).map((r) => ({ text: r.answer.type === 'open' ? r.answer.text : '', at: r.at }));
@@ -576,7 +595,7 @@ export async function sessionResults(db: Store, s: Session) {
     return [...questions, { kind: 'board' as const, quiz: quiz.title || 'Quiz', board: publicBoard(rankBoard(scores, null), LIMITS.peoplePerSession) }];
   };
   const items = (await Promise.all(s.interactions.map(async (i) => {
-    if (i.type === 'survey') return Promise.all(i.polls.map((p) => pollResult(p, i.title || 'Survey')));
+    if (isGroup(i)) return Promise.all(i.polls.map((p) => pollResult(p, i.type === 'feedback' ? i.title : i.title || 'Survey')));
     if (i.type !== 'quiz') return [await pollResult(i, null)];
     return quizResult(i);
   }))).flat();
