@@ -194,13 +194,19 @@ export function QuizEditor({ quiz, onChange, disabled, tallies }: { quiz: Quiz; 
 }
 
 /** `tallies` and `texts` are the results of each poll in the survey, by its id. */
-/** One poll of a survey or the feedback form, numbered, with its results and a Remove button. */
-function GroupPoll({ poll, index, onChange, onRemove, disabled, tally, texts }: { poll: Poll; index: number; onChange: (p: Poll) => void; onRemove: () => void; disabled?: boolean; tally?: Tally; texts?: Texts }) {
+/** One poll of a survey or the feedback form, numbered, with its results, Move up and down, and Remove. `onMove` is given -1 or 1; `first` and `last` say where it can go. */
+function GroupPoll({ poll, index, onChange, onRemove, onMove, first, last, disabled, tally, texts }: {
+  poll: Poll; index: number; onChange: (p: Poll) => void; onRemove: () => void; onMove: (by: number) => void; first: boolean; last: boolean; disabled?: boolean; tally?: Tally; texts?: Texts;
+}) {
   return (
     <div className="sub">
       <div className="spread">
         <span className="row strong"><Icon name={TYPE_ICON[poll.type]} />{TYPE_LABEL[poll.type]} <span className="num faint">{index + 1}</span>{tally && <span className="count num">· {tally.people} answered</span>}</span>
-        <button type="button" className="icon-btn ghost" aria-label={`Remove question ${index + 1}`} disabled={disabled} onClick={onRemove}><Icon name="trash" /></button>
+        <span className="row" style={{ gap: 2 }}>
+          <button type="button" className="icon-btn ghost" aria-label={`Move question ${index + 1} up`} disabled={disabled || first} onClick={() => onMove(-1)}><Icon name="up" /></button>
+          <button type="button" className="icon-btn ghost" aria-label={`Move question ${index + 1} down`} disabled={disabled || last} onClick={() => onMove(1)}><Icon name="down" /></button>
+          <button type="button" className="icon-btn ghost" aria-label={`Remove question ${index + 1}`} disabled={disabled} onClick={onRemove}><Icon name="trash" /></button>
+        </span>
       </div>
       <PollEditor poll={poll} disabled={disabled} tally={tally?.people ? tally : undefined} texts={texts} onChange={onChange} />
     </div>
@@ -219,13 +225,21 @@ function AddPoll({ onAdd, disabled }: { onAdd: (p: Poll) => void; disabled?: boo
   );
 }
 
+/** The polls with the one at `at` swapped with its neighbour. */
+function moved(polls: Poll[], at: number, by: number): Poll[] {
+  const next = [...polls];
+  [next[at], next[at + by]] = [next[at + by], next[at]];
+  return next;
+}
+
 export function SurveyEditor({ survey, onChange, disabled, tallies, texts }: { survey: Survey; onChange: (s: Survey) => void; disabled?: boolean; tallies?: Record<string, Tally>; texts?: Record<string, Texts> }) {
   return (
     <div className="stack">
       <TitleField label="Survey name" value={survey.title} disabled={disabled} onChange={(title) => onChange({ ...survey, title })} />
       {survey.polls.map((p, i) => (
-        <GroupPoll key={p.id} poll={p} index={i} disabled={disabled} tally={tallies?.[p.id]} texts={texts?.[p.id]}
+        <GroupPoll key={p.id} poll={p} index={i} disabled={disabled} tally={tallies?.[p.id]} texts={texts?.[p.id]} first={i === 0} last={i === survey.polls.length - 1}
           onChange={(next) => onChange({ ...survey, polls: survey.polls.map((x) => (x.id === p.id ? next : x)) })}
+          onMove={(by) => onChange({ ...survey, polls: moved(survey.polls, i, by) })}
           onRemove={() => onChange({ ...survey, polls: survey.polls.filter((x) => x.id !== p.id) })} />
       ))}
       {survey.polls.length < LIMITS.itemsPerGroup && <AddPoll disabled={disabled} onAdd={(p) => onChange({ ...survey, polls: [...survey.polls, p] })} />}
@@ -248,8 +262,9 @@ export function FeedbackEditor({ feedback, onChange, disabled, tallies, texts }:
         </div>
       ))}
       {own.map((p, i) => (
-        <GroupPoll key={p.id} poll={p} index={fixed.length + i} disabled={disabled} tally={tallies?.[p.id]} texts={texts?.[p.id]}
+        <GroupPoll key={p.id} poll={p} index={fixed.length + i} disabled={disabled} tally={tallies?.[p.id]} texts={texts?.[p.id]} first={i === 0} last={i === own.length - 1}
           onChange={(next) => onChange({ ...feedback, polls: feedback.polls.map((x) => (x.id === p.id ? next : x)) })}
+          onMove={(by) => onChange({ ...feedback, polls: moved(feedback.polls, fixed.length + i, by) })}
           onRemove={() => onChange({ ...feedback, polls: feedback.polls.filter((x) => x.id !== p.id) })} />
       ))}
       {feedback.polls.length < LIMITS.itemsPerGroup && <AddPoll disabled={disabled} onAdd={(p) => onChange({ ...feedback, polls: [...feedback.polls, p] })} />}

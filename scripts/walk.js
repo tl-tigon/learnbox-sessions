@@ -561,12 +561,18 @@ const FIRST = { timeout: 120000 };
     await p.click('button:has-text("Add feedback")');
     await p.waitForSelector('.dtitle:has-text("Feedback")', WAIT);
     const fixedShown = await p.$$eval('.dcard .sub .strong', (els) => els.map((e) => e.textContent));
+    /* Two questions of the facilitator's own, the second moved above the first; the fixed ones stay put. */
+    await p.selectOption('label:has-text("Add question") select', 'open');
+    await p.fill('.dcard textarea[aria-label="Question"]', 'One thing to keep');
     await p.selectOption('label:has-text("Add question") select', 'rating');
-    await p.fill('.dcard textarea[aria-label="Question"]', 'Rate the trainer');
+    await p.fill('.dcard .sub:nth-of-type(4) textarea[aria-label="Question"]', 'Rate the trainer');
+    await p.click('button[aria-label="Move question 4 up"]');
+    await p.waitForSelector('.dcard .sub:nth-of-type(3):has-text("Rate the trainer")', WAIT);
+    await p.click('button[aria-label="Remove question 4"]');
     await p.click('button:has-text("Start feedback")');
     await p.waitForSelector('button[aria-label="Stop Feedback"]', WAIT);
     const copyForm = (await api('GET', `/api/sessions/${copyId}`)).body.interactions.find((i) => i.type === 'feedback');
-    check('feedback: the form opens with its two fixed questions and takes a question of the facilitator\'s own',
+    check('feedback: the form opens with its two fixed questions, takes questions of the facilitator\'s own, and moves them',
       fixedShown.some((t) => /rate this session/.test(t)) && fixedShown.some((t) => /^Comments/.test(t)) && copyForm.polls.map((q) => q.type).join() === 'rating,open,rating' && copyForm.polls[2].title === 'Rate the trainer', `${fixedShown.join('|')} ${JSON.stringify(copyForm.polls.map((q) => q.type))}`);
     await phones[1].goto(`${BASE}/s?c=${copied.code}`);
     await phones[1].waitForSelector('.poll-label:has-text("Feedback")', FIRST);
