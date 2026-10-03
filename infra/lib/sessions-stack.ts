@@ -159,7 +159,8 @@ export class SessionsStack extends cdk.Stack {
     /* Throttling: a whole room answers in the same second, so the default is generous; billing is a trickle. */
     const stage = api.defaultStage!.node.defaultChild as apigw.CfnStage;
     stage.defaultRouteSettings = { throttlingRateLimit: 500, throttlingBurstLimit: 1000 };
-    stage.routeSettings = Object.fromEntries(routes.filter((r) => r.group === 'billing').flatMap((r) => r.methods.map((m) => [`${m} ${r.path}`, { throttlingRateLimit: 10, throttlingBurstLimit: 20 }])));
+    /* routeSettings is a raw map (CloudFormation's own casing), unlike defaultRouteSettings. */
+    stage.routeSettings = Object.fromEntries(routes.filter((r) => r.group === 'billing').flatMap((r) => r.methods.map((m) => [`${m} ${r.path}`, { ThrottlingRateLimit: 10, ThrottlingBurstLimit: 20 }])));
 
     /* ---- The site ---- */
     const bucket = new s3.Bucket(this, 'Site', {
