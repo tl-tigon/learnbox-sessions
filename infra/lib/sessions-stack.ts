@@ -41,6 +41,8 @@ export interface SessionsStackProps extends cdk.StackProps {
   certificateArn?: string;
   /** Where the budget and the alarms write. */
   alertEmail?: string;
+  /** The address sign-up codes come from, once SES has production access (e.g. no-reply@learnbox.one). Unset, Cognito's own sender is used: 50 a day. */
+  sesFrom?: string;
   /** Read from the deploying shell's environment; never written to git. */
   secrets: { PAYU_KEY?: string; PAYU_SALT?: string; PAYU_ENV?: string; ANTHROPIC_API_KEY?: string; ANTHROPIC_MODEL?: string; ORIGIN_SECRET?: string };
 }
@@ -76,8 +78,10 @@ export class SessionsStack extends cdk.Stack {
       standardAttributes: { email: { required: true, mutable: false } },
       passwordPolicy: { minLength: 8, requireLowercase: false, requireUppercase: false, requireDigits: false, requireSymbols: false },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
-      /* Cognito's own sender until SES leaves its sandbox: 50 emails a day. */
-      email: cognito.UserPoolEmail.withCognito(),
+      /* Cognito's own sender until SES leaves its sandbox (50 emails a day); then the domain's own address. */
+      email: props.sesFrom
+        ? cognito.UserPoolEmail.withSES({ fromEmail: props.sesFrom, fromName: 'LearnBox Sessions', sesRegion: this.region, sesVerifiedDomain: props.sesFrom.split('@')[1] })
+        : cognito.UserPoolEmail.withCognito(),
       userVerification: { emailSubject: 'Your LearnBox Sessions code', emailBody: 'Your code is {####}.', emailStyle: cognito.VerificationEmailStyle.CODE },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });

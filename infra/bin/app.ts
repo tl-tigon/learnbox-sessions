@@ -21,6 +21,7 @@ new SessionsStack(app, 'LearnBoxSessions', {
   domain: ctx('domain'),
   certificateArn: ctx('certificateArn'),
   alertEmail: ctx('alertEmail'),
+  sesFrom: ctx('sesFrom'),
   secrets: {
     PAYU_KEY: process.env.PAYU_KEY,
     PAYU_SALT: process.env.PAYU_SALT,

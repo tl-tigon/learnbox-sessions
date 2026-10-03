@@ -4,7 +4,8 @@
      3. the pages, built with the stack's outputs (user pool, events API), uploaded to the site bucket, and the CDN told to forget the old ones.
    Run from the repo root: node scripts/deploy.mjs [--stack-only | --pages-only]
    Reads from .env.local: PAYU_KEY, PAYU_SALT, PAYU_ENV, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, ALERT_EMAIL, and optionally
-   SITE_DOMAIN with SITE_CERTIFICATE_ARN (the certificate must be in us-east-1). ORIGIN_SECRET is made on first use and kept there.
+   SITE_DOMAIN with SITE_CERTIFICATE_ARN (the certificate must be in us-east-1), and SES_FROM (e.g. no-reply@learnbox.one) once SES has
+   production access. ORIGIN_SECRET is made on first use and kept there.
    AWS_PROFILE defaults to "personal". Nothing here is written to git. */
 import { execSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -42,6 +43,7 @@ const aws = (args) => {
 const context = (siteUrl) => [
   `-c alertEmail=${process.env.ALERT_EMAIL}`,
   siteUrl ? `-c siteUrl=${siteUrl}` : '',
+  process.env.SES_FROM ? `-c sesFrom=${process.env.SES_FROM}` : '',
   process.env.SITE_DOMAIN ? `-c domain=${process.env.SITE_DOMAIN} -c certificateArn=${process.env.SITE_CERTIFICATE_ARN}` : '',
 ].filter(Boolean).join(' ');
 const outputsFile = path.join(ROOT, 'infra', 'outputs.json');
