@@ -56,7 +56,7 @@ const FIRST = { timeout: 120000 };
     // ---- Build a multiple choice poll and a quiz in the editor
     /* A new session opens on the types to add. */
     await p.waitForSelector('button.typecard:has-text("Quiz")', WAIT);
-    check('a new session opens on the types to add', (await p.$$('button.typecard')).length === 7);
+    check('a new session opens on the types to add', (await p.$$('button.typecard')).length === 8);
     const add = async (type) => { await p.click('.hostlist button.primary:has-text("Add")'); await p.click(`button.typecard:has-text("${type}")`); };
     await add('Multiple choice');
     await p.fill('textarea[aria-label="Question"]', 'Where should we go?');

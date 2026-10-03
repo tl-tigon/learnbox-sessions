@@ -435,6 +435,11 @@ function Host({ id }: { id: string }) {
                       </button>
                     );
                   })}
+                  {/* The feedback form: one per session, so once added the tile opens it instead. */}
+                  <button type="button" className="typecard" onClick={feedback ? () => select(feedback.id) : () => add('feedback')}>
+                    <span className="thumb"><Sketch type="feedback" /></span>
+                    <span className="label"><Icon name={TYPE_ICON.feedback} size={20} />{TYPE_LABEL.feedback}{feedback && <span className="pill-pro">Added</span>}</span>
+                  </button>
                 </div>
               </div>
             )}
