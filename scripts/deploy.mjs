@@ -63,7 +63,7 @@ if (mode === '--code') {
     `-c siteUrl=${siteUrl}`,
     `-c origins=${siteUrl},https://${process.env.AMPLIFY_DOMAIN}`,
     process.env.SES_FROM ? `-c sesFrom=${process.env.SES_FROM}` : '',
-    process.env.COMPANY_LINE ? `-c "companyLine=${process.env.COMPANY_LINE}"` : '',
+    process.env.SUPPORT_EMAIL ? `-c replyTo=${process.env.SUPPORT_EMAIL}` : '',
     process.env.API_DOMAIN ? `-c apiDomain=${process.env.API_DOMAIN} -c apiCertificateArn=${process.env.API_CERTIFICATE_ARN}` : '',
   ].filter(Boolean).join(' ');
   run(`npx cdk deploy --profile ${PROFILE} --require-approval never --outputs-file outputs.json ${context}`, { cwd: path.join(ROOT, 'infra') });

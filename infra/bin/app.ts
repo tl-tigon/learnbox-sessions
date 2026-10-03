@@ -24,7 +24,9 @@ new SessionsStack(app, 'LearnBoxSessions', {
   apiCertificateArn: ctx('apiCertificateArn'),
   alertEmail: ctx('alertEmail'),
   sesFrom: ctx('sesFrom'),
-  companyLine: ctx('companyLine'),
+  /* From the environment, not -c: a shell argument loses characters beyond ASCII on Windows (the middle dot, 2026-10-03). */
+  companyLine: process.env.COMPANY_LINE || undefined,
+  replyTo: ctx('replyTo'),
   reserve: ctx('reserve') === 'true',
   secrets: {
     PAYU_KEY: process.env.PAYU_KEY,

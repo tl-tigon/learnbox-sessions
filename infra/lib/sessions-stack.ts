@@ -47,6 +47,8 @@ export interface SessionsStackProps extends cdk.StackProps {
   sesFrom?: string;
   /** The company line at the foot of the code email (legal name, city, support address). Left out until the owner gives it. */
   companyLine?: string;
+  /** Where a reply to the code email goes (support@learnbox.one). */
+  replyTo?: string;
   /** Reserve each function's concurrency (its spending cap). Needs the account's Lambda limit to be at least 170. */
   reserve?: boolean;
   /** Read from the deploying shell's environment; never written to git. */
@@ -58,9 +60,11 @@ interface RouteEntry { path: string; methods: string[]; group: Group }
 
 const DIST = path.resolve(__dirname, '..', '..', 'dist', 'lambda');
 
-/** The code email, with the company line in its footer (or that line left out). Cognito fills {####}. */
+/** The code email, with the company lines in its footer (' | ' between lines; or left out). Cognito fills {####}. */
 const codeEmail = (companyLine?: string) =>
-  fs.readFileSync(path.join(__dirname, 'email-code.html'), 'utf8').replace(/\s*\{\{COMPANY\}\}/, companyLine ? `\n  ${companyLine.replace(/&/g, '&amp;').replace(/</g, '&lt;')}` : '').replace(/\r?\n\s*/g, '\n');
+  fs.readFileSync(path.join(__dirname, 'email-code.html'), 'utf8')
+    .replace(/\s*\{\{COMPANY\}\}/, companyLine ? `\n  ${companyLine.split(' | ').map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>')}` : '')
+    .replace(/\r?\n\s*/g, '\n');
 
 export class SessionsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SessionsStackProps) {
@@ -88,7 +92,7 @@ export class SessionsStack extends cdk.Stack {
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       /* Cognito's own sender until SES leaves its sandbox (50 emails a day); then the domain's own address. */
       email: props.sesFrom
-        ? cognito.UserPoolEmail.withSES({ fromEmail: props.sesFrom, fromName: 'LearnBox Sessions', sesRegion: this.region, sesVerifiedDomain: props.sesFrom.split('@')[1] })
+        ? cognito.UserPoolEmail.withSES({ fromEmail: props.sesFrom, fromName: 'LearnBox Sessions', replyTo: props.replyTo, sesRegion: this.region, sesVerifiedDomain: props.sesFrom.split('@')[1] })
         : cognito.UserPoolEmail.withCognito(),
       /* The branded code email (email-code.html): the mark from the site, the code large, the company line from .env.local. The same
          template carries the sign-up and the forgotten-password code. */
