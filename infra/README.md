@@ -22,6 +22,10 @@ It bundles the API, deploys the stack (twice the first time, so the Lambdas lear
 4. In Cloudflare, add `sessions` as a CNAME to the distribution's domain (`DistributionDomain` in the outputs), DNS only, not proxied: CloudFront is already the CDN, and a proxied record would put one in front of the other.
 5. In PayU's dashboard, change the account's website to `https://sessions.learnbox.one`.
 
+## The account's Lambda limit
+
+A new account may run 10 Lambda invocations at once in a region, in total: enough to deploy and try the site, far too few for a room of phones. The deploy reads the limit; at 170 or more it reserves each function's concurrency (100 audience, 50 host, 10 billing) as a spending cap, below that it reserves nothing. Raise it to 1,000 (requested 2026-10-03, `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000`) and deploy again; `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384` shows the current value.
+
 ## What costs what
 
 Idle, under a dollar a month: the table and the Lambdas are on demand and inside the free tier, CloudFront's first terabyte is free. The budget alert writes to `ALERT_EMAIL` at 80% of $10 (actual) and 100% (forecast). A session of a few hundred phones costs cents.

@@ -40,8 +40,14 @@ const aws = (args) => {
   if (r.status !== 0) throw new Error(r.stderr || `aws ${args[0]} failed`);
   return r.stdout ? JSON.parse(r.stdout) : null;
 };
+/* Each function's concurrency is reserved (a spending cap) only when the account's Lambda limit has room: 160 reserved plus the
+   10 AWS keeps unreserved. A new account's limit is 10 in total; infra/README.md says how to raise it. */
+const lambdaLimit = aws(['lambda', 'get-account-settings']).AccountLimit.ConcurrentExecutions;
+const reserve = lambdaLimit >= 170;
+console.log(`Lambda concurrency limit ${lambdaLimit}: ${reserve ? 'reserving per function' : 'no per-function reservation (raise the limit to 1000 for a real audience)'}`);
 const context = (siteUrl) => [
   `-c "alertEmail=${process.env.ALERT_EMAIL}"`,
+  `-c reserve=${reserve}`,
   siteUrl ? `-c siteUrl=${siteUrl}` : '',
   process.env.SES_FROM ? `-c sesFrom=${process.env.SES_FROM}` : '',
   process.env.SITE_DOMAIN ? `-c domain=${process.env.SITE_DOMAIN} -c certificateArn=${process.env.SITE_CERTIFICATE_ARN}` : '',

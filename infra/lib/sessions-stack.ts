@@ -43,6 +43,8 @@ export interface SessionsStackProps extends cdk.StackProps {
   alertEmail?: string;
   /** The address sign-up codes come from, once SES has production access (e.g. no-reply@learnbox.one). Unset, Cognito's own sender is used: 50 a day. */
   sesFrom?: string;
+  /** Reserve each function's concurrency (its spending cap). Needs the account's Lambda limit to be at least 170. */
+  reserve?: boolean;
   /** Read from the deploying shell's environment; never written to git. */
   secrets: { PAYU_KEY?: string; PAYU_SALT?: string; PAYU_ENV?: string; ANTHROPIC_API_KEY?: string; ANTHROPIC_MODEL?: string; ORIGIN_SECRET?: string };
 }
@@ -139,7 +141,9 @@ export class SessionsStack extends cdk.Stack {
         code: lambda.Code.fromAsset(DIST, { exclude: ['*', `!${group}.js`] }),
         memorySize: sizing[group].memory,
         timeout: cdk.Duration.seconds(sizing[group].timeout),
-        reservedConcurrentExecutions: sizing[group].concurrency,
+        /* A cap on each function's spend. Only when the account's own Lambda limit has room for them (a new account's is 10 in total):
+           deploy.mjs reads the limit and passes reserve=true. */
+        reservedConcurrentExecutions: props.reserve ? sizing[group].concurrency : undefined,
         environment: { ...env, ...Object.fromEntries(Object.entries(extra[group]).filter(([, v]) => v)) as Record<string, string> },
         logGroup: new logs.LogGroup(this, `Logs-${group}`, { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: cdk.RemovalPolicy.DESTROY }),
       });
