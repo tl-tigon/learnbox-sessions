@@ -17,6 +17,7 @@ import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as appsync from 'aws-cdk-lib/aws-appsync';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as amplify from 'aws-cdk-lib/aws-amplify';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as cw from 'aws-cdk-lib/aws-cloudwatch';
@@ -36,8 +37,11 @@ export interface SessionsStackProps extends cdk.StackProps {
   siteUrl?: string;
   /** The addresses pages are served from (the Amplify domain, and the custom domain once set), for CORS. Unknown on the first deploy: then any origin, until the second pass. */
   origins?: string[];
-  /** The custom domain (sessions.learnbox.one). Amplify issues its certificate. */
+  /** The site's custom domain (sessions.learnbox.one), added to the Amplify app by hand (infra/README.md); here it names the site's address. */
   domain?: string;
+  /** The API's own domain (api.sessions.learnbox.one) and its certificate in this region, issued before the deploy. Both or neither. */
+  apiDomain?: string;
+  apiCertificateArn?: string;
   /** Where the budget and the alarms write: one address, or several separated by commas. */
   alertEmail?: string;
   /** The address sign-up codes come from, once SES has production access (e.g. no-reply@learnbox.one). Unset, Cognito's own sender is used: 50 a day. */
@@ -188,10 +192,16 @@ export class SessionsStack extends cdk.Stack {
       ],
     });
     const branch = new amplify.CfnBranch(this, 'Main', { appId: app.attrAppId, branchName: 'main', stage: 'PRODUCTION', enableAutoBuild: false, framework: 'Web' });
-    /* The custom domain: Amplify issues its certificate and names the two DNS records to add (infra/README.md). */
-    if (props.domain) {
-      const [prefix, ...rest] = props.domain.split('.');
-      new amplify.CfnDomain(this, 'Domain', { appId: app.attrAppId, domainName: rest.join('.'), subDomainSettings: [{ branchName: branch.attrBranchName, prefix }] });
+    /* The site's custom domain is added to the app by hand: CloudFormation would wait on the DNS records. */
+    void branch;
+
+    /* The API's own name, so the browser is not seen calling an execute-api address (owner, 2026-10-03). */
+    let apiTarget: string | undefined;
+    if (props.apiDomain) {
+      if (!props.apiCertificateArn) throw new Error('apiDomain needs apiCertificateArn');
+      const dn = new apigw.DomainName(this, 'ApiDomain', { domainName: props.apiDomain, certificate: acm.Certificate.fromCertificateArn(this, 'ApiCert', props.apiCertificateArn) });
+      new apigw.ApiMapping(this, 'ApiMapping', { api, domainName: dn });
+      apiTarget = dn.regionalDomainName;
     }
 
     /* ---- Watching it ---- */
@@ -230,6 +240,8 @@ export class SessionsStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AmplifyDomain', { value: `main.${app.attrDefaultDomain}` });
     new cdk.CfnOutput(this, 'SiteUrl', { value: props.domain ? `https://${props.domain}` : `https://main.${app.attrDefaultDomain}` });
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.apiEndpoint });
+    /* What the DNS record for the API's own name points at, once the domain is in. */
+    new cdk.CfnOutput(this, 'ApiDomainTarget', { value: apiTarget ?? '' });
     new cdk.CfnOutput(this, 'UserPoolId', { value: pool.userPoolId });
     new cdk.CfnOutput(this, 'UserPoolClientId', { value: client.userPoolClientId });
     new cdk.CfnOutput(this, 'EventsHttpDomain', { value: events.httpDns });

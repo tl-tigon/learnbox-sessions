@@ -4,8 +4,8 @@
  * region ap-south-1. Secrets come from the deploying shell's environment (scripts/deploy.mjs
  * reads them from .env.local) and are never written here or to git.
  *
- * Context (-c): siteUrl (the site's address, for links the server sends out), domain (the custom
- * domain, once DNS is set up), origins (the
+ * Context (-c): siteUrl (the site's address, for links the server sends out), domain (the site's custom
+ * domain), apiDomain and apiCertificateArn (the API's own name and its issued certificate), origins (the
  * site's addresses, for CORS), alertEmail (where the budget and alarms write), sesFrom, reserve.
  */
 import * as cdk from 'aws-cdk-lib';
@@ -20,6 +20,8 @@ new SessionsStack(app, 'LearnBoxSessions', {
   siteUrl: ctx('siteUrl'),
   origins: ctx('origins')?.split(','),
   domain: ctx('domain'),
+  apiDomain: ctx('apiDomain'),
+  apiCertificateArn: ctx('apiCertificateArn'),
   alertEmail: ctx('alertEmail'),
   sesFrom: ctx('sesFrom'),
   reserve: ctx('reserve') === 'true',

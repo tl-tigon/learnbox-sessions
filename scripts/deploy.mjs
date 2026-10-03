@@ -5,9 +5,11 @@
         as a deployment of the branch `main`.
    Run from the repo root: node scripts/deploy.mjs [--stack-only | --pages-only]
    Reads from .env.local: PAYU_KEY, PAYU_SALT, PAYU_ENV, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, ALERT_EMAIL, and optionally
-   SITE_DOMAIN (sessions.learnbox.one, once its DNS records are in place: infra/README.md) and SES_FROM (e.g. no-reply@learnbox.one)
-   once SES has production access. AWS_PROFILE defaults to "personal". Nothing here is written to git. */
+   SITE_DOMAIN (sessions.learnbox.one, once its DNS records are in place), API_DOMAIN with API_CERTIFICATE_ARN (the API's own name and
+   its issued certificate in ap-south-1; the pages call that name once its DNS record resolves, the gateway's address until then; see
+   infra/README.md) and SES_FROM (e.g. no-reply@learnbox.one) once SES has production access. AWS_PROFILE defaults to "personal". Nothing here is written to git. */
 import { execSync, spawnSync } from 'node:child_process';
+import dns from 'node:dns/promises';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +52,7 @@ const context = (siteUrl) => [
   origins().length ? `-c origins=${origins().join(',')}` : '',
   process.env.SES_FROM ? `-c sesFrom=${process.env.SES_FROM}` : '',
   process.env.SITE_DOMAIN ? `-c domain=${process.env.SITE_DOMAIN}` : '',
+  process.env.API_DOMAIN ? `-c apiDomain=${process.env.API_DOMAIN} -c apiCertificateArn=${process.env.API_CERTIFICATE_ARN}` : '',
 ].filter(Boolean).join(' ');
 const outputsFile = path.join(ROOT, 'infra', 'outputs.json');
 const outputs = () => JSON.parse(fs.readFileSync(outputsFile, 'utf8')).LearnBoxSessions;
@@ -66,9 +69,13 @@ if (mode !== '--pages-only') {
 
 if (mode !== '--stack-only') {
   const o = outputs();
+  /* The API's own name, once its DNS record exists; the gateway's address until then, so the pages always reach an API. */
+  const apiName = process.env.API_DOMAIN && (await dns.resolveCname(process.env.API_DOMAIN).then(() => true, () => dns.lookup(process.env.API_DOMAIN).then(() => true, () => false)));
+  const apiUrl = apiName ? `https://${process.env.API_DOMAIN}` : o.ApiUrl;
+  if (process.env.API_DOMAIN && !apiName) console.warn(`${process.env.API_DOMAIN} does not resolve yet: the pages call ${o.ApiUrl}. Deploy the pages again once the DNS record is in.`);
   const pageEnv = {
     ...process.env,
-    NEXT_PUBLIC_API_URL: o.ApiUrl,
+    NEXT_PUBLIC_API_URL: apiUrl,
     NEXT_PUBLIC_AUTH_MODE: 'cognito',
     NEXT_PUBLIC_COGNITO_USER_POOL_ID: o.UserPoolId,
     NEXT_PUBLIC_COGNITO_CLIENT_ID: o.UserPoolClientId,
@@ -101,5 +108,5 @@ if (mode !== '--stack-only') {
     if (status === 'FAILED' || status === 'CANCELLED') throw new Error(`Amplify deployment ${status}: ${JSON.stringify(job.steps.map((s) => [s.stepName, s.status, s.statusReason]))}`);
     process.stdout.write('.');
   }
-  console.log(`\nSite: ${o.SiteUrl}\nAPI: ${o.ApiUrl}\nUser pool: ${o.UserPoolId}`);
+  console.log(`\nSite: ${o.SiteUrl}\nAPI: ${apiUrl}${o.ApiDomainTarget ? ` (DNS: ${process.env.API_DOMAIN} CNAME ${o.ApiDomainTarget})` : ''}\nUser pool: ${o.UserPoolId}`);
 }

@@ -12,15 +12,15 @@ node scripts/deploy.mjs
 
 It bundles the API, deploys the stack (twice the first time, so the Lambdas and the API's CORS learn the site's address), builds the pages with the stack's outputs, zips them and hands the zip to Amplify Hosting as a deployment of the branch `main`. No build runs in AWS and nothing is connected to Git. `--stack-only` and `--pages-only` do one half. The outputs land in `infra/outputs.json` (ignored by git). First time only, the account needs CDK's bootstrap: `cd infra && npx cdk bootstrap --profile personal`.
 
-## The custom domain
+## The custom domains
 
-`learnbox.one` is served by Cloudflare. For `sessions.learnbox.one`:
+ is served by Cloudflare. Every record below is DNS only (grey cloud, not proxied): Amplify and API Gateway are already the edge, and a proxied record would put one in front of the other. Set up on 2026-10-03; the records were given to the owner then.
 
-1. Put `SITE_DOMAIN=sessions.learnbox.one` in `.env.local` and deploy. The stack adds the domain to the Amplify app, which issues the certificate itself.
-2. `aws amplify get-domain-association --app-id <AmplifyAppId> --domain-name learnbox.one --profile personal --region ap-south-1` shows two records to add in Cloudflare, both DNS only (not proxied): a CNAME that proves the domain (`certificateVerificationDNSRecord`) and the `sessions` CNAME to the app (`subDomains[].dnsRecord`). Amplify is already the CDN; a proxied record would put one in front of the other.
-3. The domain's status in that output goes to `AVAILABLE` within an hour of the records being added.
-4. The API's own name, `api.sessions.learnbox.one` (planned, not built): a certificate in ap-south-1 (`aws acm request-certificate --domain-name api.sessions.learnbox.one --validation-method DNS`), its validation CNAME in Cloudflare, an API Gateway custom domain mapped to the HTTP API in the stack, the `api` CNAME to the gateway's regional domain (DNS only), and `NEXT_PUBLIC_API_URL` pointed at it by the deploy script.
-5. In PayU's dashboard, change the account's website to `https://sessions.learnbox.one`.
+**The site, .** The domain is added to the Amplify app by hand, not by the stack (CloudFormation would sit waiting on the DNS records): . Then  names two CNAMEs: one that proves the domain for Amplify's certificate () and  to the app (). Its  reaches  within an hour of the records being added.  in  makes it the site's address for the stack (links the server sends, CORS).
+
+**The API, ** (owner, 2026-10-03: the browser should not be seen calling an execute-api address). A certificate in this region, , whose validation CNAME () goes into Cloudflare. Once it is ,  and  in  make the stack add the gateway's custom domain, and the output  is what the  CNAME points at. The pages call the name once it resolves (the deploy checks), the gateway's address until then; deploy the pages again after the record is in.
+
+Then, in PayU's dashboard, change the account's website to .
 
 ## The account's Lambda limit
 
