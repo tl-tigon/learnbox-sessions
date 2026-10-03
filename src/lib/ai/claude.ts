@@ -41,13 +41,13 @@ export function estimateCost(model: string, inputTokens: number, outputTokens: n
 
 /**
  * Asks the model and returns its text. `standIn` makes the development answer when there is no
- * key; `fail` (development only) makes that answer fail, so the screens' failure path can be walked.
+ * key; `fail` (development only, with or without a key) makes the call fail, so the screens' failure path can be walked.
  */
 export async function complete(system: string, user: string, maxTokens: number, standIn: () => string, fail = false): Promise<Completion> {
+  if (fail && devAuth()) throw new AiError(502, FAILED);
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     if (!devAuth()) throw new AiError(503, 'AI is not set up');
-    if (fail) throw new AiError(502, FAILED);
     const text = standIn();
     return { text, model: 'standin', inputTokens: Math.ceil((system.length + user.length) / 4), outputTokens: Math.ceil(text.length / 4), costUsd: 0 };
   }

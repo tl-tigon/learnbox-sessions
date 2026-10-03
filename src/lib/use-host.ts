@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authed } from './auth/client';
+import { request } from './net';
 import type { PublicQuestion } from './engine/questions';
 import type { BoardEntry } from './engine/quiz';
 import { useLive } from './use-live';
@@ -105,7 +106,7 @@ function useScreen<T extends Shared>(id: string, load: () => Promise<T>, countsI
 export function useWall(id: string, displayKey: string | null) {
   const load = useCallback(async () => {
     const url = `/api/sessions/${id}?view=wall`;
-    const r = displayKey ? await fetch(url, { headers: { 'x-display-key': displayKey }, cache: 'no-store' }) : await authed(url);
+    const r = displayKey ? await request(url, { headers: { 'x-display-key': displayKey }, cache: 'no-store' }) : await authed(url);
     if (r.status === 401 || r.status === 404) throw new Error(r.status === 401 ? 'Sign in' : 'Not found');
     if (!r.ok) throw new Error('Connection lost');
     return (await r.json()) as WallView;

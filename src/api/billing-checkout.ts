@@ -1,5 +1,5 @@
 import { store } from '@/lib/store';
-import { siteOrigin, startOrder } from '@/lib/billing';
+import { apiOrigin, startOrder } from '@/lib/billing';
 import { fail, isResponse, json, limited, readJson, requireUser } from '@/lib/http';
 import { LiveError } from '@/lib/live';
 
@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   if (isResponse(u)) return u;
   if (limited(`pay:${u.sub}`, 10)) return fail(429, 'Too many tries. Wait a minute.');
   try {
-    return json(await startOrder(store(), u, await readJson(req), siteOrigin(req)));
+    return json(await startOrder(store(), u, await readJson(req), apiOrigin(req)));
   } catch (e) {
     if (e instanceof LiveError) return fail(e.status, e.message);
     throw e;

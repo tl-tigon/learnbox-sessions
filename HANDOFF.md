@@ -4,7 +4,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 
 ## Where things stand
 
-**The product was rebuilt on 2026-10-02 around Slido's event model, with a new interface.** The earlier slide-deck version (presentations, slides, a control view) is gone; its rules for counting, Q&A, quiz scoring, storage and downloads were carried over. Everything is in a local git repo only (`main`). There is no GitHub remote yet.
+**Live since 2026-10-03** at https://main.d2wqz9tncl5dz7.amplifyapp.com (the API at https://wtuoqq61y3.execute-api.ap-south-1.amazonaws.com, user pool `ap-south-1_BAx1Xo4ju`, table `LearnBoxSessions`), deployed from this machine with `node scripts/deploy.mjs`. Payments are on with the Live PayU keys. Everything is in a local git repo only (`main`). There is no GitHub remote yet.
 
 **What works now** (in-memory store, with development sign-in):
 - **Facilitator**
@@ -64,7 +64,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 
 **Tests:**
 - `npm test` runs 112 vitest tests: answers, cleaning, sessions, vote changes, surveys, the feedback form (`feedback.test.ts`: its fixed questions, Free, answers after the end, the code kept, the close time), the AI features (`ai.test.ts`: what the model is sent, the cache, too little data, failures, the mocked Anthropic request and its usage record, the monthly allowance and the per-minute guard, every follow-up mode launched and answered, what the model returns kept as text, and that no page or component reads the key or the prompts), views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
-- The same walk passes 82 of 82 against the production shape: the built files served as a CDN would and the API running through the Lambda bundles (`npm run preview`, then `BASE=http://localhost:3300 node scripts/walk.js`).
+- The same walk passes 82 of 82 against the production shape: the built files served as Amplify Hosting would and the API running through the Lambda bundles (`npm run preview`, then `BASE=http://localhost:3300 node scripts/walk.js`).
 - A browser walk passes 82 of 82 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
   - Screenshots go to `scripts/live-walk/`, which is gitignored.
@@ -89,7 +89,8 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 ## Decisions by the owner
 - **2026-10-01**: LearnBox Sessions is LearnBox's free tool, like HubSpot's free tools. The UI must be SaaS-grade on the front page and after sign-in. Copy is plain statements.
 - **2026-10-02**: the name is LearnBox Sessions, at `sessions.learnbox.one`.
-- **2026-10-03**: no managed compute. The pages are plain files on a CDN and the API runs as Lambdas behind API Gateway, after a crawler flood once ran up a large bill on a managed-compute app. Keeping Lambdas warm is decided after a load test.
+- **2026-10-03**: no managed compute. The pages are plain files and the API runs as Lambdas behind API Gateway, after a crawler flood once ran up a large bill on a managed-compute app. Keeping Lambdas warm is decided after a load test.
+- **2026-10-03**: the pages are served by **Amplify Hosting** ("I want frontend on Amplify"), not CloudFront. The deploy script hands Amplify the built files as a zip; nothing is built in AWS and nothing is connected to Git. The browser calls the API at its own address (CORS names the site); only the join link `/j/<code>` is proxied through Amplify so it stays on the site's domain. The custom domain goes through Amplify, which issues the certificate.
 - **2026-10-03**: two plans, Free and Pro. Free holds 100 people and 8 polls and quizzes, with the full Q&A (first set at 200 and 10, tightened the same day); Pro adds 1,000 people, 50 items, surveys and downloads. Pro is ₹79 for 1 month or ₹588 for 12 months (owner, 2026-10-03). Payments go through the owner's PayU (India) account.
 - **2026-10-03**: PayU may add its convenience fee for the buyer on top of ₹588. The PayU account's website moves from `tigon.one` to `sessions.learnbox.one`.
 - **2026-10-03**: every screen has a white background, whatever the device's setting. Dark stays as the switch in the phone's menu, for the phone's screens only.
@@ -115,8 +116,8 @@ These are in `src/lib/limits.ts`.
 | Leaderboard rows on the big screen | 5 | 10 |
 
 ## Waiting on the owner
-1. **OK to deploy** (account `281627750083`, profile `personal`, region `ap-south-1`). The stack is written in `infra/` (2026-10-03, owner: "write it, don't deploy yet") and synthesises; `node scripts/deploy.mjs` runs it. It makes: the DynamoDB table, the Cognito user pool (email + password with an emailed code, through Cognito's own sender while SES is in its sandbox; Google needs a Google OAuth client from the owner and is not in yet), the AppSync Events API, the three Lambdas behind the HTTP API (throttled; reserved concurrency 100/50/10), the S3 bucket and CloudFront distribution (which forward `/api/*` and `/j/*` to the API with a secret header, so the API answers the CDN alone), error and throttle alarms, and a $10 budget alert. Before deploying, `.env.local` needs `ALERT_EMAIL`, and `PAYU_ENV=live` since the owner wants payments on with the Live keys (real money; 2026-10-03). First time only: `cd infra && npx cdk bootstrap --profile personal`.
-2. **The DNS records** for `sessions.learnbox.one`: `learnbox.one` is served by Cloudflare (nameservers `jim`/`shaz.ns.cloudflare.com`), not Route 53. Two CNAMEs, DNS-only (not proxied): the certificate's validation record, then `sessions` to the distribution's domain. `infra/README.md` has the steps. Until then the site is on the distribution's `cloudfront.net` address, which is enough to test on.
+1. **Deployed 2026-10-03** (account `281627750083`, profile `personal`, region `ap-south-1`), after four failed creates the same day (a key-casing slip in the stage's throttle, the stage made before the routes it names, and the account's Lambda limit of 10) and the move from CloudFront to Amplify Hosting. Live: the DynamoDB table, the Cognito user pool (email + password with a code from no-reply@learnbox.one through SES, which has production access; Google needs a Google OAuth client and is not in yet), the AppSync Events API, the three Lambdas behind the HTTP API (throttled; **no reserved concurrency until the account's Lambda limit is raised**: an increase to 1,000 was requested on 2026-10-03, request `36e54fe2d3cd4b0e8422ed1ce56b97a1aJXGkJ6A`, and the deploy script turns the caps on by itself once it sees room), the Amplify app with the branch `main`, error and throttle alarms, and the $10 budget alert to tejaslahir@gmail.com and manage@tigon.one (each must confirm the SNS subscription email). Payments are on with the Live PayU keys.
+2. **The custom domain** `sessions.learnbox.one`: `learnbox.one` is served by Cloudflare (nameservers `jim`/`shaz.ns.cloudflare.com`), not Route 53. Put `SITE_DOMAIN=sessions.learnbox.one` in `.env.local`, deploy, then add the two records Amplify names (DNS-only, not proxied); `infra/README.md` has the steps. Until then the site is on `main.d2wqz9tncl5dz7.amplifyapp.com`, which is enough to test on. A mistyped address on the site gets Amplify's own empty 404 (a true 404 status; its rule for a 404 page redirects and answers 200).
 3. **OK to create a private GitHub repo** under `tl-tigon`.
 4. **PayU**, to switch payments on:
    - the owner's PayU account is approved for `www.tigon.one` (seen 2026-10-03), which takes no payments, so its website can be changed to `sessions.learnbox.one` (owner, 2026-10-03). Change it once that site is live with the pages PayU checks for: contact, terms, privacy and refunds. Those pages need the company's legal name, a contact address and the refund rule;
@@ -134,12 +135,12 @@ These are in `src/lib/limits.ts`.
 9. **Copy for the owner to confirm**: "Create a session" in the phone's menu; the strip "LearnBox Sessions is free to use at your own meetings." with its "Create a session" button (it leads to `/sign-in?mode=up`); the two lines under the Q&A settings.
 
 ## Next steps
-1. **Deploy**, on the owner's OK: `node scripts/deploy.mjs` (the stack is written). Then: sign up on the live site and check sign-in, a session from two phones, the live push, a payment (real, refund it in PayU), a debrief; run the store tests against the real table; a load test of about 500 simulated phones to settle whether to keep Lambdas warm; the Zoho Books invoice after a payment.
+1. **Test the live site**: sign up and check sign-in (the code arrives from no-reply@learnbox.one), a session from two phones, the live push, a payment (real, refund it in PayU), a debrief; run the store tests against the real table; after the Lambda limit is raised, a load test of about 500 simulated phones to settle whether to keep Lambdas warm; the Zoho Books invoice after a payment; the custom domain.
 2. **The rest of v1**, each waiting on the owner: the site's copy, Terms and Privacy, the LearnBox places, cost alarms.
 3. **More of Slido**, if wanted: downvotes, labels, audience replies, a PowerPoint add-in.
 
 ## To check at the first deploy
-- **The caller's address.** `clientIp` in `src/lib/http.ts` takes the last entry of `X-Forwarded-For`. Behind CloudFront and API Gateway that entry may be CloudFront's own address, with the viewer's before it. Confirm with one request and, if so, take the entry before last; otherwise every caller shares one limit.
+- **The caller's address.** Done: the browser calls the API at its own address, so the gateway's `sourceIp` is the phone's, and the Lambda adapter puts it in `x-client-ip` for `clientIp` (any sent by the caller is dropped).
 - **Cookies from `learnbox.one`.** A browser sends cookies set for `.learnbox.one` to `sessions.learnbox.one` too. LearnBox Sessions sets none and reads none, but the request must still fit the host's header limit. Open the site in a browser that is signed in to LearnBox and confirm it loads.
 - **Store tests against DynamoDB.** The store has never run against a real table. Run the unit tests with `STORE=dynamo` on the dev table before anything else.
 - **Rows written while a session is being deleted** stay until their 12-month expiry. They belong to no session and are not reachable.

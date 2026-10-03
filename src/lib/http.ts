@@ -47,8 +47,8 @@ export function blocked(key: string, perMinute: number): boolean {
 }
 
 /**
- * The caller's address, for rate limits. Behind the CDN, the Lambda adapter sets `x-client-ip`
- * from what the CDN saw (and strips any the caller sent). Otherwise a proxy appends the address
+ * The caller's address, for rate limits. In production the Lambda adapter sets `x-client-ip` from
+ * the connection the gateway saw (and strips any the caller sent). Otherwise a proxy appends the address
  * it saw to the end of X-Forwarded-For, and everything before that is whatever the caller sent,
  * so the last entry is the one to trust.
  */

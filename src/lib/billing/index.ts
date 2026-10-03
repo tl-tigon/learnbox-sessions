@@ -44,8 +44,10 @@ export function gateway(): Gateway | null {
   return null;
 }
 
-/** This site's own address, for the links PayU sends the buyer back to. SITE_URL when the server sits behind a proxy. */
+/** The site's address, where the buyer's browser is sent after paying: SITE_URL in production, where the pages live apart from the API. */
 export const siteOrigin = (req: Request) => (process.env.SITE_URL || new URL(req.url).origin).replace(/\/$/, '');
+/** This API's own address, where PayU posts the signed outcome. */
+export const apiOrigin = (req: Request) => new URL(req.url).origin;
 
 /** PayU takes a transaction id of up to 25 letters and digits. */
 const newTxn = () => Date.now().toString(36).padStart(9, '0') + randomBytes(8).toString('hex');

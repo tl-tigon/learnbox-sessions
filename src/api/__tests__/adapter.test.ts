@@ -67,25 +67,15 @@ describe('the Lambda adapter', () => {
     expect(redirect.headers.location).toBe('https://x/app/account');
   });
 
-  it('behind the CDN, answers only requests carrying the origin secret, and takes the caller\'s address from the CDN alone', async () => {
-    process.env.ORIGIN_SECRET = 'cdn-secret';
-    try {
-      const audience = serve(ROUTES.filter((r) => r.group === 'audience'));
-      const direct = await audience(event({ headers: { host: 'api.example', 'x-client-ip': '1.1.1.1', 'cloudfront-viewer-address': '2.2.2.2:443' } }));
-      expect(direct.statusCode).toBe(404);
-      const viaCdn = event({ headers: { host: 'api.example', 'x-origin-secret': 'cdn-secret', 'x-client-ip': '1.1.1.1', 'cloudfront-viewer-address': '2.2.2.2:443' } });
-      expect((await audience(viaCdn)).statusCode).toBe(200);
-      expect(toRequest(viaCdn).headers.get('x-client-ip')).toBe('2.2.2.2');
-      expect(clientIp(toRequest(viaCdn))).toBe('2.2.2.2');
-      /* The wrong secret is as good as none. */
-      expect((await audience(event({ headers: { host: 'api.example', 'x-origin-secret': 'guess' } }))).statusCode).toBe(404);
-    } finally {
-      delete process.env.ORIGIN_SECRET;
-    }
-    /* With no secret configured (the local preview), nothing is trusted: a sent x-client-ip is dropped. */
-    const plain = toRequest(event({ headers: { host: 'api.example', 'x-client-ip': '1.1.1.1', 'cloudfront-viewer-address': '2.2.2.2:443', 'x-forwarded-for': '9.9.9.9' } }));
-    expect(plain.headers.get('x-client-ip')).toBeNull();
-    expect(clientIp(plain)).toBe('9.9.9.9');
+  it('takes the caller\'s address from the connection the gateway saw, never from a header the caller sent', async () => {
+    const r = toRequest(event({ headers: { host: 'api.example', 'x-client-ip': '1.1.1.1', 'x-forwarded-for': '9.9.9.9' } }));
+    expect(r.headers.get('x-client-ip')).toBe('1.2.3.4');
+    expect(clientIp(r)).toBe('1.2.3.4');
+    /* Without one (the local preview over a socket with no address), a sent x-client-ip is still dropped. */
+    const e = event({ headers: { host: 'api.example', 'x-client-ip': '1.1.1.1', 'x-forwarded-for': '9.9.9.9' } });
+    delete e.requestContext.http.sourceIp;
+    expect(toRequest(e).headers.get('x-client-ip')).toBeNull();
+    expect(clientIp(toRequest(e))).toBe('9.9.9.9');
   });
 
   it('serves one group\'s routes and answers 500, not a crash, when a handler throws', async () => {

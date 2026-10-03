@@ -324,6 +324,7 @@ const FIRST = { timeout: 120000 };
     await p.screenshot({ path: path.join(OUT, '07b-host-poll.png') });
 
     // ---- AI: the debrief of the poll, a follow-up written from it and launched, then taken out again
+    // (With ANTHROPIC_API_KEY in .env.local the dev server asks the real model, so the wording check accepts its text too.)
     await p.click('.ai button:has-text("Debrief")');
     await p.waitForSelector('section[aria-label="LearnBox Debrief"]', WAIT);
     const parts = await p.$$eval('.ai-part h4', (els) => els.map((e) => e.textContent));
@@ -332,7 +333,7 @@ const FIRST = { timeout: 120000 };
     await p.waitForSelector('.ai-card:has-text("2 / ")', WAIT);
     const cached = await api('GET', `/api/sessions/${sessionId}/ai?interaction=${choice.id}`);
     check('AI: the debrief has its four parts, is written from the poll\'s numbers, and a second one is counted',
-      parts.join() === 'What happened,What to explore,Ask the room,Facilitator tip' && /5 people answered/.test(happened) && cached.body.debrief?.interactionId === choice.id && cached.body.usage.debrief.used === 2 && !/Never invent/.test(JSON.stringify(cached.body)),
+      parts.join() === 'What happened,What to explore,Ask the room,Facilitator tip' && /5 people answered|Goa|Coorg|Lonavala/.test(happened) && cached.body.debrief?.interactionId === choice.id && cached.body.usage.debrief.used === 2 && !/Never invent/.test(JSON.stringify(cached.body)),
       `${parts.join()} | ${happened}`);
     await p.screenshot({ path: path.join(OUT, '07c-host-debrief.png') });
     const tooFew = await api('POST', `/api/sessions/${sessionId}/ai`, { feature: 'debrief', interactionId: 'cloud-not-yet' });
