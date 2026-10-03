@@ -5,5 +5,10 @@
 import { ROUTES } from '@/api/all';
 import { dispatch } from '@/api/routes';
 
-const run = (req: Request) => dispatch(req, ROUTES);
+/* `x-client-ip` is the Lambda adapter's to set, from what the CDN saw; here nobody sets it. */
+const run = (req: Request) => {
+  const headers = new Headers(req.headers);
+  headers.delete('x-client-ip');
+  return dispatch(new Request(req.url, { method: req.method, headers, body: req.body, duplex: 'half' } as RequestInit), ROUTES);
+};
 export { run as GET, run as POST, run as PUT, run as PATCH, run as DELETE };

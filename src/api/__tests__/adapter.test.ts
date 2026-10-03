@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { serve, toRequest, toResult, type GatewayEvent } from '../lambda/adapter';
 import { dispatch, matchPath, type Route } from '../routes';
-import { json } from '@/lib/http';
+import { clientIp, json } from '@/lib/http';
 
 const event = (over: Partial<GatewayEvent> & { method?: string } = {}): GatewayEvent => ({
   rawPath: over.rawPath ?? '/api/thing/a1',
@@ -65,6 +65,27 @@ describe('the Lambda adapter', () => {
     const redirect = await toResult(new Response(null, { status: 303, headers: { location: 'https://x/app/account' } }));
     expect(redirect).toMatchObject({ statusCode: 303, body: '', isBase64Encoded: false });
     expect(redirect.headers.location).toBe('https://x/app/account');
+  });
+
+  it('behind the CDN, answers only requests carrying the origin secret, and takes the caller\'s address from the CDN alone', async () => {
+    process.env.ORIGIN_SECRET = 'cdn-secret';
+    try {
+      const audience = serve(ROUTES.filter((r) => r.group === 'audience'));
+      const direct = await audience(event({ headers: { host: 'api.example', 'x-client-ip': '1.1.1.1', 'cloudfront-viewer-address': '2.2.2.2:443' } }));
+      expect(direct.statusCode).toBe(404);
+      const viaCdn = event({ headers: { host: 'api.example', 'x-origin-secret': 'cdn-secret', 'x-client-ip': '1.1.1.1', 'cloudfront-viewer-address': '2.2.2.2:443' } });
+      expect((await audience(viaCdn)).statusCode).toBe(200);
+      expect(toRequest(viaCdn).headers.get('x-client-ip')).toBe('2.2.2.2');
+      expect(clientIp(toRequest(viaCdn))).toBe('2.2.2.2');
+      /* The wrong secret is as good as none. */
+      expect((await audience(event({ headers: { host: 'api.example', 'x-origin-secret': 'guess' } }))).statusCode).toBe(404);
+    } finally {
+      delete process.env.ORIGIN_SECRET;
+    }
+    /* With no secret configured (the local preview), nothing is trusted: a sent x-client-ip is dropped. */
+    const plain = toRequest(event({ headers: { host: 'api.example', 'x-client-ip': '1.1.1.1', 'cloudfront-viewer-address': '2.2.2.2:443', 'x-forwarded-for': '9.9.9.9' } }));
+    expect(plain.headers.get('x-client-ip')).toBeNull();
+    expect(clientIp(plain)).toBe('9.9.9.9');
   });
 
   it('serves one group\'s routes and answers 500, not a crash, when a handler throws', async () => {

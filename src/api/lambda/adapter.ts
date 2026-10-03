@@ -20,10 +20,24 @@ export interface GatewayResult { statusCode: number; headers: Record<string, str
 
 const TEXT = /^(text\/|application\/(json|xml|javascript|x-www-form-urlencoded))/;
 
+/**
+ * The CDN in front of the gateway sends a secret header with every request it forwards, so the
+ * gateway's own address answers nobody else, and the viewer's address the CDN reports can be
+ * trusted. With no secret configured (the local preview), nothing is checked or trusted.
+ */
+export const fromCdn = (e: GatewayEvent) => {
+  const want = process.env.ORIGIN_SECRET;
+  return !!want && e.headers?.['x-origin-secret'] === want;
+};
+
 export function toRequest(e: GatewayEvent): Request {
   const headers = new Headers();
   for (const [k, v] of Object.entries(e.headers ?? {})) if (v !== undefined) headers.set(k, v);
   if (e.cookies?.length) headers.set('cookie', e.cookies.join('; '));
+  /* The caller's address, as `clientIp` reads it: only what the CDN saw, never what the caller sent. */
+  headers.delete('x-client-ip');
+  const viewer = e.headers?.['cloudfront-viewer-address'];
+  if (fromCdn(e) && viewer) headers.set('x-client-ip', viewer.replace(/:\d+$/, ''));
   const method = e.requestContext.http.method.toUpperCase();
   const url = `https://${e.requestContext.domainName ?? headers.get('host') ?? 'localhost'}${e.rawPath}${e.rawQueryString ? `?${e.rawQueryString}` : ''}`;
   const body = e.body === undefined || method === 'GET' || method === 'HEAD' ? undefined : e.isBase64Encoded ? Buffer.from(e.body, 'base64') : e.body;
@@ -43,6 +57,9 @@ export async function toResult(r: Response): Promise<GatewayResult> {
 export function serve(mine: Route[]) {
   return async (event: GatewayEvent): Promise<GatewayResult> => {
     try {
+      if (process.env.ORIGIN_SECRET && !fromCdn(event)) {
+        return { statusCode: 404, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify({ error: 'Not found' }), isBase64Encoded: false };
+      }
       return await toResult(await dispatch(toRequest(event), mine));
     } catch (e) {
       console.error('request failed', event.requestContext.http.method, event.rawPath, e);

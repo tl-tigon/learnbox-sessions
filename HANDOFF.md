@@ -63,7 +63,7 @@ Read this file, then `CLAUDE.md`, `docs/PLAN.md` and `design/slido-study/STUDY.m
 - **Fair-use caps, rate limits and the profanity filter.**
 
 **Tests:**
-- `npm test` runs 111 vitest tests: answers, cleaning, sessions, vote changes, surveys, the feedback form (`feedback.test.ts`: its fixed questions, Free, answers after the end, the code kept, the close time), the AI features (`ai.test.ts`: what the model is sent, the cache, too little data, failures, the mocked Anthropic request and its usage record, the monthly allowance and the per-minute guard, every follow-up mode launched and answered, what the model returns kept as text, and that no page or component reads the key or the prompts), views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
+- `npm test` runs 112 vitest tests: answers, cleaning, sessions, vote changes, surveys, the feedback form (`feedback.test.ts`: its fixed questions, Free, answers after the end, the code kept, the close time), the AI features (`ai.test.ts`: what the model is sent, the cache, too little data, failures, the mocked Anthropic request and its usage record, the monthly allowance and the per-minute guard, every follow-up mode launched and answered, what the model returns kept as text, and that no page or component reads the key or the prompts), views, Q&A, quiz, account deletion, downloads, plans and payments (`plans.test.ts`: what Free refuses, what happens when Pro ends, PayU's signatures, forged and repeated outcomes). Many try to break a rule (voting twice, changing a locked vote, answering a closed question, reading hidden answers). `hardening.test.ts` holds the cases found by the review below.
 - The same walk passes 82 of 82 against the production shape: the built files served as a CDN would and the API running through the Lambda bundles (`npm run preview`, then `BASE=http://localhost:3300 node scripts/walk.js`).
 - A browser walk passes 82 of 82 checks: `node scripts/walk.js`, with `npm run dev` running.
   - It uses playwright-core from `../LMS/Trust Sim/capture-tool/node_modules/playwright-core` with system Chrome.
@@ -115,21 +115,15 @@ These are in `src/lib/limits.ts`.
 | Leaderboard rows on the big screen | 5 | 10 |
 
 ## Waiting on the owner
-1. **OK to create in AWS** (account `281627750083`, profile `personal`, region `ap-south-1`):
-   - Cognito user pool (self sign-up, email confirm, Google);
-   - SES identity, with production access requested early because approval takes a day or more;
-   - DynamoDB table and its `-dev` twin (on-demand, `PK`/`SK` strings, TTL on `expiresAt`);
-   - AppSync Events API (namespace `live`; API key for subscribe, IAM for publish);
-   - the CDK stack: an S3 bucket and CloudFront distribution for the built files, the HTTP API with its three Lambdas and throttling, alarms;
-   - Budgets alert.
-2. **OK to add the DNS record** for `sessions.learnbox.one`. It goes in the `learnbox.one` zone, which belongs to LearnBox.
+1. **OK to deploy** (account `281627750083`, profile `personal`, region `ap-south-1`). The stack is written in `infra/` (2026-10-03, owner: "write it, don't deploy yet") and synthesises; `node scripts/deploy.mjs` runs it. It makes: the DynamoDB table, the Cognito user pool (email + password with an emailed code, through Cognito's own sender while SES is in its sandbox; Google needs a Google OAuth client from the owner and is not in yet), the AppSync Events API, the three Lambdas behind the HTTP API (throttled; reserved concurrency 100/50/10), the S3 bucket and CloudFront distribution (which forward `/api/*` and `/j/*` to the API with a secret header, so the API answers the CDN alone), error and throttle alarms, and a $10 budget alert. Before deploying, `.env.local` needs `ALERT_EMAIL`, and `PAYU_ENV=live` since the owner wants payments on with the Live keys (real money; 2026-10-03). First time only: `cd infra && npx cdk bootstrap --profile personal`.
+2. **The DNS records** for `sessions.learnbox.one`: `learnbox.one` is served by Cloudflare (nameservers `jim`/`shaz.ns.cloudflare.com`), not Route 53. Two CNAMEs, DNS-only (not proxied): the certificate's validation record, then `sessions` to the distribution's domain. `infra/README.md` has the steps. Until then the site is on the distribution's `cloudfront.net` address, which is enough to test on.
 3. **OK to create a private GitHub repo** under `tl-tigon`.
 4. **PayU**, to switch payments on:
    - the owner's PayU account is approved for `www.tigon.one` (seen 2026-10-03), which takes no payments, so its website can be changed to `sessions.learnbox.one` (owner, 2026-10-03). Change it once that site is live with the pages PayU checks for: contact, terms, privacy and refunds. Those pages need the company's legal name, a contact address and the refund rule;
    - the keys in `.env.local` are the Live ones. Either test keys from the dashboard's Test Mode (if the account still has it), or the owner's go-ahead for `PAYU_ENV=live` and one real payment of ₹588, refunded afterwards from the dashboard;
    - a convenience fee added by PayU for the buyer is accepted (owner, 2026-10-03). If the first live payment shows one, the account page and the Pricing page must say so beside ₹588;
    - whether the account takes international cards (the price is in rupees only);
-   - whether ₹588 includes GST, and who issues the invoice. Nothing here makes an invoice;
+   - whether ₹588 includes GST. **Invoices are made in Zoho Books, the Tigon organisation** (owner, 2026-10-03): after a paid order the server should create the invoice there. Not built yet; it needs a Zoho "self client" (client id and secret, with a refresh token for Zoho Books), the organisation id, and the item names for Pro 1 month and 12 months. Nothing here makes an invoice today;
    - a card charged by itself every month needs PayU's subscriptions product and a bank mandate from the buyer; it is not built. Both periods are single payments;
    - a refund is made by hand in the PayU dashboard; Pro stays on the account until its date unless the row is changed.
 5. **The site's copy**: the draft is in `src/lib/site.ts` and the pages in `src/app/(site)/`. Also for the owner: whether the Pricing page should promise the limits it lists; the line "Zoom, Teams, Meet, Webex: share the big screen's browser tab"; the use cases chosen (training, team meetings, all-hands, events, classrooms).
@@ -140,7 +134,7 @@ These are in `src/lib/limits.ts`.
 9. **Copy for the owner to confirm**: "Create a session" in the phone's menu; the strip "LearnBox Sessions is free to use at your own meetings." with its "Create a session" button (it leads to `/sign-in?mode=up`); the two lines under the Q&A settings.
 
 ## Next steps
-1. **Provisioning**, on the owner's OK: a CDK stack in `infra/` (as LearnBox has) with the table, the user pool, the Events API, the HTTP API and its three Lambdas from `dist/lambda/` and `routes.json`, throttling per route, reserved concurrency, the bucket and CloudFront distribution for `out/` with `/api/*` and `/j/*` forwarded to the gateway, and alarms. Then run the store tests against the dev table, and a load test of about 500 simulated phones.
+1. **Deploy**, on the owner's OK: `node scripts/deploy.mjs` (the stack is written). Then: sign up on the live site and check sign-in, a session from two phones, the live push, a payment (real, refund it in PayU), a debrief; run the store tests against the real table; a load test of about 500 simulated phones to settle whether to keep Lambdas warm; the Zoho Books invoice after a payment.
 2. **The rest of v1**, each waiting on the owner: the site's copy, Terms and Privacy, the LearnBox places, cost alarms.
 3. **More of Slido**, if wanted: downvotes, labels, audience replies, a PowerPoint add-in.
 

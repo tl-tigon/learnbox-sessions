@@ -25,13 +25,14 @@ The code stays separate from LearnBox: this product has its own repo, AWS resour
 - `npm run typecheck`, then `npm run build` (the pages, as plain files in `out/`) and `npm run build:lambda` (the API, as `dist/lambda/<group>.js` with `routes.json`). While the dev server is running, build the pages with `NEXT_DIST_DIR=.next-check npx next build`: the files land in `.next-check`; afterwards `git checkout tsconfig.json` and delete it.
 - `npm run preview`: serves the built files and the Lambda bundles on http://localhost:3300 the way production does (`OUT=.next-check` when built beside the dev server). `BASE=http://localhost:3300 node scripts/walk.js` runs the walk against it.
 - `node scripts/walk.js`: the browser walk, with the dev server running.
+- `node scripts/deploy.mjs`: the whole deploy (bundles, the CDK stack in `infra/`, the pages to S3, the CDN invalidation), with the secrets read from `.env.local`. `infra/README.md` has the custom-domain steps. Deploying creates and changes AWS resources: only on the owner's say-so.
 
 ## Stack and layout
 - **Framework**: Next.js 15 App Router, TypeScript, React 19, plain CSS (`src/app/globals.css`), Inter through `next/font`. No Tailwind or UI kits.
 - **No managed compute for pages** (owner's decision, 2026-10-03). The app builds to plain files (`output: 'export'`) for a CDN; no page is rendered on a server. A screen's id travels in the query string (`src/lib/links.ts`).
 - **The API** is in `src/api/`: one file per route, plain web `Request` in and `Response` out, no Next.js imports. `src/api/routes/` groups them (`audience`, `host`, `billing`) and `src/api/all.ts` lists them all.
   - In development, `src/app/api/[...path]/route.dev.ts` and `src/app/j/[code]/route.dev.ts` hand every call to the same table; the `.dev.ts` name keeps them out of the static build (`pageExtensions` in `next.config.ts`).
-  - In production each group is one Lambda behind an API Gateway HTTP API: `src/api/lambda/adapter.ts` turns the gateway event into a `Request` and the `Response` back. `scripts/build-lambda.mjs` bundles each group and writes `dist/lambda/routes.json`, which the infrastructure reads to make the gateway's routes. The CDN forwards `/api/*` and `/j/*` to the gateway.
+  - In production each group is one Lambda behind an API Gateway HTTP API: `src/api/lambda/adapter.ts` turns the gateway event into a `Request` and the `Response` back. The CDN sends `x-origin-secret` (`ORIGIN_SECRET`) with every request it forwards; the adapter answers nobody else, and takes the caller's address from `CloudFront-Viewer-Address` into `x-client-ip`, which `clientIp` reads. `scripts/build-lambda.mjs` bundles each group and writes `dist/lambda/routes.json`, which the infrastructure reads to make the gateway's routes. The CDN forwards `/api/*` and `/j/*` to the gateway.
   - `/j/<code>` is the join link people share: the API answers with a page carrying the session's name for chat previews, and sends the phone on to `/s?c=<code>`.
 - **Model** (`src/lib/types.ts`):
   - Session = an event with a code, Q&A settings, a list of interactions, a `state` and a display key.
